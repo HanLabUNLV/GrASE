@@ -1,2 +1,0 @@
-ID	GeneID	geneSymbol	chr	strand	longExonStart_0base	longExonEnd	shortES	shortEE	flankingES	flankingEE	DexseqFragment
-0	ENSG00000230630.5	DNM3OS	chr1	-	172142135	172142233	172142135	172142213	172144364	172144437	E010
