@@ -1,0 +1,512 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<graphml xmlns="http://graphml.graphdrawing.org/xmlns"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://graphml.graphdrawing.org/xmlns
+         http://graphml.graphdrawing.org/xmlns/1.0/graphml.xsd">
+<!-- Created by igraph -->
+  <key id="v_name" for="node" attr.name="name" attr.type="string"/>
+  <key id="e_start" for="edge" attr.name="start" attr.type="double"/>
+  <key id="e_end" for="edge" attr.name="end" attr.type="double"/>
+  <key id="e_width" for="edge" attr.name="width" attr.type="double"/>
+  <key id="e_ex_or_in" for="edge" attr.name="ex_or_in" attr.type="string"/>
+  <key id="e_ENST00000417354.3" for="edge" attr.name="ENST00000417354.3" attr.type="boolean"/>
+  <key id="e_ENST00000648228.1" for="edge" attr.name="ENST00000648228.1" attr.type="boolean"/>
+  <key id="e_ENST00000650189.1" for="edge" attr.name="ENST00000650189.1" attr.type="boolean"/>
+  <key id="e_ENST00000650416.1" for="edge" attr.name="ENST00000650416.1" attr.type="boolean"/>
+  <key id="e_ENST00000648909.1" for="edge" attr.name="ENST00000648909.1" attr.type="boolean"/>
+  <key id="e_ENST00000650013.1" for="edge" attr.name="ENST00000650013.1" attr.type="boolean"/>
+  <graph id="G" edgedefault="directed">
+    <node id="n0">
+      <data key="v_name">R</data>
+    </node>
+    <node id="n1">
+      <data key="v_name">172144841</data>
+    </node>
+    <node id="n2">
+      <data key="v_name">172144742</data>
+    </node>
+    <node id="n3">
+      <data key="v_name">172144654</data>
+    </node>
+    <node id="n4">
+      <data key="v_name">172144620</data>
+    </node>
+    <node id="n5">
+      <data key="v_name">172144583</data>
+    </node>
+    <node id="n6">
+      <data key="v_name">172144569</data>
+    </node>
+    <node id="n7">
+      <data key="v_name">172144558</data>
+    </node>
+    <node id="n8">
+      <data key="v_name">172144438</data>
+    </node>
+    <node id="n9">
+      <data key="v_name">172144365</data>
+    </node>
+    <node id="n10">
+      <data key="v_name">172142655</data>
+    </node>
+    <node id="n11">
+      <data key="v_name">172142234</data>
+    </node>
+    <node id="n12">
+      <data key="v_name">172142214</data>
+    </node>
+    <node id="n13">
+      <data key="v_name">172142136</data>
+    </node>
+    <node id="n14">
+      <data key="v_name">172140597</data>
+    </node>
+    <node id="n15">
+      <data key="v_name">172140480</data>
+    </node>
+    <node id="n16">
+      <data key="v_name">172140449</data>
+    </node>
+    <node id="n17">
+      <data key="v_name">172140219</data>
+    </node>
+    <node id="n18">
+      <data key="v_name">172140052</data>
+    </node>
+    <node id="n19">
+      <data key="v_name">172139955</data>
+    </node>
+    <node id="n20">
+      <data key="v_name">172138954</data>
+    </node>
+    <node id="n21">
+      <data key="v_name">172138882</data>
+    </node>
+    <node id="n22">
+      <data key="v_name">172138397</data>
+    </node>
+    <node id="n23">
+      <data key="v_name">L</data>
+    </node>
+    <edge source="n1" target="n3">
+      <data key="e_start">172144840</data>
+      <data key="e_end">172144654</data>
+      <data key="e_width">187</data>
+      <data key="e_ex_or_in">ex</data>
+      <data key="e_ENST00000417354.3">true</data>
+      <data key="e_ENST00000648228.1">false</data>
+      <data key="e_ENST00000650189.1">false</data>
+      <data key="e_ENST00000650416.1">false</data>
+      <data key="e_ENST00000648909.1">false</data>
+      <data key="e_ENST00000650013.1">false</data>
+    </edge>
+    <edge source="n3" target="n8">
+      <data key="e_start">172144653</data>
+      <data key="e_end">172144438</data>
+      <data key="e_width">216</data>
+      <data key="e_ex_or_in">in</data>
+      <data key="e_ENST00000417354.3">true</data>
+      <data key="e_ENST00000648228.1">false</data>
+      <data key="e_ENST00000650189.1">false</data>
+      <data key="e_ENST00000650416.1">false</data>
+      <data key="e_ENST00000648909.1">false</data>
+      <data key="e_ENST00000650013.1">false</data>
+    </edge>
+    <edge source="n8" target="n9">
+      <data key="e_start">172144437</data>
+      <data key="e_end">172144365</data>
+      <data key="e_width">73</data>
+      <data key="e_ex_or_in">ex</data>
+      <data key="e_ENST00000417354.3">true</data>
+      <data key="e_ENST00000648228.1">true</data>
+      <data key="e_ENST00000650189.1">true</data>
+      <data key="e_ENST00000650416.1">true</data>
+      <data key="e_ENST00000648909.1">false</data>
+      <data key="e_ENST00000650013.1">false</data>
+    </edge>
+    <edge source="n9" target="n12">
+      <data key="e_start">172144364</data>
+      <data key="e_end">172142214</data>
+      <data key="e_width">2151</data>
+      <data key="e_ex_or_in">in</data>
+      <data key="e_ENST00000417354.3">true</data>
+      <data key="e_ENST00000648228.1">false</data>
+      <data key="e_ENST00000650189.1">false</data>
+      <data key="e_ENST00000650416.1">true</data>
+      <data key="e_ENST00000648909.1">true</data>
+      <data key="e_ENST00000650013.1">false</data>
+    </edge>
+    <edge source="n12" target="n13">
+      <data key="e_start">172142213</data>
+      <data key="e_end">172142136</data>
+      <data key="e_width">78</data>
+      <data key="e_ex_or_in">ex</data>
+      <data key="e_ENST00000417354.3">true</data>
+      <data key="e_ENST00000648228.1">false</data>
+      <data key="e_ENST00000650189.1">false</data>
+      <data key="e_ENST00000650416.1">true</data>
+      <data key="e_ENST00000648909.1">true</data>
+      <data key="e_ENST00000650013.1">false</data>
+    </edge>
+    <edge source="n13" target="n14">
+      <data key="e_start">172142135</data>
+      <data key="e_end">172140597</data>
+      <data key="e_width">1539</data>
+      <data key="e_ex_or_in">in</data>
+      <data key="e_ENST00000417354.3">true</data>
+      <data key="e_ENST00000648228.1">false</data>
+      <data key="e_ENST00000650189.1">true</data>
+      <data key="e_ENST00000650416.1">true</data>
+      <data key="e_ENST00000648909.1">true</data>
+      <data key="e_ENST00000650013.1">true</data>
+    </edge>
+    <edge source="n14" target="n22">
+      <data key="e_start">172140596</data>
+      <data key="e_end">172138397</data>
+      <data key="e_width">2200</data>
+      <data key="e_ex_or_in">ex</data>
+      <data key="e_ENST00000417354.3">true</data>
+      <data key="e_ENST00000648228.1">false</data>
+      <data key="e_ENST00000650189.1">false</data>
+      <data key="e_ENST00000650416.1">false</data>
+      <data key="e_ENST00000648909.1">false</data>
+      <data key="e_ENST00000650013.1">false</data>
+    </edge>
+    <edge source="n5" target="n7">
+      <data key="e_start">172144582</data>
+      <data key="e_end">172144558</data>
+      <data key="e_width">25</data>
+      <data key="e_ex_or_in">ex</data>
+      <data key="e_ENST00000417354.3">false</data>
+      <data key="e_ENST00000648228.1">true</data>
+      <data key="e_ENST00000650189.1">false</data>
+      <data key="e_ENST00000650416.1">false</data>
+      <data key="e_ENST00000648909.1">false</data>
+      <data key="e_ENST00000650013.1">false</data>
+    </edge>
+    <edge source="n7" target="n8">
+      <data key="e_start">172144557</data>
+      <data key="e_end">172144438</data>
+      <data key="e_width">120</data>
+      <data key="e_ex_or_in">in</data>
+      <data key="e_ENST00000417354.3">false</data>
+      <data key="e_ENST00000648228.1">true</data>
+      <data key="e_ENST00000650189.1">true</data>
+      <data key="e_ENST00000650416.1">true</data>
+      <data key="e_ENST00000648909.1">false</data>
+      <data key="e_ENST00000650013.1">false</data>
+    </edge>
+    <edge source="n9" target="n14">
+      <data key="e_start">172144364</data>
+      <data key="e_end">172140597</data>
+      <data key="e_width">3768</data>
+      <data key="e_ex_or_in">in</data>
+      <data key="e_ENST00000417354.3">false</data>
+      <data key="e_ENST00000648228.1">true</data>
+      <data key="e_ENST00000650189.1">false</data>
+      <data key="e_ENST00000650416.1">false</data>
+      <data key="e_ENST00000648909.1">false</data>
+      <data key="e_ENST00000650013.1">false</data>
+    </edge>
+    <edge source="n14" target="n15">
+      <data key="e_start">172140596</data>
+      <data key="e_end">172140480</data>
+      <data key="e_width">117</data>
+      <data key="e_ex_or_in">ex</data>
+      <data key="e_ENST00000417354.3">false</data>
+      <data key="e_ENST00000648228.1">true</data>
+      <data key="e_ENST00000650189.1">false</data>
+      <data key="e_ENST00000650416.1">false</data>
+      <data key="e_ENST00000648909.1">false</data>
+      <data key="e_ENST00000650013.1">false</data>
+    </edge>
+    <edge source="n15" target="n20">
+      <data key="e_start">172140479</data>
+      <data key="e_end">172138954</data>
+      <data key="e_width">1526</data>
+      <data key="e_ex_or_in">in</data>
+      <data key="e_ENST00000417354.3">false</data>
+      <data key="e_ENST00000648228.1">true</data>
+      <data key="e_ENST00000650189.1">false</data>
+      <data key="e_ENST00000650416.1">false</data>
+      <data key="e_ENST00000648909.1">false</data>
+      <data key="e_ENST00000650013.1">false</data>
+    </edge>
+    <edge source="n20" target="n21">
+      <data key="e_start">172138953</data>
+      <data key="e_end">172138882</data>
+      <data key="e_width">72</data>
+      <data key="e_ex_or_in">ex</data>
+      <data key="e_ENST00000417354.3">false</data>
+      <data key="e_ENST00000648228.1">true</data>
+      <data key="e_ENST00000650189.1">false</data>
+      <data key="e_ENST00000650416.1">false</data>
+      <data key="e_ENST00000648909.1">false</data>
+      <data key="e_ENST00000650013.1">false</data>
+    </edge>
+    <edge source="n10" target="n13">
+      <data key="e_start">172142654</data>
+      <data key="e_end">172142136</data>
+      <data key="e_width">519</data>
+      <data key="e_ex_or_in">ex</data>
+      <data key="e_ENST00000417354.3">false</data>
+      <data key="e_ENST00000648228.1">false</data>
+      <data key="e_ENST00000650189.1">false</data>
+      <data key="e_ENST00000650416.1">false</data>
+      <data key="e_ENST00000648909.1">false</data>
+      <data key="e_ENST00000650013.1">true</data>
+    </edge>
+    <edge source="n14" target="n19">
+      <data key="e_start">172140596</data>
+      <data key="e_end">172139955</data>
+      <data key="e_width">642</data>
+      <data key="e_ex_or_in">ex</data>
+      <data key="e_ENST00000417354.3">false</data>
+      <data key="e_ENST00000648228.1">false</data>
+      <data key="e_ENST00000650189.1">false</data>
+      <data key="e_ENST00000650416.1">false</data>
+      <data key="e_ENST00000648909.1">false</data>
+      <data key="e_ENST00000650013.1">true</data>
+    </edge>
+    <edge source="n4" target="n9">
+      <data key="e_start">172144619</data>
+      <data key="e_end">172144365</data>
+      <data key="e_width">255</data>
+      <data key="e_ex_or_in">ex</data>
+      <data key="e_ENST00000417354.3">false</data>
+      <data key="e_ENST00000648228.1">false</data>
+      <data key="e_ENST00000650189.1">false</data>
+      <data key="e_ENST00000650416.1">false</data>
+      <data key="e_ENST00000648909.1">true</data>
+      <data key="e_ENST00000650013.1">false</data>
+    </edge>
+    <edge source="n14" target="n18">
+      <data key="e_start">172140596</data>
+      <data key="e_end">172140052</data>
+      <data key="e_width">545</data>
+      <data key="e_ex_or_in">ex</data>
+      <data key="e_ENST00000417354.3">false</data>
+      <data key="e_ENST00000648228.1">false</data>
+      <data key="e_ENST00000650189.1">false</data>
+      <data key="e_ENST00000650416.1">false</data>
+      <data key="e_ENST00000648909.1">true</data>
+      <data key="e_ENST00000650013.1">false</data>
+    </edge>
+    <edge source="n2" target="n7">
+      <data key="e_start">172144741</data>
+      <data key="e_end">172144558</data>
+      <data key="e_width">184</data>
+      <data key="e_ex_or_in">ex</data>
+      <data key="e_ENST00000417354.3">false</data>
+      <data key="e_ENST00000648228.1">false</data>
+      <data key="e_ENST00000650189.1">true</data>
+      <data key="e_ENST00000650416.1">false</data>
+      <data key="e_ENST00000648909.1">false</data>
+      <data key="e_ENST00000650013.1">false</data>
+    </edge>
+    <edge source="n9" target="n11">
+      <data key="e_start">172144364</data>
+      <data key="e_end">172142234</data>
+      <data key="e_width">2131</data>
+      <data key="e_ex_or_in">in</data>
+      <data key="e_ENST00000417354.3">false</data>
+      <data key="e_ENST00000648228.1">false</data>
+      <data key="e_ENST00000650189.1">true</data>
+      <data key="e_ENST00000650416.1">false</data>
+      <data key="e_ENST00000648909.1">false</data>
+      <data key="e_ENST00000650013.1">false</data>
+    </edge>
+    <edge source="n11" target="n13">
+      <data key="e_start">172142233</data>
+      <data key="e_end">172142136</data>
+      <data key="e_width">98</data>
+      <data key="e_ex_or_in">ex</data>
+      <data key="e_ENST00000417354.3">false</data>
+      <data key="e_ENST00000648228.1">false</data>
+      <data key="e_ENST00000650189.1">true</data>
+      <data key="e_ENST00000650416.1">false</data>
+      <data key="e_ENST00000648909.1">false</data>
+      <data key="e_ENST00000650013.1">false</data>
+    </edge>
+    <edge source="n14" target="n17">
+      <data key="e_start">172140596</data>
+      <data key="e_end">172140219</data>
+      <data key="e_width">378</data>
+      <data key="e_ex_or_in">ex</data>
+      <data key="e_ENST00000417354.3">false</data>
+      <data key="e_ENST00000648228.1">false</data>
+      <data key="e_ENST00000650189.1">true</data>
+      <data key="e_ENST00000650416.1">false</data>
+      <data key="e_ENST00000648909.1">false</data>
+      <data key="e_ENST00000650013.1">false</data>
+    </edge>
+    <edge source="n6" target="n7">
+      <data key="e_start">172144568</data>
+      <data key="e_end">172144558</data>
+      <data key="e_width">11</data>
+      <data key="e_ex_or_in">ex</data>
+      <data key="e_ENST00000417354.3">false</data>
+      <data key="e_ENST00000648228.1">false</data>
+      <data key="e_ENST00000650189.1">false</data>
+      <data key="e_ENST00000650416.1">true</data>
+      <data key="e_ENST00000648909.1">false</data>
+      <data key="e_ENST00000650013.1">false</data>
+    </edge>
+    <edge source="n14" target="n16">
+      <data key="e_start">172140596</data>
+      <data key="e_end">172140449</data>
+      <data key="e_width">148</data>
+      <data key="e_ex_or_in">ex</data>
+      <data key="e_ENST00000417354.3">false</data>
+      <data key="e_ENST00000648228.1">false</data>
+      <data key="e_ENST00000650189.1">false</data>
+      <data key="e_ENST00000650416.1">true</data>
+      <data key="e_ENST00000648909.1">false</data>
+      <data key="e_ENST00000650013.1">false</data>
+    </edge>
+    <edge source="n0" target="n1">
+      <data key="e_start">-2147483648</data>
+      <data key="e_end">-2147483648</data>
+      <data key="e_width">-2147483648</data>
+      <data key="e_ex_or_in">NA</data>
+      <data key="e_ENST00000417354.3">true</data>
+      <data key="e_ENST00000648228.1">true</data>
+      <data key="e_ENST00000650189.1">true</data>
+      <data key="e_ENST00000650416.1">true</data>
+      <data key="e_ENST00000648909.1">true</data>
+      <data key="e_ENST00000650013.1">true</data>
+    </edge>
+    <edge source="n0" target="n2">
+      <data key="e_start">-2147483648</data>
+      <data key="e_end">-2147483648</data>
+      <data key="e_width">-2147483648</data>
+      <data key="e_ex_or_in">NA</data>
+      <data key="e_ENST00000417354.3">true</data>
+      <data key="e_ENST00000648228.1">true</data>
+      <data key="e_ENST00000650189.1">true</data>
+      <data key="e_ENST00000650416.1">true</data>
+      <data key="e_ENST00000648909.1">true</data>
+      <data key="e_ENST00000650013.1">true</data>
+    </edge>
+    <edge source="n0" target="n4">
+      <data key="e_start">-2147483648</data>
+      <data key="e_end">-2147483648</data>
+      <data key="e_width">-2147483648</data>
+      <data key="e_ex_or_in">NA</data>
+      <data key="e_ENST00000417354.3">true</data>
+      <data key="e_ENST00000648228.1">true</data>
+      <data key="e_ENST00000650189.1">true</data>
+      <data key="e_ENST00000650416.1">true</data>
+      <data key="e_ENST00000648909.1">true</data>
+      <data key="e_ENST00000650013.1">true</data>
+    </edge>
+    <edge source="n0" target="n5">
+      <data key="e_start">-2147483648</data>
+      <data key="e_end">-2147483648</data>
+      <data key="e_width">-2147483648</data>
+      <data key="e_ex_or_in">NA</data>
+      <data key="e_ENST00000417354.3">true</data>
+      <data key="e_ENST00000648228.1">true</data>
+      <data key="e_ENST00000650189.1">true</data>
+      <data key="e_ENST00000650416.1">true</data>
+      <data key="e_ENST00000648909.1">true</data>
+      <data key="e_ENST00000650013.1">true</data>
+    </edge>
+    <edge source="n0" target="n6">
+      <data key="e_start">-2147483648</data>
+      <data key="e_end">-2147483648</data>
+      <data key="e_width">-2147483648</data>
+      <data key="e_ex_or_in">NA</data>
+      <data key="e_ENST00000417354.3">true</data>
+      <data key="e_ENST00000648228.1">true</data>
+      <data key="e_ENST00000650189.1">true</data>
+      <data key="e_ENST00000650416.1">true</data>
+      <data key="e_ENST00000648909.1">true</data>
+      <data key="e_ENST00000650013.1">true</data>
+    </edge>
+    <edge source="n0" target="n10">
+      <data key="e_start">-2147483648</data>
+      <data key="e_end">-2147483648</data>
+      <data key="e_width">-2147483648</data>
+      <data key="e_ex_or_in">NA</data>
+      <data key="e_ENST00000417354.3">true</data>
+      <data key="e_ENST00000648228.1">true</data>
+      <data key="e_ENST00000650189.1">true</data>
+      <data key="e_ENST00000650416.1">true</data>
+      <data key="e_ENST00000648909.1">true</data>
+      <data key="e_ENST00000650013.1">true</data>
+    </edge>
+    <edge source="n16" target="n23">
+      <data key="e_start">-2147483648</data>
+      <data key="e_end">-2147483648</data>
+      <data key="e_width">-2147483648</data>
+      <data key="e_ex_or_in">NA</data>
+      <data key="e_ENST00000417354.3">true</data>
+      <data key="e_ENST00000648228.1">true</data>
+      <data key="e_ENST00000650189.1">true</data>
+      <data key="e_ENST00000650416.1">true</data>
+      <data key="e_ENST00000648909.1">true</data>
+      <data key="e_ENST00000650013.1">true</data>
+    </edge>
+    <edge source="n17" target="n23">
+      <data key="e_start">-2147483648</data>
+      <data key="e_end">-2147483648</data>
+      <data key="e_width">-2147483648</data>
+      <data key="e_ex_or_in">NA</data>
+      <data key="e_ENST00000417354.3">true</data>
+      <data key="e_ENST00000648228.1">true</data>
+      <data key="e_ENST00000650189.1">true</data>
+      <data key="e_ENST00000650416.1">true</data>
+      <data key="e_ENST00000648909.1">true</data>
+      <data key="e_ENST00000650013.1">true</data>
+    </edge>
+    <edge source="n18" target="n23">
+      <data key="e_start">-2147483648</data>
+      <data key="e_end">-2147483648</data>
+      <data key="e_width">-2147483648</data>
+      <data key="e_ex_or_in">NA</data>
+      <data key="e_ENST00000417354.3">true</data>
+      <data key="e_ENST00000648228.1">true</data>
+      <data key="e_ENST00000650189.1">true</data>
+      <data key="e_ENST00000650416.1">true</data>
+      <data key="e_ENST00000648909.1">true</data>
+      <data key="e_ENST00000650013.1">true</data>
+    </edge>
+    <edge source="n19" target="n23">
+      <data key="e_start">-2147483648</data>
+      <data key="e_end">-2147483648</data>
+      <data key="e_width">-2147483648</data>
+      <data key="e_ex_or_in">NA</data>
+      <data key="e_ENST00000417354.3">true</data>
+      <data key="e_ENST00000648228.1">true</data>
+      <data key="e_ENST00000650189.1">true</data>
+      <data key="e_ENST00000650416.1">true</data>
+      <data key="e_ENST00000648909.1">true</data>
+      <data key="e_ENST00000650013.1">true</data>
+    </edge>
+    <edge source="n21" target="n23">
+      <data key="e_start">-2147483648</data>
+      <data key="e_end">-2147483648</data>
+      <data key="e_width">-2147483648</data>
+      <data key="e_ex_or_in">NA</data>
+      <data key="e_ENST00000417354.3">true</data>
+      <data key="e_ENST00000648228.1">true</data>
+      <data key="e_ENST00000650189.1">true</data>
+      <data key="e_ENST00000650416.1">true</data>
+      <data key="e_ENST00000648909.1">true</data>
+      <data key="e_ENST00000650013.1">true</data>
+    </edge>
+    <edge source="n22" target="n23">
+      <data key="e_start">-2147483648</data>
+      <data key="e_end">-2147483648</data>
+      <data key="e_width">-2147483648</data>
+      <data key="e_ex_or_in">NA</data>
+      <data key="e_ENST00000417354.3">true</data>
+      <data key="e_ENST00000648228.1">true</data>
+      <data key="e_ENST00000650189.1">true</data>
+      <data key="e_ENST00000650416.1">true</data>
+      <data key="e_ENST00000648909.1">true</data>
+      <data key="e_ENST00000650013.1">true</data>
+    </edge>
+  </graph>
+</graphml>
