@@ -1,2 +1,0 @@
-ID	GeneID	geneSymbol	chr	strand	longExonStart_0base	longExonEnd	shortES	shortEE	flankingES	flankingEE
-0	"ENSG00000124496.12"	"TRERF1"	chr6	-	42232680	42232928	42232680	42232892	42236204	42236411
