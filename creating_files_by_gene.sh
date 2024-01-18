@@ -14,7 +14,7 @@ mkdir -p tmp
 
 awk '/aggregate_gene/ {print $10}' $gff | sed -e 's/^"//' -e 's/"$//' > tmp/all_genes.txt
 
-cat all_genes.txt | while read line; do
+cat tmp/all_genes.txt | while read line; do
 	#echo -e "\n\nGene ID: $line\n"
 	
 	mkdir gene_files/$line
@@ -45,7 +45,7 @@ find ./gene_files/ -type d -empty -delete
 
 ls gene_files > tmp/all_genes_updated.txt
 
-cat all_genes_updated.txt | while read line; do
+cat tmp/all_genes_updated.txt | while read line; do
 	
 	cp $graphml/$line.graphml gene_files/$line/	
 	
