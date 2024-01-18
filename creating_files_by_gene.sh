@@ -1,6 +1,17 @@
 #!/bin/bash
 
-all_genes='example/all_genes.txt'
+while getopts "a:t:f:s:r:d:g:" arg; do
+        case $arg in
+		a) all_genes=$OPTARG;;
+                r) rmats=$OPTARG;;
+                d) gff=$OPTARG;;
+                g) graphml=$OPTARG;;
+        esac
+done
+
+#echo "\nAll Genes: $all_genes \nA3SS: $a3ss \nA5SS: $a5ss \nSE: $se \nRI: $ri \nGFF: $gff \nGraphML: $graphml\n" 
+
+mkdir -p gene_files
 
 cat $all_genes | while read line; do
 	#echo -e "\n\nGene ID: $line\n"
@@ -8,38 +19,36 @@ cat $all_genes | while read line; do
 	mkdir gene_files/$line
 
 	#echo -e "A3SS events:" 
-	grep -w GeneID fromGTF.A3SS.txt > example/$line/fromGTF.A3SS.txt
-	grep -w $line fromGTF.A3SS.txt >> example/$line/fromGTF.A3SS.txt
+	grep -w GeneID $rmats/fromGTF.A3SS.txt > gene_files/$line/fromGTF.A3SS.txt
+	grep -w $line $rmats/fromGTF.A3SS.txt >> gene_files/$line/fromGTF.A3SS.txt
 	
 	#echo -e "\nA5SS events:" 
-	grep -w GeneID fromGTF.A5SS.txt > example/$line/fromGTF.A5SS.txt
-	grep -w $line fromGTF.A5SS.txt >> example/$line/fromGTF.A5SS.txt
+	grep -w GeneID $rmats/fromGTF.A5SS.txt > gene_files/$line/fromGTF.A5SS.txt
+	grep -w $line $rmats/fromGTF.A5SS.txt >> gene_files/$line/fromGTF.A5SS.txt
 	
 	#echo -e "\nSE events:"
-	grep -w GeneID fromGTF.SE.txt > example/$line/fromGTF.SE.txt	
-	grep -w $line fromGTF.SE.txt >> example/$line/fromGTF.SE.txt
+	grep -w GeneID $rmats/fromGTF.SE.txt > gene_files/$line/fromGTF.SE.txt	
+	grep -w $line $rmats/fromGTF.SE.txt >> gene_files/$line/fromGTF.SE.txt
 
 	#echo -e "\nRI events:"
-	grep -w GeneID fromGTF.RI.txt > example/$line/fromGTF.RI.txt
-        grep -w $line fromGTF.RI.txt >> example/$line/fromGTF.RI.txt
+	grep -w GeneID $rmats/fromGTF.RI.txt > gene_files/$line/fromGTF.RI.txt
+        grep -w $line $rmats/fromGTF.RI.txt >> gene_files/$line/fromGTF.RI.txt
 
 done
 
 
-find ./example/ -type f -exec awk -v x=2 'NR==x{exit 1}' {} \; -exec  rm -f {} \;
-find ./example/ -type d -empty -delete
+find ./gene_files/ -type f -exec awk -v x=2 'NR==x{exit 1}' {} \; -exec  rm -f {} \;
+find ./gene_files/ -type d -empty -delete
 
 
 
-ls example > all_genes_updated.txt
+ls gene_files > all_genes_updated.txt
 
-all_genes_updated='all_genes_updated.txt'
-
-cat $all_genes_updated | while read line; do
+cat all_genes_updated.txt | while read line; do
 	
-	cp graphmls/$line.graphml gene_files/$line/	
+	cp $graphml/$line.graphml gene_files/$line/	
 	
 	#echo -e "\nDexseq Data:"
-        grep -w $line /home/dwito/RStudioFiles/gencode.v34.annotation.dexseq.gff > gene_files/$line/$line.dexseq.gff
+        grep -w $line $gff > gene_files/$line/$line.dexseq.gff
 
 done
