@@ -394,7 +394,7 @@ def main():
 
 	color_dict = {"ex": "purple", "in": "grey", "NA": "grey", None: "dark green"}
 	curved_dict = {"ex": -0.3, "in": False, "NA": False, None: 0}
-	width_dict = {"ex": 10, "in": 10, "NA": 4, None: 10}
+	width_dict = {"ex": 10, "in": 4, "NA": 4, None: 10}
 	order_dict = {}
 	for name in g.vs['name']:
 		order_dict[name] = name
