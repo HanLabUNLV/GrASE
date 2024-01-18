@@ -1,5 +1,9 @@
 import igraph as ig
+import networkx
+import networkx as nx
+import matplotlib.pyplot as plt
 import pandas as pd
+import subprocess
 import sys
 import os
 
@@ -324,6 +328,13 @@ def main():
 	gff.close()
 
 
+	for vertex in g.vs:
+		vertex['id'] = vertex['id'].strip('n')
+		if vertex['name'] == 'R':
+			vertex['id'] = 'R'
+		if vertex['name'] == 'L':
+			vertex['id'] = 'L'
+
 
 	g.es["rmats"] = g.es["event"] = g.es["A3SS"] = g.es["A5SS"] = g.es["SE"] = g.es["RI"] = ""
 
@@ -368,6 +379,9 @@ def main():
 		else:
 			RI = ""
 
+		if g.es[x]["ex_or_in"] == "in":
+			g.es[x]["edge_style"] = "dotted"
+
 
 		if A3SS or A5SS or SE or RI:
 			newLine = '\n'
@@ -376,11 +390,11 @@ def main():
 			newLine = ''
 			space = ''
 
-		edge_labels.append(g.es["dexseq_fragment"][x] + newLine + A3SS + space + A5SS + space + SE + space + RI)
+		edge_labels.append(g.es["dexseq_fragment"][x] + space + A3SS + space + A5SS + space + SE + space + RI)
 
-	color_dict = {"ex": "orange", "in": "grey", "NA": "grey", None: "dark green"}
+	color_dict = {"ex": "purple", "in": "grey", "NA": "grey", None: "dark green"}
 	curved_dict = {"ex": -0.3, "in": False, "NA": False, None: 0}
-	width_dict = {"ex": 5, "in": 2, "NA": 2, None: 5}
+	width_dict = {"ex": 10, "in": 10, "NA": 4, None: 10}
 	order_dict = {}
 	for name in g.vs['name']:
 		order_dict[name] = name
@@ -394,17 +408,27 @@ def main():
 	visual_style = {"edge_curved": [curved_dict[ex_or_in] for ex_or_in in g.es["ex_or_in"]],
 	                "edge_color": [color_dict[ex_or_in] for ex_or_in in g.es["ex_or_in"]],
 	                "edge_width": [width_dict[ex_or_in] for ex_or_in in g.es["ex_or_in"]],
-	                "order": [order_dict[order] for order in g.vs["name"]], "vertex_label": g.vs["id"],
-	                "edge_arrow_size": 0.001, "edge_label": edge_labels, "vertex_shape": "hidden",
-	                "vertex_label_size": 35, "edge_label_size": 35, "bbox": (3500, 1000), "margin": 100}
+	                "order": [order_dict[order] for order in g.vs["name"]],
+	                "vertex_label": g.vs["id"], "vertex_label_size": 65, "vertex_label_dist": 1.5,
+	                "vertex_shape": "hidden",
+	                "edge_arrow_size": 0.001, "edge_label": edge_labels, "edge_label_size": 65,
+	                "bbox": (3500, 1000), "margin": 100,
+	                }
 
 	layout = g.layout_sugiyama()
 	layout.rotate(270)
 
 	ig.plot(g, sys.argv[1] + "/graph_" + g["gene"] + ".png", layout=layout, **visual_style)
-
 	# g.write_graphml("updated_" + g["gene"] + ".graphml")
+
+'''
+	A = g.get_edgelist()
+	G = networkx.DiGraph(A)
+	nx.draw(G)
+	plt.show()
+'''
 
 
 if __name__ == "__main__":
 	main()
+
