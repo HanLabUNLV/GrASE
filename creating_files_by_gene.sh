@@ -2,18 +2,19 @@
 
 while getopts "a:t:f:s:r:d:g:" arg; do
         case $arg in
-		a) all_genes=$OPTARG;;
                 r) rmats=$OPTARG;;
                 d) gff=$OPTARG;;
                 g) graphml=$OPTARG;;
         esac
 done
 
-#echo "\nAll Genes: $all_genes \nA3SS: $a3ss \nA5SS: $a5ss \nSE: $se \nRI: $ri \nGFF: $gff \nGraphML: $graphml\n" 
 
 mkdir -p gene_files
+mkdir -p tmp
 
-cat $all_genes | while read line; do
+awk '/aggregate_gene/ {print $10}' $gff | sed -e 's/^"//' -e 's/"$//' > tmp/all_genes.txt
+
+cat all_genes.txt | while read line; do
 	#echo -e "\n\nGene ID: $line\n"
 	
 	mkdir gene_files/$line
@@ -42,7 +43,7 @@ find ./gene_files/ -type d -empty -delete
 
 
 
-ls gene_files > all_genes_updated.txt
+ls gene_files > tmp/all_genes_updated.txt
 
 cat all_genes_updated.txt | while read line; do
 	
