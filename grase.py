@@ -1,10 +1,6 @@
 import igraph as ig
-import networkx
-import networkx as nx
-import matplotlib.pyplot as plt
 import pandas as pd
-import subprocess
-import sys
+import argparse
 import os
 
 """
@@ -16,6 +12,42 @@ Vocabulary:
 	graphml - (exon, intron, splicingGraphs)
 """
 
+USAGE = '''%(prog)s [options]'''
+
+def get_args():
+	parser = argparse.ArgumentParser(usage=USAGE, exit_on_error=False)
+
+	parser.add_argument('-g', action='store', dest='gene_files_directory', required=True,
+	                    help='The gene_files directory created by the first step (creating_files_by_gene.sh)')
+
+	args = parser.parse_args()
+
+	return args
+
+
+
+def get_files(args, gene):
+	gene = os.path.join(args.gene_files_directory, gene)
+	fromGTF_A3SS = fromGTF_A5SS = fromGTF_SE = fromGTF_RI = ''
+	for file in os.listdir(gene):
+		file = os.path.join(gene, file)
+		if file.endswith(".graphml"):
+			g = ig.Graph.Read_GraphML(file)
+		elif file.endswith(".dexseq.gff"):
+			gff = open(file)
+		elif file.endswith("fromGTF.SE.txt"):
+			fromGTF_SE = open(file)
+		elif file.endswith("fromGTF.RI.txt"):
+			fromGTF_RI = open(file)
+		elif file.endswith("fromGTF.A3SS.txt"):
+			fromGTF_A3SS = open(file)
+		elif file.endswith("fromGTF.A5SS.txt"):
+			fromGTF_A5SS = open(file)
+
+	return g, gff, fromGTF_SE, fromGTF_RI, fromGTF_A3SS, fromGTF_A5SS
+
+
+'''
 def check_fromGTF_input(commandLineArg, argNum):
 	"""
 	Checks command line arguments of fromGTF.event.txt files (args 5 - 8). If the files open properly, then they are
@@ -65,9 +97,9 @@ def check_fromGTF_input(commandLineArg, argNum):
 	else:
 		print("Error, command line argument " + str(argNum) + " must be in the format 'fromGTF.event.txt'\n Event options: A3SS, A5SS, SE, RI")
 		exit(0)
+'''
 
-
-def map_DEXSeq_from_gff(g, gff):
+def map_DEXSeq_from_gff(g):
 	"""
 	Takes a gff DEXSeq output file and reads it. The function will take the coordinates of DEXSeq exon fragments
 	in order to create edges on the igraph object that map to those fragments. The fragments are labelled with
@@ -106,7 +138,7 @@ def map_DEXSeq_from_gff(g, gff):
 	return g
 
 
-def map_rMATS_event_overhang(g, fromGTF, eventType):
+def map_rMATS_event_overhang(g, fromGTF, eventType, gene, gff):
 	"""
 	Takes a fromGTF.event.txt rMATS output file and reads it. This function will take the coordinates of rMATS events in
 	order to create edges on the igraph object that map those events with corresponding DEXSeq fragments. The goal is to
@@ -127,10 +159,12 @@ def map_rMATS_event_overhang(g, fromGTF, eventType):
 	:param eventType: Tracks rMATS event type (A3SS or A5SS) to label edges on the igrpah object appropriately
 	:return: igraph object after the rMATS labels have been added to the DEXSeq edges appropriately.
 	"""
-	df = pd.read_csv(fromGTF, dtype=str, sep='\t')
+	rmats_df = pd.read_csv(fromGTF, dtype=str, sep='\t')
+	dex_df = pd.read_table(gff.name, dtype=str, header=None, skiprows=1, delim_whitespace=True)
 	fromGTF.seek(0)
 
 	dx_ID = {} # dictionary that maps {rMATS ID: [dexseq fragments]}
+	dx_gff = {} # dictionary that maps {dexseq fragment: [rMATS IDs]}
 	ID = [] # lists ID #s of every line in the fromGTF
 	longES = [] # lists long exon start coordinates of every line in the fromGTF
 	longEE = [] # lists long exon end coordinates of every line in the fromGTF
@@ -171,13 +205,19 @@ def map_rMATS_event_overhang(g, fromGTF, eventType):
 						# of nodes over that fragment. Find that one edge (corresponding to dexseq fragment) and label it.
 						g.es.find(_within=(i, i+1))[eventType] = True
 						dx_ID[ID[x]].append('E' + ''.join(g.es.select(_within=(i, i+1))["dexseq_fragment"]))
+						if g.es.select(_within=(i, i+1))["dexseq_fragment"][0] not in dx_gff:
+							dx_gff[g.es.select(_within=(i, i+1))["dexseq_fragment"][0]] = []
+						dx_gff[g.es.select(_within=(i, i+1))["dexseq_fragment"][0]].append(eventType + "_" + ID[x])
 
 			# cannot assume longES = shortES or longEE = shortEE since gene strandedness (+/-) affects the layout of the graph.
 			# works exactly the same as longES[x] == shortES[x], but in reverse order
 			if longEE[x] == shortEE[x]:
 				for i in range(g.vs.find(longES[x]).index, g.vs.find(shortES[x]).index):
-							g.es.find(_within=(i, i+1))[eventType] = True
-							dx_ID[ID[x]].append('E' + ''.join(g.es.select(_within=(i, i+1))["dexseq_fragment"]))
+						g.es.find(_within=(i, i+1))[eventType] = True
+						dx_ID[ID[x]].append('E' + ''.join(g.es.select(_within=(i, i+1))["dexseq_fragment"]))
+						if g.es.select(_within=(i, i+1))["dexseq_fragment"][0] not in dx_gff:
+							dx_gff[g.es.select(_within=(i, i+1))["dexseq_fragment"][0]] = []
+						dx_gff[g.es.select(_within=(i, i+1))["dexseq_fragment"][0]].append(eventType + "_" + ID[x])
 		if eventType == "A5SS":
 			# works exactly the same as A3SS events, but in reverse order (A5SS and A3SS are on opposite sides of the exon)
 			g.es.find(_within=(g.vs.find(longEE[x]).index, g.vs.find(longES[x]).index))["rmats"] = "rmats long"
@@ -186,23 +226,34 @@ def map_rMATS_event_overhang(g, fromGTF, eventType):
 				for i in range(g.vs.find(shortEE[x]).index, g.vs.find(longEE[x]).index):
 						g.es.find(_within=(i, i+1))["A5SS"] = True
 						dx_ID[ID[x]].append('E' + ''.join(g.es.select(_within=(i, i+1))["dexseq_fragment"]))
+						if g.es.select(_within=(i, i+1))["dexseq_fragment"][0] not in dx_gff:
+							dx_gff[g.es.select(_within=(i, i+1))["dexseq_fragment"][0]] = []
+						dx_gff[g.es.select(_within=(i, i+1))["dexseq_fragment"][0]].append(eventType+ "_" + ID[x])
 			if longEE[x] == shortEE[x]:
 				for i in range(g.vs.find(shortES[x]).index, g.vs.find(longES[x]).index):
 						g.es.find(_within=(i, i+1))["A5SS"] = True
 						dx_ID[ID[x]].append('E' + ''.join(g.es.select(_within=(i, i+1))["dexseq_fragment"]))
+						if g.es.select(_within=(i, i+1))["dexseq_fragment"][0] not in dx_gff:
+							dx_gff[g.es.select(_within=(i, i+1))["dexseq_fragment"][0]] = []
+						dx_gff[g.es.select(_within=(i, i+1))["dexseq_fragment"][0]].append(eventType + "_" + ID[x])
 
 	for x in dx_ID:
 		dx_ID[x] = ','.join(dx_ID[x])
 
-	df['DexseqFragment'] = df['ID'].map(dx_ID)
-	#df['DexseqFragment'] = pd.Series(dx_ID)
-	df.to_csv(sys.argv[1] + "/fromGTF_" + g["gene"] + "." + eventType + ".txt", sep='\t', index=False)
+	for x in dx_gff:
+		dx_gff[x] = ','.join(dx_gff[x])
+
+	rmats_df['DexseqFragment'] = rmats_df['ID'].map(dx_ID)
+	rmats_df.to_csv(gene + "/fromGTF_" + g["gene"] + "." + eventType + ".txt", sep='\t', index=False)
+
+	dex_df[14] = dex_df[13].map(dx_gff)
+	dex_df.to_csv(gene + "/" + g["gene"] + ".dexseq.mapped.gff", sep='\t', index=False, header=False)
 
 	return g
 
 
 
-def map_rMATS_event_full_fragment(g, fromGTF, eventType):
+def map_rMATS_event_full_fragment(g, fromGTF, eventType, gene, gff):
 	"""
 	Takes a fromGTF.event.txt rMATS output file and reads it. This function will take the coordinates of rMATS events in
 	order to create edges on the igraph object that map those events with corresponding DEXSeq fragments. The goal is to
@@ -222,9 +273,11 @@ def map_rMATS_event_full_fragment(g, fromGTF, eventType):
 	:return: igraph object after the rMATS labels have been added to the DEXSeq edges appropriately.
 	"""
 	df = pd.read_table(fromGTF, dtype=str, sep='\t')
+	dex_df = pd.read_table(gff.name, dtype=str, header=None, skiprows=1, delim_whitespace=True)
 	fromGTF.seek(0)
 
 	dx_ID = {} # dictionary that maps {rMATS ID: [dexseq fragments]}
+	dx_gff = {} # dictionary that maps {dexseq fragment: [rMATS IDs]}
 	ID = [] # lists ID #s of every line in the fromGTF
 	exonStart = [] # lists exon start coordinates of every line in the fromGTF
 	exonEnd = [] # lists exon end coordinates of every line in the fromGTF
@@ -252,6 +305,9 @@ def map_rMATS_event_full_fragment(g, fromGTF, eventType):
 					if g.es.select(_within=(i, i+1))[k]["dexseq_fragment"] != '':
 						g.es.select(_within=(i, i+1))[k][eventType] = True
 						dx_ID[ID[x]].append('E' + ''.join(g.es.select(_within=(i, i+1))["dexseq_fragment"]))
+						if g.es.select(_within=(i, i+1))["dexseq_fragment"][0] not in dx_gff:
+							dx_gff[g.es.select(_within=(i, i+1))["dexseq_fragment"][0]] = []
+						dx_gff[g.es.select(_within=(i, i+1))["dexseq_fragment"][0]].append(eventType + "_" + ID[x])
 		# works exactly the same as strand == +, but in the reverse direction
 		if g["strand"] == '-':
 			for i in range(g.vs.find(exonEnd[x]).index, g.vs.find(exonStart[x]).index):
@@ -259,74 +315,49 @@ def map_rMATS_event_full_fragment(g, fromGTF, eventType):
 					if g.es.select(_within=(i, i+1))[k]["dexseq_fragment"] != '':
 						g.es.select(_within=(i, i+1))[k][eventType] = True
 						dx_ID[ID[x]].append('E' + ''.join(g.es.select(_within=(i, i+1))["dexseq_fragment"]))
+						if g.es.select(_within=(i, i+1))["dexseq_fragment"][0] not in dx_gff:
+							dx_gff[g.es.select(_within=(i, i+1))["dexseq_fragment"][0]] = []
+						dx_gff[g.es.select(_within=(i, i+1))["dexseq_fragment"][0]].append(eventType + "_" + ID[x])
 
 	for x in dx_ID:
 		dx_ID[x] = ','.join(dx_ID[x])
 
+	for x in dx_gff:
+		dx_gff[x] = ','.join(dx_gff[x])
+
 	df['DexseqFragment'] = df['ID'].map(dx_ID)
-	df.to_csv(sys.argv[1] + "/fromGTF_" + g["gene"] + "." + eventType + ".txt", sep='\t', index=False)
+	df.to_csv(gene + "/fromGTF_" + g["gene"] + "." + eventType + ".txt", sep='\t', index=False)
+
+	dex_df[14] = dex_df[13].map(dx_gff)
+	dex_df.to_csv(gene + "/" + g["gene"] + ".dexseq.mapped.gff", sep='\t', index=False, header=False)
 
 	return g
 
 
 
-def main():
+def map_rMATS(g, gene, gff):
+	g.es["rmats"] = g.es["event"] = g.es["A3SS"] = g.es["A5SS"] = g.es["SE"] = g.es["RI"] = ""
 
-	global fromGTF_A3SS
-	global fromGTF_A5SS
-	global fromGTF_SE
-	global fromGTF_RI
+	if fromGTF_A3SS:
+		g = map_rMATS_event_overhang(g, fromGTF_A3SS, "A3SS", gene, gff)
+		fromGTF_A3SS.close()
+	if fromGTF_A5SS:
+		g = map_rMATS_event_overhang(g, fromGTF_A5SS, "A5SS", gene, gff)
+		fromGTF_A5SS.close()
+	if fromGTF_SE:
+		g = map_rMATS_event_full_fragment(g, fromGTF_SE, "SE", gene, gff)
+		fromGTF_SE.close()
+	if fromGTF_RI:
+		g = map_rMATS_event_full_fragment(g, fromGTF_RI, "RI", gene, gff)
+		fromGTF_RI.close()
 
-	fromGTF_A3SS = fromGTF_A5SS = fromGTF_SE = fromGTF_RI = ''
-	args = len(sys.argv)
-
-	if args > 8 or args < 5:
-		print("\nError, command line arguments should be:\n /path/to/output_directory   graphmlFile   gffFile  fromGTF.event.txtFile(s)")
-		exit(0)
-
-	if not os.path.exists(sys.argv[1]):
-		print("\nError, output_directory does not exist")
-		exit(0)
-
-	if not sys.argv[2].endswith(".graphml"):
-		print("\nError, first command line argument must be a *.graphml file")
-		exit(0)
-	try:
-		g =	ig.Graph.Read_GraphML(sys.argv[2])
-	except IOError:
-		print("Oops! The graphml file does not exist. Try again...\n")
-		exit(0)
-
-
-	if not sys.argv[3].endswith(".gff"):
-		print("\nError, second command line argument must be a *.gff file")
-		exit(0)
-	try:
-		gff = open(sys.argv[3])
-	except IOError:
-		print("Oops! The gff file does not exist. Try again...\n")
-		exit(0)
-
-	fromGTF, eventType = check_fromGTF_input(sys.argv[4], 4)
-	globals()[eventType] = fromGTF
-
-	if args > 5:
-		fromGTF, eventType = check_fromGTF_input(sys.argv[5], 5)
-		globals()[eventType] = fromGTF
-
-	if args > 6:
-		fromGTF, eventType = check_fromGTF_input(sys.argv[6], 6)
-		globals()[eventType] = fromGTF
-
-	if args > 7:
-		fromGTF, eventType = check_fromGTF_input(sys.argv[7], 7)
-		globals()[eventType] = fromGTF
-
-
-
-	g = map_DEXSeq_from_gff(g, gff)
 	gff.close()
 
+	return g
+		
+		
+
+def style_and_plot(g, gene):
 
 	for vertex in g.vs:
 		vertex['id'] = vertex['id'].strip('n')
@@ -335,27 +366,6 @@ def main():
 		if vertex['name'] == 'L':
 			vertex['id'] = 'L'
 
-
-	g.es["rmats"] = g.es["event"] = g.es["A3SS"] = g.es["A5SS"] = g.es["SE"] = g.es["RI"] = ""
-
-	if fromGTF_A3SS:
-		g = map_rMATS_event_overhang(g, fromGTF_A3SS, "A3SS")
-		fromGTF_A3SS.close()
-
-	if fromGTF_A5SS:
-		g = map_rMATS_event_overhang(g, fromGTF_A5SS, "A5SS")
-		fromGTF_A5SS.close()
-
-	if fromGTF_SE:
-		g = map_rMATS_event_full_fragment(g, fromGTF_SE, "SE")
-		fromGTF_SE.close()
-
-	if fromGTF_RI:
-		g = map_rMATS_event_full_fragment(g, fromGTF_RI, "RI")
-		fromGTF_RI.close()
-
-
-
 	edge_labels = []
 
 	for x in range(len(g.es)):
@@ -363,45 +373,31 @@ def main():
 			A3SS = "A3SS"
 		else:
 			A3SS = ""
-
 		if g.es[x]["A5SS"] == True:
-			A5SS = "A5SS"
+			A5SS = " A5SS"
 		else:
 			A5SS = ""
-
 		if g.es[x]["SE"] == True:
-			SE = "SE"
+			SE = " SE"
 		else:
 			SE = ""
-
 		if g.es[x]["RI"] == True:
-			RI = "RI"
+			RI = " RI"
 		else:
 			RI = ""
 
-		if g.es[x]["ex_or_in"] == "in":
-			g.es[x]["edge_style"] = "dotted"
+		edge_labels.append(g.es["dexseq_fragment"][x] + '\n' + A3SS + A5SS + SE + RI)
 
-
-		if A3SS or A5SS or SE or RI:
-			newLine = '\n'
-			space = ' '
-		else:
-			newLine = ''
-			space = ''
-
-		edge_labels.append(g.es["dexseq_fragment"][x] + space + A3SS + space + A5SS + space + SE + space + RI)
-
-	color_dict = {"ex": "purple", "in": "grey", "NA": "grey", None: "dark green"}
-	curved_dict = {"ex": -0.3, "in": False, "NA": False, None: 0}
-	width_dict = {"ex": 10, "in": 4, "NA": 4, None: 10}
+	color_dict = {"ex": "purple", "in": "grey", "NA": "black", None: "dark green"}
+	curved_dict = {"ex": -0.3, "in": -0.3, "NA": False, None: 0}
+	width_dict = {"ex": 10, "in": 4, "NA": 2, None: 10}
 	order_dict = {}
+	order_num = 0
 	for name in g.vs['name']:
 		order_dict[name] = name
-
+		order_num += 1
 	order_dict["L"] = "100000000000"
 	order_dict["R"] = "0"
-
 	for name in order_dict:
 		order_dict[name] = int(order_dict[name])
 
@@ -409,26 +405,94 @@ def main():
 	                "edge_color": [color_dict[ex_or_in] for ex_or_in in g.es["ex_or_in"]],
 	                "edge_width": [width_dict[ex_or_in] for ex_or_in in g.es["ex_or_in"]],
 	                "order": [order_dict[order] for order in g.vs["name"]],
-	                "vertex_label": g.vs["id"], "vertex_label_size": 65, "vertex_label_dist": 1.5,
+	                "vertex_label": g.vs["id"], "vertex_label_size": 65, "vertex_label_dist": 1.7,
 	                "vertex_shape": "hidden",
-	                "edge_arrow_size": 0.001, "edge_label": edge_labels, "edge_label_size": 65,
-	                "bbox": (3500, 1000), "margin": 100,
+	                #"edge_label": edge_labels, "edge_label_size": 65,
+	                "edge_arrow_size": 0.001,
+	                "bbox": (3500, 1000), "margin": 100
 	                }
 
 	layout = g.layout_sugiyama()
 	layout.rotate(270)
 
-	ig.plot(g, sys.argv[1] + "/graph_" + g["gene"] + ".png", layout=layout, **visual_style)
-	# g.write_graphml("updated_" + g["gene"] + ".graphml")
+	ig.plot(g, gene + "/graph_" + g["gene"] + ".png", layout=layout, **visual_style)
+	#g.write_graphml("updated_" + g["gene"] + ".graphml")
 
-'''
-	A = g.get_edgelist()
-	G = networkx.DiGraph(A)
-	nx.draw(G)
-	plt.show()
-'''
+
+
+def main():
+
+	global gff
+	global fromGTF_A3SS
+	global fromGTF_A5SS
+	global fromGTF_SE
+	global fromGTF_RI
+
+	#args = len(sys.argv)
+	try:
+		args = get_args()
+	except:
+		print("\tgrase.py -g </path/to/gene_files/directory (created by creating_files_by_gene.sh)>\n")
+		return -1
+
+	genes = os.listdir(args.gene_files_directory)
+
+	for gene in genes:
+		g, gff, fromGTF_SE, fromGTF_RI, fromGTF_A3SS, fromGTF_A5SS = get_files(args, gene)
+		g = map_DEXSeq_from_gff(g)
+		g = map_rMATS(g, gene, gff)
+		style_and_plot(g, gene)
+
+	# add in how to create combined_fromGTF files for each event
+	# add in creating_dexseq_rmats_combined_dfs script
+
 
 
 if __name__ == "__main__":
 	main()
 
+
+
+'''
+		if args > 8 or args < 5:
+			print("\nError, command line arguments should be:\n /path/to/output_directory   graphmlFile   gffFile  fromGTF.event.txtFile(s)")
+			exit(0)
+		
+		if not os.path.exists(sys.argv[1]):
+			print("\nError, output_directory does not exist")
+			exit(0)
+		
+		if not sys.argv[2].endswith(".graphml"):
+			print("\nError, first command line argument must be a *.graphml file")
+			exit(0)
+		try:
+			g =	ig.Graph.Read_GraphML(sys.argv[2])
+		except IOError:
+			print("Oops! The graphml file does not exist. Try again...\n")
+			exit(0)
+		
+		
+		if not sys.argv[3].endswith(".gff"):
+			print("\nError, second command line argument must be a *.gff file")
+			exit(0)
+		try:
+			gff = open(sys.argv[3])
+		except IOError:
+			print("Oops! The gff file does not exist. Try again...\n")
+			exit(0)
+		
+		fromGTF, eventType = check_fromGTF_input(sys.argv[4], 4)
+		globals()[eventType] = fromGTF
+		
+		if args > 5:
+			fromGTF, eventType = check_fromGTF_input(sys.argv[5], 5)
+			globals()[eventType] = fromGTF
+		
+		if args > 6:
+			fromGTF, eventType = check_fromGTF_input(sys.argv[6], 6)
+			globals()[eventType] = fromGTF
+		
+		if args > 7:
+			fromGTF, eventType = check_fromGTF_input(sys.argv[7], 7)
+			globals()[eventType] = fromGTF
+'''
