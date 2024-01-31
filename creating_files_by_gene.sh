@@ -19,7 +19,7 @@ grep -w GeneID $rmats/fromGTF.A3SS.txt > grase_results/results/combined_fromGTF.
 grep -w GeneID $rmats/fromGTF.A5SS.txt > grase_results/results/combined_fromGTF.A5SS.txt
 grep -w GeneID $rmats/fromGTF.SE.txt > grase_results/results/combined_fromGTF.SE.txt
 grep -w GeneID $rmats/fromGTF.RI.txt > grase_results/results/combined_fromGTF.RI.txt
-touch grase_results/results/combined_dexseq.mapped.A3SS.gff grase_results/results/combined_dexseq.mapped.A5SS.gff grase_results/results/combined_dexseq.mapped.SE.gff grase_results/results/combined_dexseq.mapped.RI.gff grase_results/results/final.dexseq.map.gff grase_results/results/final.fromGTF.map.txt
+touch grase_results/results/combined_dexseq.mapped.A3SS.gff grase_results/results/combined_dexseq.mapped.A5SS.gff grase_results/results/combined_dexseq.mapped.SE.gff grase_results/results/combined_dexseq.mapped.RI.gff
 
 awk '{ print $2 }' $rmats/fromGTF.A3SS.txt | sed -e 's/^"//' -e 's/"$//' > grase_results/tmp/all_genes.txt
 awk '{ print $2 }' $rmats/fromGTF.A5SS.txt | sed -e 's/^"//' -e 's/"$//' >> grase_results/tmp/all_genes.txt
@@ -86,11 +86,6 @@ cat grase_results/tmp/all_genes.txt | while read line; do
                 wait -n
         fi
 done
-
-
-find grase_results/gene_files/ -type f -exec awk -v x=2 'NR==x{exit 1}' {} \; -exec  rm -f {} \;
-find grase_results/gene_files/ -type d -empty -delete
-
 
 
 ls grase_results/gene_files > grase_results/tmp/all_genes_updated.txt
