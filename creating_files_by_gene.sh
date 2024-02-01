@@ -15,11 +15,7 @@ mkdir -p grase_results/gene_files
 mkdir -p grase_results/tmp
 mkdir -p grase_results/results
 
-grep -w GeneID $rmats/fromGTF.A3SS.txt > grase_results/results/combined_fromGTF.A3SS.txt
-grep -w GeneID $rmats/fromGTF.A5SS.txt > grase_results/results/combined_fromGTF.A5SS.txt
-grep -w GeneID $rmats/fromGTF.SE.txt > grase_results/results/combined_fromGTF.SE.txt
-grep -w GeneID $rmats/fromGTF.RI.txt > grase_results/results/combined_fromGTF.RI.txt
-touch grase_results/results/combined_dexseq.mapped.A3SS.gff grase_results/results/combined_dexseq.mapped.A5SS.gff grase_results/results/combined_dexseq.mapped.SE.gff grase_results/results/combined_dexseq.mapped.RI.gff
+touch grase_results/results/combined_fromGTF.A3SS.txt grase_results/results/combined_fromGTF.A5SS.txt grase_results/results/combined_fromGTF.SE.txt grase_results/results/combined_fromGTF.RI.txt grase_results/results/combined_dexseq.mapped.A3SS.gff grase_results/results/combined_dexseq.mapped.A5SS.gff grase_results/results/combined_dexseq.mapped.SE.gff grase_results/results/combined_dexseq.mapped.RI.gff
 
 awk '{ print $2 }' $rmats/fromGTF.A3SS.txt | sed -e 's/^"//' -e 's/"$//' > grase_results/tmp/all_genes.txt
 awk '{ print $2 }' $rmats/fromGTF.A5SS.txt | sed -e 's/^"//' -e 's/"$//' >> grase_results/tmp/all_genes.txt
@@ -29,10 +25,12 @@ sort grase_results/tmp/all_genes.txt | uniq > grase_results/tmp/tmp.txt && mv gr
 sed -i 's/GeneID//g' grase_results/tmp/all_genes.txt
 sed -i '/^$/d' grase_results/tmp/all_genes.txt
 
+echo "Creating grase_results directory and populating gene_files directory (inside grase_results)...\n"
+
 cat grase_results/tmp/all_genes.txt | while read line; do
-	#echo -e "\n\nGene ID: $line\n"
 
 	(
+
 	if [[ $line == *"+"* ]] 
 	then 
 		num_genes=$(echo $line | tr -cd '+' | wc -c) 
@@ -80,28 +78,19 @@ cat grase_results/tmp/all_genes.txt | while read line; do
         grep -w $line $rmats/fromGTF.RI.txt >> grase_results/gene_files/$line/fromGTF.RI.txt
 
 	fi
-	) &
 
-	if [[ $(jobs -r -p | wc -l) -ge $procs ]]; then
-                wait -n
-        fi
-done
-
-
-ls grase_results/gene_files > grase_results/tmp/all_genes_updated.txt
-
-cat grase_results/tmp/all_genes_updated.txt | while read line; do
+	cp $graphml/$line.graphml grase_results/gene_files/$line/	
 	
-	(
-		cp $graphml/$line.graphml grase_results/gene_files/$line/	
+	#echo -e "\nDexseq Data:"
+        grep -w $line $gtf > grase_results/gene_files/$line/$line.gtf
+	python $prep_annotation grase_results/gene_files/$line/$line.gtf grase_results/gene_files/$line/$line.dexseq.gff
+	mkdir -p grase_results/gene_files/$line/output
 	
-		#echo -e "\nDexseq Data:"
-        	grep -w $line $gtf > grase_results/gene_files/$line/$line.gtf
-		python $prep_annotation grase_results/gene_files/$line/$line.gtf grase_results/gene_files/$line/$line.dexseq.gff
-		mkdir -p grase_results/gene_files/$line/output
 	) &
 
 	if [[ $(jobs -r -p | wc -l) -ge $procs ]]; then
 		wait -n
 	fi
 done
+
+echo "Done!"
