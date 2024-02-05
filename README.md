@@ -9,4 +9,4 @@ To generate the GraphML objects for each gene, run `SplicingGraphs.igraph.r`. Pl
 
 
 * need dexseq results using non-aggregated gff (add -r no to prepare_annotation.py command)
-* if you rerun grase.py, empty the files in the results directory [] 
+* if you rerun grase.py, empty the files in the results directory `ls grase_results/results/* | while read line; do > $line; done` 
