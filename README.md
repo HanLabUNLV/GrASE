@@ -16,7 +16,8 @@ GrASE will process every gene in your dataset that produces results in DEXSeq an
 bash creatingFilesByGene.sh -r /path/to/rmats/results -d /path/to/dexseq_prepare_annotation.py -a /path/to/annotation/file.gtf -g /path/to/graphml/directory -p number_of_threads
 ```
 
-
-
+## Running GrASE
 
 * if you run grase.py again, empty the files in the results directory: ```ls grase_results/results/* | while read line; do > $line; done``` and then rerun
+
+## Heatmap "(?)"
