@@ -2,6 +2,7 @@
 Graph of Alternative Splice junctions and Exonic parts
 
 ## DEXSeq and rMATS
+DEXSeq 
 * need dexseq results using non-aggregated gff (add -r no to prepare_annotation.py command)
 
 ## Creating graphMLs
