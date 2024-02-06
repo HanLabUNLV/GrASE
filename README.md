@@ -6,6 +6,7 @@ GraphML is an XML-based file format for graphs. This step ensures that the coord
 
 To generate the GraphML objects for each gene, run `SplicingGraphs.igraph.r`. Please, ensure that the `gencode.TxDb.R` has been sourced. 
 
+## Preparing to run GrASE
 
 
 * need dexseq results using non-aggregated gff (add -r no to prepare_annotation.py command)
