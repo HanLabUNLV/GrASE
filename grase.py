@@ -20,6 +20,12 @@ def get_args():
 
 	parser.add_argument('-g', action='store', dest='gene_files_directory', required=True,
 	                    help='The gene_files directory created by the first step (creating_files_by_gene.sh)')
+	'''
+	parser.add_argument('--rmats', action='store', dest='rmats_directory', required=True,
+	                    help='The rmats output directory')
+	parser.add_argument('--dexseq', action='store', dest='dexseq_results', required=True,
+	                    help='The dexseq results file in .txt or .csv format (tab separated)')
+	'''
 	parser.add_argument('--nthread', action='store', dest='nthread', default=1, type=int,
 	                    help='The number of threads. The optimal number of threads should be equal to the number of CPU cores. Defaultt: %(default)s')
 
@@ -206,13 +212,11 @@ def map_rMATS_event_overhang(g, fromGTF, eventType, gene, gff, grase_output_dir)
 
 	rmats_df['DexseqFragment'] = rmats_df['ID'].map(dx_ID)
 	rmats_df.to_csv(gene + "/output/fromGTF_" + g["gene"] + "." + eventType + ".txt", sep='\t', index=False)
-	rmats_df.to_csv(grase_output_dir + "/results/combined_fromGTF." + eventType + ".txt", mode='a', sep='\t', index=False, header=False)
-
+	rmats_df.to_csv(grase_output_dir + "/results/combined_fromGTF." + eventType + ".txt", mode='a', sep='\t', index=False)
 
 	dex_df[14] = dex_df[13].map(dx_gff)
 	dex_df.to_csv(gene + "/output/" + g["gene"] + ".dexseq.mapped." + eventType + ".gff", sep='\t', index=False, header=False)
-	dex_df.to_csv(grase_output_dir + "/results/combined_dexseq.mapped." + eventType + ".gff", mode='a', sep='\t', index=False, header=False)
-
+	dex_df.to_csv(grase_output_dir + "/results/combined_dexseq.mapped." + eventType + ".gff", mode='a', sep='\t', index=False)
 	return g
 
 
@@ -291,11 +295,11 @@ def map_rMATS_event_full_fragment(g, fromGTF, eventType, gene, gff, grase_output
 
 	rmats_df['DexseqFragment'] = rmats_df['ID'].map(dx_ID)
 	rmats_df.to_csv(gene + "/output/fromGTF_" + g["gene"] + "." + eventType + ".txt", sep='\t', index=False)
-	rmats_df.to_csv(grase_output_dir + "/results/combined_fromGTF." + eventType + ".txt", mode='a', sep='\t', index=False, header=False)
+	rmats_df.to_csv(grase_output_dir + "/results/combined_fromGTF." + eventType + ".txt", mode='a', sep='\t', index=False)
 
 	dex_df[14] = dex_df[13].map(dx_gff)
 	dex_df.to_csv(gene + "/output/" + g["gene"] + ".dexseq.mapped." + eventType + ".gff", sep='\t', index=False, header=False)
-	dex_df.to_csv(grase_output_dir + "/results/combined_dexseq.mapped." + eventType + ".gff", mode='a', sep='\t', index=False, header=False)
+	dex_df.to_csv(grase_output_dir + "/results/combined_dexseq.mapped." + eventType + ".gff", mode='a', sep='\t', index=False)
 
 	return g
 
@@ -403,19 +407,14 @@ def main():
 
 	genes = os.listdir(args.gene_files_directory)
 
+	print("\nProcessing genes...\n")
+
 	p = Pool(args.nthread)
 	p.map(process_gene, genes)
 
-	''' 
-	for gene in genes:
-		g, gene, gff, fromGTF_SE, fromGTF_RI, fromGTF_A3SS, fromGTF_A5SS = get_files(args, gene)
-		g = map_DEXSeq_from_gff(g)
-		g = map_rMATS(g, gene, gff)
-		style_and_plot(g, gene)
-	'''
+	print("Done processing genes.\n")
 
 	# add in creating_dexseq_rmats_combined_dfs script
-
 
 
 if __name__ == "__main__":
