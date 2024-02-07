@@ -1,6 +1,15 @@
 # GrASE
 Graph of Alternative Splice junctions and Exonic parts
 
+## Dependencies
+* igraph
+* python
+* dexseq
+* rmats
+* star
+* splicingGraphs
+
+
 ## DEXSeq and rMATS
 DEXSeq 
 * need dexseq results using non-aggregated gff (add -r no to prepare_annotation.py command)
