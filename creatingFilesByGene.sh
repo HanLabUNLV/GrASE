@@ -15,8 +15,6 @@ mkdir -p grase_results/gene_files
 mkdir -p grase_results/tmp
 mkdir -p grase_results/results
 
-touch grase_results/results/combined_fromGTF.A3SS.txt grase_results/results/combined_fromGTF.A5SS.txt grase_results/results/combined_fromGTF.SE.txt grase_results/results/combined_fromGTF.RI.txt grase_results/results/combined_dexseq.mapped.A3SS.gff grase_results/results/combined_dexseq.mapped.A5SS.gff grase_results/results/combined_dexseq.mapped.SE.gff grase_results/results/combined_dexseq.mapped.RI.gff
-
 awk '{ print $2 }' $rmats/fromGTF.A3SS.txt | sed -e 's/^"//' -e 's/"$//' > grase_results/tmp/all_genes.txt
 awk '{ print $2 }' $rmats/fromGTF.A5SS.txt | sed -e 's/^"//' -e 's/"$//' >> grase_results/tmp/all_genes.txt
 awk '{ print $2 }' $rmats/fromGTF.SE.txt | sed -e 's/^"//' -e 's/"$//' >> grase_results/tmp/all_genes.txt
