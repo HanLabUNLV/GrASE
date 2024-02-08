@@ -2,6 +2,7 @@
 Graph of Alternative Splice junctions and Exonic parts
 
 ## Dependencies
+Tested on Ubuntu (20.04.6 LTS)
 * igraph
 * python
 * dexseq
