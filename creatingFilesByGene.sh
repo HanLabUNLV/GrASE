@@ -14,6 +14,9 @@ mkdir -p grase_results
 mkdir -p grase_results/gene_files
 mkdir -p grase_results/tmp
 mkdir -p grase_results/results
+mkdir -p grase_results/results/tmp
+mkdir -p grase_results/results/SplicingEvents
+mkdir -p grase_results/results/ExonParts
 
 awk '{ print $2 }' $rmats/fromGTF.A3SS.txt | sed -e 's/^"//' -e 's/"$//' > grase_results/tmp/all_genes.txt
 awk '{ print $2 }' $rmats/fromGTF.A5SS.txt | sed -e 's/^"//' -e 's/"$//' >> grase_results/tmp/all_genes.txt
