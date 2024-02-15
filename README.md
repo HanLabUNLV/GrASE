@@ -28,6 +28,7 @@ bash creatingFilesByGene.sh -r /path/to/rmats/results -d /path/to/dexseq_prepare
 
 ## Running GrASE
 
-* if you run grase.py again, empty the files in the results directory: ```ls grase_results/results/* | while read line; do > $line; done``` and then rerun
+* if you run grase.py again, empty the files in the results directory: ```rm grase_results/results/*``` and then rerun
+* required flags: -g <gene_files> (created by creatingFilesByGene.sh) --rmats <rmats_results_directory> --dexseq <dexseq_results.txt>
 
 ## Heatmap "(?)"
