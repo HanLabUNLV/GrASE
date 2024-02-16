@@ -626,8 +626,8 @@ def main():
 	else:
 		print(f"\nProcessing genes (using {args.nthread} threads)...\n")
 
-	#p = Pool(args.nthread)
-	#p.map(process_gene, genes)
+	p = Pool(args.nthread)
+	p.map(process_gene, genes)
 
 	print("Done processing genes.\n")
 	print("Processing results...\n")
