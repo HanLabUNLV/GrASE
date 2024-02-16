@@ -592,14 +592,15 @@ def get_grase_results(get_results_files):
 	events_dex_sig_dedup.to_csv(output_dir + "/SplicingEvents/DexSigEvents.txt", sep='\t', index=False)
 	events_rmats_sig.to_csv(output_dir + "/SplicingEvents/rMATS_SigEvents.txt", sep='\t', index=False)
 	events_rmats_sig_dex_sig.to_csv(output_dir + "/SplicingEvents/rMATS_Sig__DexSigEvents.txt", sep='\t', index=False)
-	dex_to_rmats_ex_dexRes_MATS.to_csv(output_dir + "/SplicingEvents/ExonsToEvents.mapped.txt", sep='\t', index=False)
 
 	exon_dex_sig.to_csv(output_dir + "/ExonParts/DexSigEvents.txt", sep='\t', index=False)
 	exon_rmats_tested.to_csv(output_dir + "/ExonParts/rMATS_TestedEvents.txt", sep='\t', index=False)
 	exon_rmats_sig.to_csv(output_dir + "/ExonParts/rMATS_SigEvents.txt", sep='\t', index=False)
 	exon_rmats_tested_dex_sig.to_csv(output_dir + "/ExonParts/rMATS_Tested__DexSigEvents.txt", sep='\t', index=False)
 	exon_rmats_sig_dex_sig.to_csv(output_dir + "/ExonParts/rMATS_Sig__DexSigEvents.txt", sep='\t', index=False)
-	rmats_to_dex_ex_MATS_dexRes.to_csv(output_dir + "/ExonParts/EventsToExons.mapped.txt", sep='\t', index=False)
+
+	dex_to_rmats_ex_dexRes_MATS.to_csv(output_dir + "/Mapped.ExonsToEvents.txt", sep='\t', index=False)
+	rmats_to_dex_ex_MATS_dexRes.to_csv(output_dir + "/Mapped.EventsToExons.txt", sep='\t', index=False)
 
 	return 0
 
@@ -618,6 +619,8 @@ def main():
 	except:
 		print("\tgrase.py -g </path/to/gene_files/directory (created by creating_files_by_gene.sh)> --nthread <num_threads>\n")
 		return -1
+
+	os.li
 
 	genes = os.listdir(args.gene_files_directory)
 
