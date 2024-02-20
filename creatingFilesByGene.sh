@@ -1,12 +1,21 @@
 #!/bin/bash
 
-while getopts "r:d:g:a:P:" arg; do
+print_usage(){
+    echo "Usage: bash creatingFilesByGene.sh [-r /rmats_results] [-a annotation.gtf] [-d dexseq_prepare_annotation.py]  [-g /graphml_directory] [-p num_threads]"
+}
+
+if [[ $# -lt 7 ]]; then
+    print_usage
+    exit 1
+fi
+
+while getopts "r:d:g:a:p:" arg; do
         case "$arg" in
                 r ) rmats="$OPTARG";;
 		a ) gtf="$OPTARG";;
                 d ) prep_annotation="$OPTARG";;
                 g ) graphml="$OPTARG";;
-		P ) procs="$OPTARG";;
+		p ) procs="$OPTARG";;
         esac
 done
 
