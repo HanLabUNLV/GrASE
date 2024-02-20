@@ -15,13 +15,14 @@ library(GenomicFeatures)
 
 library(SplicingGraphs)
 library(igraph)
-source("gencode.TxDb.R")
+#source("gencode.TxDb.R")
 
-txdb = gencode_txdb()
+#txdb = gencode_txdb()
+options(scipen=50)
 
 #Alternatively, you can create a txdb from any organism as long as you have the gtf file
 #Example for Drosophila melanogaster:
-#txdb = makeTxDbFromGFF("Drosophila_melanogaster.BDGP6.46.111.gtf", format="gtf", organism="Drosophila melanogaster")
+txdb = makeTxDbFromGFF("Drosophila_melanogaster.BDGP6.46.111.gtf", format="gtf", organism="Drosophila melanogaster")
 
 SG2igraph <- function(geneID, sg, edges_by_gene) {
 
@@ -90,6 +91,7 @@ chrs = paste0("chr", c(1:22, "X", "Y", "M"))
 #example chromosomes for Drosophila melanogaster:
 #chrs = c("2L", "2R", "3L", "3R", "X", "Y")
 
+
 #generate graphMLs for each gene
 for (chr in chrs) {
   seqlevels(txdb) <- c(chr)
@@ -104,4 +106,3 @@ for (chr in chrs) {
   }
   seqlevels(txdb) <- seqlevels0(txdb)
 }
-
