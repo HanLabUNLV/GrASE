@@ -3,12 +3,14 @@ Graph of Alternative Splice junctions and Exonic parts
 
 ## Dependencies
 Tested on Ubuntu (20.04.6 LTS)
-* igraph
-* python
-* dexseq
-* rmats
-* star
-* splicingGraphs
+R packages:
+* splicingGraphs (1.40.0)
+* DEXSeq (1.46.0)
+Python packages:
+* rMATS  (4.1.1)
+* igraph (0.10.6)
+* python (3.11.5)
+* STAR   (optional - 2.7.10b)
 
 
 ## DEXSeq and rMATS
