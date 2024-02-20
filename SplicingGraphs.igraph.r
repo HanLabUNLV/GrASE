@@ -22,7 +22,7 @@ options(scipen=50)
 
 #Alternatively, you can create a txdb from any organism as long as you have the gtf file
 #Example for Drosophila melanogaster:
-txdb = makeTxDbFromGFF("Drosophila_melanogaster.BDGP6.46.111.gtf", format="gtf", organism="Drosophila melanogaster")
+txdb = makeTxDbFromGFF("/path/to/gtf", format="gtf", organism="Homo sapiens")
 
 SG2igraph <- function(geneID, sg, edges_by_gene) {
 
