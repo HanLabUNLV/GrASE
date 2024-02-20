@@ -5,7 +5,8 @@ Graph of Alternative Splice junctions and Exonic parts
 Tested on Ubuntu (20.04.6 LTS)  
 R packages:  
 * splicingGraphs (1.40.0)
-* DEXSeq (1.46.0)  
+* DEXSeq (1.46.0)
+
 Python packages:  
 * rMATS  (4.1.1)
 * igraph (0.10.6)
