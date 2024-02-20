@@ -3,6 +3,7 @@ Graph of Alternative Splice junctions and Exonic parts
 
 ## Dependencies  
 Tested on Ubuntu (20.04.6 LTS)  
+
 R packages:  
 * splicingGraphs (1.40.0)
 * DEXSeq (1.46.0)
