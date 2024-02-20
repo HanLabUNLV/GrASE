@@ -621,8 +621,6 @@ def main():
 		print("\tgrase.py -g </path/to/gene_files/directory (created by creating_files_by_gene.sh)> --nthread <num_threads>\n")
 		return -1
 
-	os.li
-
 	genes = os.listdir(args.gene_files_directory)
 
 	if args.nthread == 1:
