@@ -183,7 +183,7 @@ def map_rMATS_event_overhang(g, fromGTF, eventType, gene, gff, grase_output_dir)
 	:return: igraph object after the rMATS labels have been added to the DEXSeq edges appropriately.
 	"""
 	rmats_df = pd.read_csv(fromGTF, dtype=str, sep='\t')
-	dex_df = pd.read_table(gff.name, dtype=str, header=None, skiprows=1, delim_whitespace=True)
+	dex_df = pd.read_table(gff.name, dtype=str, header=None, skiprows=1, sep='\t')
 	fromGTF.seek(0)
 
 	dx_ID = {} # dictionary that maps {rMATS ID: [dexseq fragments]}
@@ -309,7 +309,7 @@ def map_rMATS_event_full_fragment(g, fromGTF, eventType, gene, gff, grase_output
 	:return: igraph object after the rMATS labels have been added to the DEXSeq edges appropriately.
 	"""
 	rmats_df = pd.read_csv(fromGTF, dtype=str, sep='\t')
-	dex_df = pd.read_table(gff.name, dtype=str, header=None, skiprows=1, delim_whitespace=True)
+	dex_df = pd.read_table(gff.name, dtype=str, header=None, skiprows=1, sep='\t')
 	fromGTF.seek(0)
 
 	dx_ID = {} # dictionary that maps {rMATS ID: [dexseq fragments]}
@@ -498,14 +498,14 @@ def get_grase_results(get_results_files):
 	del dex_to_A3SS, dex_to_A5SS, dex_to_SE, dex_to_RI, dex_to_SE_A5, dex_to_SE_A5_A3
 
 	dex_to_rmats["rMATS_ID"] = dex_to_rmats[["rMATS_ID_A3SS", "rMATS_ID_A5SS", "rMATS_ID_SE", "rMATS_ID_RI"]].stack().groupby(level=0).agg(', '.join)
-	dex_to_rmats.drop(columns=["rMATS_ID_A3SS", "rMATS_ID_A5SS", "rMATS_ID_SE", "rMATS_ID_RI"], inplace=True)
+	dex_to_rmats = dex_to_rmats.drop(columns=["rMATS_ID_A3SS", "rMATS_ID_A5SS", "rMATS_ID_SE", "rMATS_ID_RI"])
 
 	dex_to_rmats_dexRes = pd.merge(dexseqResults, dex_to_rmats, how="outer", left_on=["groupID", "featureID"], right_on=["GeneID", "DexseqFragment"])
-	dex_to_rmats_dexRes["groupID"].fillna(dex_to_rmats_dexRes["GeneID"], inplace=True)
-	dex_to_rmats_dexRes["featureID"].fillna(dex_to_rmats_dexRes["DexseqFragment"], inplace=True)
-	dex_to_rmats_dexRes.drop(columns=["GeneID", "DexseqFragment"], inplace=True)
-	dex_to_rmats_dexRes.sort_values(by=["groupID", "featureID"], inplace=True)
-	dex_to_rmats_dexRes.reset_index(drop=True, inplace=True)
+	dex_to_rmats_dexRes["groupID"] = dex_to_rmats_dexRes["groupID"].fillna(dex_to_rmats_dexRes["GeneID"])
+	dex_to_rmats_dexRes["featureID"] = dex_to_rmats_dexRes["featureID"].fillna(dex_to_rmats_dexRes["DexseqFragment"])
+	dex_to_rmats_dexRes = dex_to_rmats_dexRes.drop(columns=["GeneID", "DexseqFragment"])
+	dex_to_rmats_dexRes = dex_to_rmats_dexRes.sort_values(by=["groupID", "featureID"])
+	dex_to_rmats_dexRes = dex_to_rmats_dexRes.reset_index(drop=True)
 	num_exons = len(dex_to_rmats_dexRes)
 
 	exon_dex_sig = dex_to_rmats_dexRes[["groupID", "featureID", "padj"]].loc[dex_to_rmats_dexRes["padj"] <= .05]
@@ -525,7 +525,7 @@ def get_grase_results(get_results_files):
 	dex_to_rmats_ex_SE = dex_to_rmats_exploded.merge(SE_MATS, how="left", left_on=["GeneID", "rMATS_ID"], right_on=["GeneID", "ID"])
 	dex_to_rmats_ex_RI = dex_to_rmats_exploded.merge(RI_MATS, how="left", left_on=["GeneID", "rMATS_ID"], right_on=["GeneID", "ID"])
 	dex_to_rmats_ex_MATS = pd.concat([dex_to_rmats_ex_A3, dex_to_rmats_ex_A5, dex_to_rmats_ex_SE, dex_to_rmats_ex_RI])
-	dex_to_rmats_ex_MATS.dropna(subset="ID.1", inplace=True)
+	dex_to_rmats_ex_MATS = dex_to_rmats_ex_MATS.dropna(subset="ID.1")
 	del dex_to_rmats_ex_A3, dex_to_rmats_ex_A5, dex_to_rmats_ex_SE, dex_to_rmats_ex_RI
 
 	dex_to_rmats_ex_dexRes = dex_to_rmats_dexRes.copy()
@@ -544,8 +544,8 @@ def get_grase_results(get_results_files):
 
 	# event counts ##################################################################################
 	rmats_to_dex = pd.concat([A3SS_to_dex, A5SS_to_dex, SE_to_dex, RI_to_dex])
-	rmats_to_dex.sort_values(by=["GeneID", "ID"], inplace=True)
-	rmats_to_dex.reset_index(drop=True ,inplace=True)
+	rmats_to_dex = rmats_to_dex.sort_values(by=["GeneID", "ID"])
+	rmats_to_dex = rmats_to_dex.reset_index(drop=True)
 	num_events_rmats_tested = len(rmats_to_dex)
 	del A3SS_to_dex, A5SS_to_dex, SE_to_dex, RI_to_dex
 
@@ -555,7 +555,7 @@ def get_grase_results(get_results_files):
 	rmats_to_dex_RI = rmats_to_dex.merge(RI_MATS, how="left", on=["GeneID", "ID"])
 	del A3SS_MATS, A5SS_MATS, SE_MATS, RI_MATS
 	rmats_to_dex_MATS = pd.concat([rmats_to_dex_A3, rmats_to_dex_A5, rmats_to_dex_SE, rmats_to_dex_RI])
-	rmats_to_dex_MATS.dropna(subset="ID.1", inplace=True)
+	rmats_to_dex_MATS = rmats_to_dex_MATS.dropna(subset="ID.1")
 	rmats_to_dex_MATS[["FDR"]] = rmats_to_dex_MATS[["FDR"]].apply(pd.to_numeric)
 	del rmats_to_dex_A3, rmats_to_dex_A5, rmats_to_dex_SE, rmats_to_dex_RI
 
@@ -593,11 +593,11 @@ def get_grase_results(get_results_files):
 	events_rmats_sig.to_csv(output_dir + "/SplicingEvents/rMATS_SigEvents.txt", sep='\t', index=False)
 	events_rmats_sig_dex_sig.to_csv(output_dir + "/SplicingEvents/rMATS_Sig__DexSigEvents.txt", sep='\t', index=False)
 
-	exon_dex_sig.to_csv(output_dir + "/ExonParts/DexSigEvents.txt", sep='\t', index=False)
-	exon_rmats_tested.to_csv(output_dir + "/ExonParts/rMATS_TestedEvents.txt", sep='\t', index=False)
-	exon_rmats_sig.to_csv(output_dir + "/ExonParts/rMATS_SigEvents.txt", sep='\t', index=False)
-	exon_rmats_tested_dex_sig.to_csv(output_dir + "/ExonParts/rMATS_Tested__DexSigEvents.txt", sep='\t', index=False)
-	exon_rmats_sig_dex_sig.to_csv(output_dir + "/ExonParts/rMATS_Sig__DexSigEvents.txt", sep='\t', index=False)
+	exon_dex_sig.to_csv(output_dir + "/ExonParts/DexSigExons.txt", sep='\t', index=False)
+	exon_rmats_tested.to_csv(output_dir + "/ExonParts/rMATS_TestedExons.txt", sep='\t', index=False)
+	exon_rmats_sig.to_csv(output_dir + "/ExonParts/rMATS_SigExons.txt", sep='\t', index=False)
+	exon_rmats_tested_dex_sig.to_csv(output_dir + "/ExonParts/rMATS_Tested__DexSigExons.txt", sep='\t', index=False)
+	exon_rmats_sig_dex_sig.to_csv(output_dir + "/ExonParts/rMATS_Sig__DexSigExons.txt", sep='\t', index=False)
 
 	dex_to_rmats_ex_dexRes_MATS.to_csv(output_dir + "/Mapped.ExonsToEvents.txt", sep='\t', index=False)
 	rmats_to_dex_ex_MATS_dexRes.to_csv(output_dir + "/Mapped.EventsToExons.txt", sep='\t', index=False)
