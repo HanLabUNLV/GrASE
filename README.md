@@ -32,7 +32,7 @@ bash creatingFilesByGene.sh -r /path/to/rmats/results -d /path/to/dexseq_prepare
 
 ## Running GrASE
 
-* if you run grase.py again, empty the files in the results directory: ```rm grase_results/results/tmp/*``` and then rerun
+* if you run grase.py again, remove the files in the results tmp directory: ```rm grase_results/results/tmp/*``` and then rerun
 
 usage:
 ```
