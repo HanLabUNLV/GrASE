@@ -27,7 +27,7 @@ To generate the GraphML objects for each gene, run [SplicingGraphs.igraph.r](Spl
 ## Preparing to run GrASE
 GrASE will process every gene in your dataset that produces results in DEXSeq and rMATS. In order to properly run GrASE, some setup needs to be done. Run [creatingFilesByGene.sh](creatingFilesByGene.sh) to set up your `grase_results` directory, which will hold everything you need to run GrASE. 
 ```
-bash creatingFilesByGene.sh -r /path/to/rmats/results -d /path/to/dexseq_prepare_annotation.py -a /path/to/annotation/file.gtf -g /path/to/graphml/directory -P number_of_threads
+bash creatingFilesByGene.sh -r /path/to/rmats/results -d /path/to/dexseq_prepare_annotation.py -a /path/to/annotation/file.gtf -g /path/to/graphml/directory -p number_of_threads
 ```
 
 ## Running GrASE
