@@ -13,19 +13,23 @@ Vocabulary:
 	graphml - (exon, intron, splicingGraphs)
 """
 
-USAGE = '''%(prog)s [options]'''
+USAGE = '''python %(prog)s [-g gene_files] [--rmats rmats_results_directory] [--dexseq dexseq_results.txt] [--nthread nthreads]
+       or
+       python %(prog)s -h for help'''
 
 def get_args():
 	parser = argparse.ArgumentParser(usage=USAGE)
 
 	parser.add_argument('-g', action='store', dest='gene_files_directory', required=True,
-	                    help='The gene_files directory created by the first step (creating_files_by_gene.sh)')
+	                    help='Required. The gene_files directory created by the first step (creating_files_by_gene.sh)')
 	parser.add_argument('--rmats', action='store', dest='rmats_directory', required=True,
-	                    help='The rmats output directory')
+	                    help='Required. The rmats output directory')
 	parser.add_argument('--dexseq', action='store', dest='dexseq_results', required=True,
-	                    help='The dexseq results file in .txt or .csv format (tab separated)')
+	                    help='Required. The dexseq results file in .txt or .csv format (tab separated)')
 	parser.add_argument('--nthread', action='store', dest='nthread', default=1, type=int,
-	                    help='The number of threads. The optimal number of threads should be equal to the number of CPU cores. Defaultt: %(default)s')
+	                    help='Optional. The number of threads. The optimal number of threads should be equal to the number of CPU cores. Default: %(default)s')
+	'''parser.add_argument('--task', action='store', dest='task', type=int,
+	                    help='If task is set to results, gene processing will be skipped, and only the results will be processed')'''
 
 	args = parser.parse_args()
 
@@ -74,19 +78,15 @@ def get_results_files():
 			RI_MATS["ID"] = "RI_" + RI_MATS["ID"].astype(str)
 
 	grase_results_dir = os.path.abspath(os.path.join(args.gene_files_directory, os.pardir))
-	for dir in os.listdir(grase_results_dir):
-		dir = os.path.join(grase_results_dir, dir)
-		if dir.endswith("results"):
-			grase_results = os.path.abspath(dir)
-			output_dir = grase_results
-			for file in os.listdir(grase_results):
-				file = os.path.join(grase_results, file)
-				if file.endswith("tmp"):
-					grase_results = os.path.abspath(file)
-					break
+	output_dir = os.path.join(grase_results_dir + "/results")
+	grase_results_tmp = os.path.join(output_dir + "/tmp")
+	'''	for file in os.listdir(grase_results_tmp):
+		file = os.path.join(grase_results_tmp, file)
+		if file.endswith("tmp"):
+			grase_results = os.path.abspath(file)'''
 
-	for file in os.listdir(grase_results):
-		file = os.path.join(grase_results, file)
+	for file in os.listdir(grase_results_tmp):
+		file = os.path.join(grase_results_tmp, file)
 
 		if file.endswith("A3SS.mapped.txt"):
 			dex_to_A3SS = dex_to_mats(file)
@@ -615,11 +615,7 @@ def main():
 	global fromGTF_SE
 	global fromGTF_RI
 
-	try:
-		args = get_args()
-	except:
-		print("\tgrase.py -g </path/to/gene_files/directory (created by creating_files_by_gene.sh)> --nthread <num_threads>\n")
-		return -1
+	args = get_args()
 
 	genes = os.listdir(args.gene_files_directory)
 
@@ -628,6 +624,9 @@ def main():
 	else:
 		print(f"\nProcessing genes (using {args.nthread} threads)...\n")
 
+	remove_files_dir = os.path.join(os.path.abspath(os.path.join(args.gene_files_directory, os.pardir)) + "/results/tmp")
+	for file in os.listdir(remove_files_dir):
+		os.remove(os.path.join(remove_files_dir, file))
 	p = Pool(args.nthread)
 	p.map(process_gene, genes)
 
