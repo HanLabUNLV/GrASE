@@ -39,4 +39,4 @@ python grase.py -g <gene_files> --rmats <rmats_results_directory> --dexseq <dexs
 
 
 
-## Heatmap "(?)"
+## Heatmap ?
