@@ -24,6 +24,8 @@ GraphML is an XML-based file format for graphs. This step ensures that the coord
 
 To generate the GraphML objects for each gene, run [SplicingGraphs.igraph.r](SplicingGraphs.igraph.r).
 
+* add in arguments to this script in order to run it from the command line
+
 ## Preparing to run GrASE
 GrASE will process every gene in your dataset that produces results in DEXSeq and rMATS. In order to properly run GrASE, some setup needs to be done. Run [creatingFilesByGene.sh](creatingFilesByGene.sh) to create and set up your `grase_results` directory (created in your current working directory), which will hold everything you need to run GrASE. 
 ```
