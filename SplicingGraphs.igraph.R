@@ -1,27 +1,13 @@
 library(AnnotationDbi)
 library(GenomicFeatures)
-
-# create TxDb from gencode
-#source("gencode.TxDb.R")
-#gencode.v34 = gencode_txdb(
-#  version = "34",
-#  genome = "hg38",
-#  chrs = paste0("chr", c(seq_len(22), "X", "Y", "M"))
-#)
-#saveDb(gencode.v34, 'txdb.gencode34.sqlite')
-
-# load previously saved TxDb 
-#txdb = loadDb(file = '../txdb.gencode34.sqlite')
-
 library(SplicingGraphs)
 library(igraph)
-#source("gencode.TxDb.R")
 
-#txdb = gencode_txdb()
+args = commandArgs(trailingOnly=TRUE)
 options(scipen=50)
 
-#Alternatively, you can create a txdb from any organism as long as you have the gtf file
-#Example for Drosophila melanogaster:
+#You can create a txdb from any organism as long as you have the gtf file
+#Example for Homo sapiens:
 txdb = makeTxDbFromGFF("/path/to/gtf", format="gtf", organism="Homo sapiens")
 
 SG2igraph <- function(geneID, sg, edges_by_gene) {
@@ -87,9 +73,8 @@ SG2igraph <- function(geneID, sg, edges_by_gene) {
 
 
 #specify the chromosomes you are interested in
+#example chromosomes for Homo sapiens:
 chrs = paste0("chr", c(1:22, "X", "Y", "M"))
-#example chromosomes for Drosophila melanogaster:
-#chrs = c("2L", "2R", "3L", "3R", "X", "Y")
 
 
 #generate graphMLs for each gene
