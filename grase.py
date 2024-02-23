@@ -539,9 +539,7 @@ def get_grase_results(get_results_files):
 	exon_rmats_sig = dex_to_rmats_ex_dexRes_MATS
 	exon_rmats_sig = exon_rmats_sig.loc[dex_to_rmats_ex_dexRes_MATS["FDR"] <= .05]
 	exon_rmats_sig_dedup = exon_rmats_sig.drop_duplicates(subset=["groupID", "featureID"], keep="first")
-	exon_rmats_sig_dedup = exon_rmats_sig_dedup.drop(columns={"ID", "exonBaseMean", "dispersion", "stat", "pvalue", "padj", "Bnaive", "CD8naive", "log2fold_CD8naive_Bnaive",
-	                                                         "genomicData.end", "genomicData.seqnames", "genomicData.start", "genomicData.strand", "genomicData.width",
-	                                                         "countData.case_bnaive", "countData.case_cd8naive", "transcripts", "GeneID", "DexseqFragment"})
+	exon_rmats_sig_dedup = exon_rmats_sig_dedup.iloc[:, 19:]
 	num_exons_rmats_sig = len(exon_rmats_sig_dedup)
 
 	exon_rmats_sig_dex_sig = exon_rmats_sig[["groupID", "featureID", "padj", "rMATS_ID"]].loc[exon_rmats_sig["padj"] <= .05].drop_duplicates(subset=["groupID", "featureID"], keep="first")
