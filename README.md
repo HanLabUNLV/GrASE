@@ -1,5 +1,6 @@
 # GrASE
 Graph of Alternative Splice junctions and Exonic parts
+* write some explanation about GrASE bridging the gap from exonic parts to splice junctions
 
 ## Dependencies  
 Tested on Ubuntu (20.04.6 LTS)  
@@ -21,6 +22,10 @@ Python packages:
 ## DEXSeq and rMATS
 DEXSeq 
 * need dexseq results using non-aggregated gff (add -r no to prepare_annotation.py command)
+* write brief explanation about DEXSeq and how GrASE uses it
+
+rMATS
+* write brief explanation about rMATS and how GrASE uses it
 
 ## Creating graphMLs
 GraphML is an XML-based file format for graphs. This step ensures that the coordinates of each gene are annotated and will be essential when creating the splicing graphs. It uses the [SplicingGraphs](https://bioconductor.org/packages/release/bioc/html/SplicingGraphs.html) R package to obtain the splice junctions and exons. 
