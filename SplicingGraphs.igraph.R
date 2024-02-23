@@ -1,12 +1,16 @@
+args = commandArgs(trailingOnly=TRUE)
+
+if (length(args) < 4) {
+  stop("Too few arguments. Usage: Rscript SplicingGraphs.igraph.R </path/to/annotation.gtf> <Genus> <species> </path/to/output_directory>")
+}
+
 library(AnnotationDbi)
 library(GenomicFeatures)
 library(SplicingGraphs)
 library(igraph)
 
-args = commandArgs(trailingOnly=TRUE)
 options(scipen=50)
 
-# print(paste0(args[1], " ", args[2], " ", args[3]))
 
 #You can create a txdb from any organism as long as you have the gtf file
 #Example for Homo sapiens:
@@ -57,7 +61,7 @@ SG2igraph <- function(geneID, sg, edges_by_gene) {
   drops <- c("seqnames","strand", "tx_id")
   g1.df = g1.df[ , !(names(g1.df) %in% drops)]
   g <- graph.data.frame(g1.df, directed=TRUE, vertices=nodes.df)
-  write_graph(g, paste0(geneID, ".graphml"), "graphml")
+  write_graph(g, paste0(args[4], geneID, ".graphml"), "graphml")
 
   roots = nodes.df$ID[!(nodes.df$ID %in% c(g1.df$to, "R", "L"))] 
   leaves = nodes.df$ID[!(nodes.df$ID %in% c(g1.df$from, "R", "L"))]
@@ -89,7 +93,7 @@ for (chr in chrs) {
   geneIDs <- names(edges_by_gene)
   for (geneID in geneIDs) {
     sgigraph = SG2igraph(geneID, sg, edges_by_gene)
-    write_graph(sgigraph, paste0(geneID, ".graphml"), "graphml")
+    write_graph(sgigraph, paste0(args[4], geneID, ".graphml"), "graphml")
 
   }
   seqlevels(txdb) <- seqlevels0(txdb)
