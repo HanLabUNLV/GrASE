@@ -72,20 +72,21 @@ options:
 
 ## Final Output
 `grase_results/results` contains the final output files from GrASE
+*  `summary.txt`:
 *  `DEX_to_rMATS_Events.txt`:
 *  `rMATS_to_DEX_Exons.txt`:
 *  `Mapped.ExonsToEvents.txt`:
 *  `Mapped.EventsToExons.txt`:
-*  `summary.txt`:
-  
+
 `grase_results/results/ExonParts` contains the output files that informed our Exon counts in `summary.txt`
 *  `DexSigExons.txt`:
-*  `rMATS_Sig__DexSigExons.txt`:
 *  `rMATS_SigExons.txt`:
-*  `rMATS_Tested__DexSigExons.txt`:
 *  `rMATS_TestedExons.txt`:
+*  `rMATS_Tested__DexSigExons.txt`:
+*  `rMATS_Sig__DexSigExons.txt`:
 
 `grase_results/results/SplicingEvents` contains the output files that informed our Events counts in `summary.txt`
 *  `DexSigEvents.txt`:
-*  `rMATS_Sig__DexSigEvents.txt`:
 *  `rMATS_SigEvents.txt`:
+*  `rMATS_Sig__DexSigEvents.txt`:
+
