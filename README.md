@@ -58,11 +58,11 @@ python grase.py -g <gene_files> --rmats <rmats_results_directory> --dexseq <dexs
 usage: Rscript SplicingGraphs.igraph.R [options]
 
 options:
- GTF                                         An annotation of genes and transcripts in GTF format
+ GTF                               An annotation of genes and transcripts in GTF format
  Genus
  species
- Output Directory                            The directory where all of the created graphML files
-                                             will be placed
+ Output Directory                  The directory where all of the created graphML files
+                                   will be placed
 
 usage: bash creaingFilesByGene [options]
 
@@ -76,14 +76,14 @@ options:
 usage: python grase.py [options]
 
 options:
- -h, --help                                  Display a help message and exit
- -g Gene Files Directory                     The gene_files directory inside grase_results that
-                                             was created by creatingFilesByGene.sh
- --rmats rMATS Results Directory             The OD directory that holds the final output of the
-                                             post step of rMATS
- --dexseq Dexseq Results File                The file that holds results from DEXSeq
- --nthread NTHREAD                           The number of threads. The optimal number of threads
-                                             should be equal to the number of cpu cores. Default: 1
+ -h, --help                         Display a help message and exit
+ -g Gene Files Directory            The gene_files directory inside grase_results that
+                                    was created by creatingFilesByGene.sh
+ --rmats rMATS Results Directory    The OD directory that holds the final output of the
+                                    post step of rMATS
+ --dexseq Dexseq Results File       The file that holds results from DEXSeq
+ --nthread NTHREAD                  The number of threads. The optimal number of threads
+                                    should be equal to the number of cpu cores. Default: 1
 ```
 
 ## Heatmap ?
