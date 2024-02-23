@@ -32,7 +32,7 @@ GraphML is an XML-based file format for graphs. This step ensures that the coord
 
 To generate the GraphML objects for each gene, run [SplicingGraphs.igraph.R](SplicingGraphs.igraph.R). Some command line arguments will be required when you run the R script, including the path to the gtf, the name of the organism associated with the gtf (include genus and species), and the path to the output directory.
 ```
-Rscript SplicingGraphs.igraph.R GTF Genus species OutputDirectory
+Rscript SplicingGraphs.igraph.R /path/to/gtf Genus species /path/to/output_directory
 ```
 ## Preparing to run GrASE
 * add a bit more explanation about the file structure
@@ -58,15 +58,32 @@ python grase.py -g <gene_files> --rmats <rmats_results_directory> --dexseq <dexs
 usage: Rscript SplicingGraphs.igraph.R [options]
 
 options:
- path/to/annotation.gtf            
+ GTF                                    An annotation of genes and transcripts in GTF format
+ Genus
+ species
+ Output Directory                       The directory where all of the created graphML files
+                                        will be placed
 
 usage: bash creaingFilesByGene [options]
 
 options:
+ -r rMATS_results
+ -d dexseq_prepare_annotation.py
+ -a GTF
+ -g graphML Directory
+ -p NPROCS
 
 usage: python grase.py [options]
 
 options:
+ -h, --help                             Display a help message and exit
+ -g Gene Files Directory                The gene_files directory inside grase_results that was
+                                        created by creatingFilesByGene.sh
+ --rmats rMATS Results Directory        The OD directory that holds the final output of the post
+                                        step of rMATS
+ --dexseq Dexseq Results File           The file that holds results from DEXSeq
+ --nthread NTHREAD                      The number of threads. The optimal number of threads should
+                                        be equal to the number of cpu cores. Default: 1
 ```
 
 ## Heatmap ?
