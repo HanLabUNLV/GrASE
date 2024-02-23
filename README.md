@@ -25,7 +25,7 @@ DEXSeq
 ## Creating graphMLs
 GraphML is an XML-based file format for graphs. This step ensures that the coordinates of each gene are annotated and will be essential when creating the splicing graphs. It uses the [SplicingGraphs](https://bioconductor.org/packages/release/bioc/html/SplicingGraphs.html) R package to obtain the splice junctions and exons. 
 
-To generate the GraphML objects for each gene, run [SplicingGraphs.igraph.R](SplicingGraphs.igraph.R). Some command line arguments will be required when you run the R script, including the path to the gtf and the name of the organism associated with the gtf (Genus species).
+To generate the GraphML objects for each gene, run [SplicingGraphs.igraph.R](SplicingGraphs.igraph.R). Some command line arguments will be required when you run the R script, including the path to the gtf and the name of the organism associated with the gtf (include genus and species).
 ```
 Rscript SplicingGraphs.igraph.R /path/to/annotation.gtf Genus species
 ```
