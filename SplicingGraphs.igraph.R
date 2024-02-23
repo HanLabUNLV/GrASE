@@ -6,9 +6,11 @@ library(igraph)
 args = commandArgs(trailingOnly=TRUE)
 options(scipen=50)
 
+# print(paste0(args[1], " ", args[2], " ", args[3]))
+
 #You can create a txdb from any organism as long as you have the gtf file
 #Example for Homo sapiens:
-txdb = makeTxDbFromGFF("/path/to/gtf", format="gtf", organism="Homo sapiens")
+txdb = makeTxDbFromGFF(args[1], format="gtf", organism=paste(args[2], args[3], sep=" "))
 
 SG2igraph <- function(geneID, sg, edges_by_gene) {
 
@@ -74,7 +76,8 @@ SG2igraph <- function(geneID, sg, edges_by_gene) {
 
 #specify the chromosomes you are interested in
 #example chromosomes for Homo sapiens:
-chrs = paste0("chr", c(1:22, "X", "Y", "M"))
+# chrs = paste0("chr", c(1:22, "X", "Y", "M"))
+chrs = seqlevels(txdb)
 
 
 #generate graphMLs for each gene
