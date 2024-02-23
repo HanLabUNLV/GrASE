@@ -35,7 +35,9 @@ To generate the GraphML objects for each gene, run [SplicingGraphs.igraph.R](Spl
 Rscript SplicingGraphs.igraph.R /path/to/annotation.gtf Genus species /path/to/output_directory
 ```
 ## Preparing to run GrASE
-* add a bit more explanation
+* add a bit more explanation about the file structure
+  * directory for each gene in gene_files and the files populated
+    
 GrASE will process every gene in your dataset that produces results in DEXSeq and rMATS. In order to properly run GrASE, some setup needs to be done. Run [creatingFilesByGene.sh](creatingFilesByGene.sh) to create and set up your `grase_results` directory (created in your current working directory), which will hold everything you need to run GrASE. 
 ```
 bash creatingFilesByGene.sh -r /path/to/rmats/results -d /path/to/dexseq_prepare_annotation.py -a /path/to/annotation/file.gtf -g /path/to/graphml/directory -p number_of_threads
@@ -47,11 +49,24 @@ usage:
 ```
 python grase.py -g <gene_files> --rmats <rmats_results_directory> --dexseq <dexseq_results.txt> --nthread <number_of_threads>
 ```
-* describe output of GrASE briefly
-
-## Heatmap ?
-
-## Output
 * graph output in each gene directory
   * images?
 * 
+## Usage
+### All Arguments
+```
+
+```
+
+## Heatmap ?
+
+## Final Output
+`grase_results/results` contains the final output files from GrASE
+*  `DEX_to_rMATS_Events.txt`
+*  `rMATS_to_DEX_Exons.txt`
+*  `Mapped.ExonsToEvents.txt`
+*  `Mapped.EventsToExons.txt`
+*  `summary.txt`
+`grase_results/results/ExonParts` contains the output files that informed our Exon counts in `summary.txt`
+*  ``
+`grase_results/results/SplicingEvents` contains the output files that informed our Events counts in `summary.txt`
