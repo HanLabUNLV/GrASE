@@ -55,18 +55,37 @@ python grase.py -g <gene_files> --rmats <rmats_results_directory> --dexseq <dexs
 ## Usage
 ### All Arguments
 ```
+usage: Rscript SplicingGraphs.igraph.R [options]
 
+options:
+
+usage: bash creaingFilesByGene [options]
+
+options:
+
+usage: python grase.py [options]
+
+options:
 ```
 
 ## Heatmap ?
 
 ## Final Output
 `grase_results/results` contains the final output files from GrASE
-*  `DEX_to_rMATS_Events.txt`
-*  `rMATS_to_DEX_Exons.txt`
-*  `Mapped.ExonsToEvents.txt`
-*  `Mapped.EventsToExons.txt`
-*  `summary.txt`
+*  `DEX_to_rMATS_Events.txt`:
+*  `rMATS_to_DEX_Exons.txt`:
+*  `Mapped.ExonsToEvents.txt`:
+*  `Mapped.EventsToExons.txt`:
+*  `summary.txt`:
+  
 `grase_results/results/ExonParts` contains the output files that informed our Exon counts in `summary.txt`
-*  ``
+*  `DexSigExons.txt`:
+*  `rMATS_Sig__DexSigExons.txt`:
+*  `rMATS_SigExons.txt`:
+*  `rMATS_Tested__DexSigExons.txt`:
+*  `rMATS_TestedExons.txt`:
+
 `grase_results/results/SplicingEvents` contains the output files that informed our Events counts in `summary.txt`
+*  `DexSigEvents.txt`:
+*  `rMATS_Sig__DexSigEvents.txt`:
+*  `rMATS_SigEvents.txt`:
