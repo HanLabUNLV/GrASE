@@ -32,7 +32,7 @@ GraphML is an XML-based file format for graphs. This step ensures that the coord
 
 To generate the GraphML objects for each gene, run [SplicingGraphs.igraph.R](SplicingGraphs.igraph.R). Some command line arguments will be required when you run the R script, including the path to the gtf, the name of the organism associated with the gtf (include genus and species), and the path to the output directory.
 ```
-Rscript SplicingGraphs.igraph.R /path/to/annotation.gtf Genus species /path/to/output_directory
+Rscript SplicingGraphs.igraph.R GTF Genus species OutputDirectory
 ```
 ## Preparing to run GrASE
 * add a bit more explanation about the file structure
@@ -58,6 +58,7 @@ python grase.py -g <gene_files> --rmats <rmats_results_directory> --dexseq <dexs
 usage: Rscript SplicingGraphs.igraph.R [options]
 
 options:
+ path/to/annotation.gtf            
 
 usage: bash creaingFilesByGene [options]
 
