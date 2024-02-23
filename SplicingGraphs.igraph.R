@@ -1,7 +1,7 @@
 args = commandArgs(trailingOnly=TRUE)
 
 if (length(args) < 4) {
-  stop("Too few arguments. Usage: Rscript SplicingGraphs.igraph.R </path/to/annotation.gtf> <Genus> <species> </path/to/output_directory>")
+  stop("Too few arguments. Usage: Rscript SplicingGraphs.igraph.R /path/to/annotation.gtf Genus species /path/to/output_directory")
 }
 
 library(AnnotationDbi)
