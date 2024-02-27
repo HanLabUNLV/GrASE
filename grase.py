@@ -1,3 +1,4 @@
+import multiprocessing
 from multiprocessing import Pool
 import igraph as ig
 import pandas as pd
@@ -32,6 +33,10 @@ def get_args():
 	                    help='If task is set to results, gene processing will be skipped, and only the results will be processed')'''
 
 	args = parser.parse_args()
+
+	if args.nthread > multiprocessing.cpu_count():
+		args.nthread = multiprocessing.cpu_count()
+		print(f'\nThe number of CPU cores is less than the given nthread value, setting nthread to {args.nthread}')
 
 	return args
 
@@ -105,7 +110,8 @@ def get_results_files():
 		if file.endswith("fromGTF.RI.txt"):
 			RI_to_dex = mats_to_dex(file, "RI")
 
-	dexseqResults = pd.read_table(args.dexseq_results)
+	dexseqResults = pd.read_table(args.dexseq_results, dtype=str)
+	dexseqResults["padj"] = dexseqResults["padj"].astype(float)
 
 	return (output_dir, dexseqResults,
 	        A3SS_MATS, A5SS_MATS, SE_MATS, RI_MATS,
@@ -183,7 +189,7 @@ def map_rMATS_event_overhang(g, fromGTF, eventType, gene, gff, grase_output_dir)
 	:return: igraph object after the rMATS labels have been added to the DEXSeq edges appropriately.
 	"""
 	rmats_df = pd.read_csv(fromGTF, dtype=str, sep='\t')
-	dex_df = pd.read_csv(gff.name, dtype=str, header=None, skiprows=1, sep='\s+')
+	dex_df = pd.read_csv(gff.name, dtype=str, header=None, skiprows=1, sep=r'\s+')
 	fromGTF.seek(0)
 
 	dx_ID = {} # dictionary that maps {rMATS ID: [dexseq fragments]}
@@ -309,7 +315,7 @@ def map_rMATS_event_full_fragment(g, fromGTF, eventType, gene, gff, grase_output
 	:return: igraph object after the rMATS labels have been added to the DEXSeq edges appropriately.
 	"""
 	rmats_df = pd.read_csv(fromGTF, dtype=str, sep='\t')
-	dex_df = pd.read_csv(gff.name, dtype=str, header=None, skiprows=1, sep='\s+')
+	dex_df = pd.read_csv(gff.name, dtype=str, header=None, skiprows=1, sep=r'\s+')
 	fromGTF.seek(0)
 
 	dx_ID = {} # dictionary that maps {rMATS ID: [dexseq fragments]}
@@ -497,7 +503,7 @@ def get_grase_results(get_results_files):
 	dex_to_rmats = pd.merge(dex_to_SE_A5_A3, dex_to_RI, how="outer", on=["GeneID", "DexseqFragment"])
 	del dex_to_A3SS, dex_to_A5SS, dex_to_SE, dex_to_RI, dex_to_SE_A5, dex_to_SE_A5_A3
 
-	dex_to_rmats["rMATS_ID"] = dex_to_rmats[["rMATS_ID_A3SS", "rMATS_ID_A5SS", "rMATS_ID_SE", "rMATS_ID_RI"]].stack().groupby(level=0).agg(', '.join)
+	dex_to_rmats["rMATS_ID"] = dex_to_rmats[["rMATS_ID_A3SS", "rMATS_ID_A5SS", "rMATS_ID_SE", "rMATS_ID_RI"]].stack().groupby(level=0).agg(','.join)
 	dex_to_rmats = dex_to_rmats.drop(columns=["rMATS_ID_A3SS", "rMATS_ID_A5SS", "rMATS_ID_SE", "rMATS_ID_RI"])
 
 	dex_to_rmats_dexRes = pd.merge(dexseqResults, dex_to_rmats, how="outer", left_on=["groupID", "featureID"], right_on=["GeneID", "DexseqFragment"])
@@ -522,6 +528,7 @@ def get_grase_results(get_results_files):
 	dex_to_rmats_exploded = dex_to_rmats.copy()
 	dex_to_rmats_exploded["rMATS_ID"] = dex_to_rmats_exploded["rMATS_ID"].str.split(",")
 	dex_to_rmats_exploded = dex_to_rmats_exploded.explode("rMATS_ID")
+	dex_to_rmats_exploded["rMATS_ID"] = dex_to_rmats_exploded["rMATS_ID"].astype(str)
 	dex_to_rmats_ex_A3 = dex_to_rmats_exploded.merge(A3SS_MATS, how="left", left_on=["GeneID", "rMATS_ID"], right_on=["GeneID", "ID"])
 	dex_to_rmats_ex_A5 = dex_to_rmats_exploded.merge(A5SS_MATS, how="left", left_on=["GeneID", "rMATS_ID"], right_on=["GeneID", "ID"])
 	dex_to_rmats_ex_SE = dex_to_rmats_exploded.merge(SE_MATS, how="left", left_on=["GeneID", "rMATS_ID"], right_on=["GeneID", "ID"])
