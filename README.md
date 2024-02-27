@@ -64,7 +64,7 @@ options:
  Output Directory                  The directory where all of the created graphML files
                                    will be placed
 
-usage: bash creaingFilesByGene [options]
+usage: bash creatingFilesByGene [options]
 
 options:
  -r rMATS_results
