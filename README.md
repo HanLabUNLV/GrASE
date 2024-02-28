@@ -1,5 +1,9 @@
 # GrASE
 Graph of Alternative Splice junctions and Exonic parts
+
+## About
+GrASE is a tool that bridges the gap between the splice-junction approach of software like rMATS and the exon-fragment approach of software like DEXSeq. Specifically, this tool uses both rMATS and DEXSeq in order to map splicing events to the exons they encompass and vice versa.
+
 * write some explanation about GrASE bridging the gap from exonic parts to splice junctions
 
 ## Dependencies  
