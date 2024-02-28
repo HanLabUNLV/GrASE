@@ -13,7 +13,7 @@ R packages:
 * SplicingGraphs (1.40.0)
 * igrpah (1.5.1)
 * GenomicFeatures (1.52.0)
-* AnnotatoinDbi (1.62.2)
+* AnnotationDbi (1.62.2)
 * DEXSeq (1.46.0)
 
 Python packages:  
