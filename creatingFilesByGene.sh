@@ -93,7 +93,7 @@ cat grase_results/tmp/all_genes.txt | while read line; do
 	
 	#echo -e "\nDexseq Data:"
         grep -w $line $gtf > grase_results/gene_files/$line/$line.gtf
-	python $prep_annotation grase_results/gene_files/$line/$line.gtf grase_results/gene_files/$line/$line.dexseq.gff
+	python3 $prep_annotation grase_results/gene_files/$line/$line.gtf grase_results/gene_files/$line/$line.dexseq.gff
 	mkdir -p grase_results/gene_files/$line/output
 	
 	) &
