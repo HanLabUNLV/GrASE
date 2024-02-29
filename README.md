@@ -52,7 +52,7 @@ bash creatingFilesByGene.sh -r /path/to/rmats/results -d /path/to/dexseq_prepare
 * add explanation
 usage:
 ```
-python grase.py -g <gene_files> --rmats <rmats_results_directory> --dexseq <dexseq_results.txt> --nthread <number_of_threads>
+python3 grase.py -g <gene_files> --rmats <rmats_results_directory> --dexseq <dexseq_results.txt> --nthread <number_of_threads>
 ```
 * graph output in each gene directory
   * images?
