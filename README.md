@@ -11,7 +11,7 @@ Tested on Ubuntu (20.04.6 LTS)
 
 R packages:  
 * SplicingGraphs (1.40.0)
-* igrpah (1.5.1)
+* igraph (1.5.1)
 * GenomicFeatures (1.52.0)
 * AnnotationDbi (1.62.2)
 * DEXSeq (1.46.0)
