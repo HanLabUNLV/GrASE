@@ -27,7 +27,7 @@ Python packages:
 ## DEXSeq and rMATS
 DEXSeq 
 
-When running DEXSeq, preprocessing should be done with python to ensure full compatibility. When running `dexseq_prepare_annotation.py`, make sure to include -r no as an argument. This will ensure that the dexseq.gff output will be in a non-aggregated form (also to ensure compatibility with GrASE). The rest of the DEXSeq pipeline can be completed as normal. Make sure to create a dexseq_output.txt file when the pipeline is finished. GrASE will use this output file in its analysis. 
+When running DEXSeq, preprocessing should be done with python to ensure full compatibility. When running `dexseq_prepare_annotation.py`, make sure to include `-r no` as an argument. This will ensure that the dexseq.gff output will be in a non-aggregated form (also to ensure compatibility with GrASE). The rest of the DEXSeq pipeline can be completed as normal. Make sure to create a dexseq_output.txt file when the pipeline is finished. GrASE will use this output file in its analysis. 
 
 * write brief explanation about DEXSeq and how GrASE uses it
 
