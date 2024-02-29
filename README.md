@@ -2,7 +2,7 @@
 Graph of Alternative Splice junctions and Exonic parts
 
 ## About
-GrASE is a tool that bridges the gap between the splice-junction approach of software like rMATS and the exon-fragment approach of software like DEXSeq. Specifically, this tool uses both rMATS and DEXSeq in order to map splicing events to the exons they encompass and vice versa.
+GrASE is a tool that bridges the gap between the splice-junction approach of software like [rMATS](https://rnaseq-mats.sourceforge.io/index.html) and the exon-fragment approach of software like [DEXSeq](https://bioconductor.org/packages/release/bioc/vignettes/DEXSeq/inst/doc/DEXSeq.html). Specifically, this tool uses both rMATS and DEXSeq in order to map splicing events to the exons they encompass and vice versa. Before using GrASE, you must run rMATS on your data in order to get an rmats_output directory. In addition, you must also run DEXSeq on your data, and then output the results into a txt file. GrASE will use the output of both software in order to do its job. 
 
 * write some explanation about GrASE bridging the gap from exonic parts to splice junctions
 
@@ -26,7 +26,9 @@ Python packages:
 
 ## DEXSeq and rMATS
 DEXSeq 
-* need dexseq results using non-aggregated gff (add -r no to prepare_annotation.py command)
+
+When running DEXSeq, preprocessing should be done with python to ensure full compatibility. When running `dexseq_prepare_annotation.py`, make sure to include -r no as an argument. This will ensure that the dexseq.gff output will be in a non-aggregated form (also to ensure compatibility with GrASE). The rest of the DEXSeq pipeline can be completed as normal. Make sure to create a dexseq_output.txt file when the pipeline is finished. GrASE will use this output file in its analysis. 
+
 * write brief explanation about DEXSeq and how GrASE uses it
 
 rMATS
