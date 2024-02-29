@@ -17,7 +17,7 @@ R packages:
 * DEXSeq (1.46.0)
 
 Python packages:  
-* python (3.11.5)
+* python3 (3.11.5)
 * rMATS  (4.1.1)
 * htseq  (0.13.5)
 * igraph (0.10.6)
