@@ -4,7 +4,7 @@ Graph of Alternative Splice junctions and Exonic parts
 ## About
 GrASE is a tool that bridges the gap between the splice-junction approach of software like [rMATS](https://rnaseq-mats.sourceforge.io/index.html) and the exon-fragment approach of software like [DEXSeq](https://bioconductor.org/packages/release/bioc/vignettes/DEXSeq/inst/doc/DEXSeq.html). Specifically, this tool uses both rMATS and DEXSeq in order to map splicing events to the exons they encompass and vice versa. Before using GrASE, you must run rMATS on your data in order to get an rmats_output directory. In addition, you must also run DEXSeq on your data, and then output the results into a txt file. GrASE will use the output of both software in order to do its job. 
 
-* write some explanation about GrASE bridging the gap from exonic parts to splice junctions
+* Container used for running GrASE can be found here: [GrASE Container](https://drive.google.com/drive/folders/10H6NxN0T1cP0O68VwhCh55KVVb08Iqzb)
 
 ## Dependencies  
 Tested on Ubuntu (20.04.6 LTS)  
@@ -93,8 +93,6 @@ options:
  --nthread NTHREAD                  The number of threads. The optimal number of threads
                                     should be equal to the number of cpu cores. Default: 1
 ```
-
-## Heatmap ?
 
 ## Final Output
 `grase_results/results` contains the final output files from GrASE
