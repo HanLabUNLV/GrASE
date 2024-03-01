@@ -52,6 +52,7 @@ bash creatingFilesByGene.sh -r /path/to/rmats/results -d /path/to/dexseq_prepare
 
 ## Running GrASE
 * add explanation
+  
 usage:
 ```
 python3 grase.py -g <gene_files> --rmats <rmats_results_directory> --dexseq <dexseq_results.txt> --nthread <number_of_threads>
