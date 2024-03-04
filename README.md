@@ -18,9 +18,13 @@ R packages:
 
 Python packages:  
 * python3 (3.11.5)
-* rMATS  (4.1.1)
-* htseq  (0.13.5)
-* igraph (0.10.6)
+* rMATS   (4.1.1)
+* htseq   (0.13.5)
+* igraph  (0.10.6)
+* pycairo (1.23.0)
+* pandas  (2.1.4)
+
+Other packages:
 * STAR   (optional - 2.7.10b)
 
 
