@@ -103,4 +103,6 @@ cat grase_results/tmp/all_genes.txt | while read line; do
 	fi
 done
 
+rm -r grase_results/tmp
+
 echo "Done!"
