@@ -591,11 +591,11 @@ def get_grase_results(get_results_files):
 	exon_dex_sig_rmats_sig, num_exons_dex_sig_rmats_sig = filter_df(exon_dex_sig, "Exon", "Secondary", "df['FDR'] <= .05")
 	exon_dex_sig = exon_dex_sig[["groupID", "featureID", "padj", "rMATS_ID", "FDR"]]
 
+
 	# Event Counts ##################################################################################
 	rmats_to_dex = pd.concat([A3SS_to_dex, A5SS_to_dex, SE_to_dex, RI_to_dex])
 	rmats_to_dex = rmats_to_dex.sort_values(by=["GeneID", "ID"])
 	rmats_to_dex = rmats_to_dex.reset_index(drop=True)
-	num_events_rmats_detected = len(rmats_to_dex)
 	del A3SS_to_dex, A5SS_to_dex, SE_to_dex, RI_to_dex
 
 	rmats_to_dex_A3 = rmats_to_dex.merge(A3SS_MATS, how="left", on=["GeneID", "ID"])
