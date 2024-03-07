@@ -57,7 +57,7 @@ This script will create the `grase results` directory, which will contain:
 * `results`, a directory that will hold the final results after running grase.py (next step)
 
 Here is an example of a toy file structure:
-```
+```bash
 grase_results
 ├── gene_files
 │   ├── ENSG00000286751.1
