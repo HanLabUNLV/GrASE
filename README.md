@@ -56,6 +56,7 @@ This script will create the `grase results` directory, which will contain:
 * `gene_files`, a directory for each relevant gene to be processed in your dataset (taken from rMATS and DEXSeq results)
 * `results`, a directory that will hold the final results after running grase.py (next step)
 
+Here is an example of a toy file structure:
 ```bash
 grase_results
 ├── gene_files
@@ -92,9 +93,6 @@ grase_results
     └── tmp
 
 ```
-
-* add a bit more explanation about the file structure
-  * directory for each gene in gene_files and the files populated
 
 ## Running GrASE
 * add explanation
