@@ -51,6 +51,117 @@ GrASE will process every gene in your dataset that produces results in DEXSeq an
 ```
 bash creatingFilesByGene.sh -r /path/to/rmats/results -d /path/to/dexseq_prepare_annotation.py -a /path/to/annotation/file.gtf -g /path/to/graphml/directory -p number_of_threads
 ```
+```bash
+grase_results
+├── gene_files
+│   ├── ENSG00000286751.1
+│   │   ├── ENSG00000286751.1.dexseq.gff
+│   │   ├── ENSG00000286751.1.graphml
+│   │   ├── ENSG00000286751.1.gtf
+│   │   ├── fromGTF.A3SS.txt
+│   │   ├── fromGTF.A5SS.txt
+│   │   ├── fromGTF.RI.txt
+│   │   ├── fromGTF.SE.txt
+│   │   └── output
+│   │       ├── ENSG00000286751.1.dexseq.A3SS.mapped.txt
+│   │       ├── ENSG00000286751.1.dexseq.A5SS.mapped.txt
+│   │       ├── ENSG00000286751.1.dexseq.mapped.A3SS.gff
+│   │       ├── ENSG00000286751.1.dexseq.mapped.A5SS.gff
+│   │       ├── ENSG00000286751.1.dexseq.mapped.RI.gff
+│   │       ├── ENSG00000286751.1.dexseq.mapped.SE.gff
+│   │       ├── ENSG00000286751.1.dexseq.RI.mapped.txt
+│   │       ├── ENSG00000286751.1.dexseq.SE.mapped.txt
+│   │       ├── fromGTF_ENSG00000286751.1.A3SS.txt
+│   │       ├── fromGTF_ENSG00000286751.1.A5SS.txt
+│   │       ├── fromGTF_ENSG00000286751.1.RI.txt
+│   │       ├── fromGTF_ENSG00000286751.1.SE.txt
+│   │       ├── graph.ENSG00000286751.1.png
+│   │       └── graph_ENSG00000286751.1.png
+│   ├── ENSG00000287688.1
+│   │   ├── ENSG00000287688.1.dexseq.gff
+│   │   ├── ENSG00000287688.1.graphml
+│   │   ├── ENSG00000287688.1.gtf
+│   │   ├── fromGTF.A3SS.txt
+│   │   ├── fromGTF.A5SS.txt
+│   │   ├── fromGTF.RI.txt
+│   │   ├── fromGTF.SE.txt
+│   │   └── output
+│   │       ├── ENSG00000287688.1.dexseq.A3SS.mapped.txt
+│   │       ├── ENSG00000287688.1.dexseq.A5SS.mapped.txt
+│   │       ├── ENSG00000287688.1.dexseq.mapped.A3SS.gff
+│   │       ├── ENSG00000287688.1.dexseq.mapped.A5SS.gff
+│   │       ├── ENSG00000287688.1.dexseq.mapped.RI.gff
+│   │       ├── ENSG00000287688.1.dexseq.mapped.SE.gff
+│   │       ├── ENSG00000287688.1.dexseq.RI.mapped.txt
+│   │       ├── ENSG00000287688.1.dexseq.SE.mapped.txt
+│   │       ├── fromGTF_ENSG00000287688.1.A3SS.txt
+│   │       ├── fromGTF_ENSG00000287688.1.A5SS.txt
+│   │       ├── fromGTF_ENSG00000287688.1.RI.txt
+│   │       ├── fromGTF_ENSG00000287688.1.SE.txt
+│   │       ├── graph.ENSG00000287688.1.png
+│   │       └── graph_ENSG00000287688.1.png
+│   └── ENSG00000288597.1
+│       ├── ENSG00000288597.1.dexseq.gff
+│       ├── ENSG00000288597.1.graphml
+│       ├── ENSG00000288597.1.gtf
+│       ├── fromGTF.A3SS.txt
+│       ├── fromGTF.A5SS.txt
+│       ├── fromGTF.RI.txt
+│       ├── fromGTF.SE.txt
+│       └── output
+│           ├── ENSG00000288597.1.dexseq.A3SS.mapped.txt
+│           ├── ENSG00000288597.1.dexseq.A5SS.mapped.txt
+│           ├── ENSG00000288597.1.dexseq.mapped.A3SS.gff
+│           ├── ENSG00000288597.1.dexseq.mapped.A5SS.gff
+│           ├── ENSG00000288597.1.dexseq.mapped.RI.gff
+│           ├── ENSG00000288597.1.dexseq.mapped.SE.gff
+│           ├── ENSG00000288597.1.dexseq.RI.mapped.txt
+│           ├── ENSG00000288597.1.dexseq.SE.mapped.txt
+│           ├── fromGTF_ENSG00000288597.1.A3SS.txt
+│           ├── fromGTF_ENSG00000288597.1.A5SS.txt
+│           ├── fromGTF_ENSG00000288597.1.RI.txt
+│           ├── fromGTF_ENSG00000288597.1.SE.txt
+│           ├── graph.ENSG00000288597.1.png
+│           └── graph_ENSG00000288597.1.png
+├── results
+│   ├── DEX_to_rMATS_Events.txt
+│   ├── ExonParts
+│   │   ├── DexSigExons.txt
+│   │   ├── DexSig__rMATS_DetectedExons.txt
+│   │   ├── DexSig__rMATS_SigExons.txt
+│   │   ├── DexSig__rMATS_TestedExons.txt
+│   │   ├── DexTestedExons.txt
+│   │   ├── DexTested__rMATS_DetectedExons.txt
+│   │   ├── DexTested__rMATS_SigExons.txt
+│   │   ├── DexTested__rMATS_TestedExons.txt
+│   │   ├── rMATS_DetectedExons.txt
+│   │   ├── rMATS_SigExons.txt
+│   │   └── rMATS_TestedExons.txt
+│   ├── Mapped.EventsToExons.txt
+│   ├── Mapped.ExonsToEvents.txt
+│   ├── rMATS_to_DEX_Exons.txt
+│   ├── SplicingEvents
+│   │   ├── DexSigEvents.txt
+│   │   ├── DexTestedEvents.txt
+│   │   ├── rMATS_Sig__DexSigEvents.txt
+│   │   ├── rMATS_Sig__DexTestedEvents.txt
+│   │   ├── rMATS_SigEvents.txt
+│   │   ├── rMATS_Tested__DexSigEvents.txt
+│   │   ├── rMATS_Tested__DexTestedEvents.txt
+│   │   └── rMATS_TestedEvents.txt
+│   ├── summary.txt
+│   └── tmp
+│       ├── combined.dexseq.A3SS.mapped.txt
+│       ├── combined.dexseq.A5SS.mapped.txt
+│       ├── combined.dexseq.RI.mapped.txt
+│       ├── combined.dexseq.SE.mapped.txt
+│       ├── combined.fromGTF.A3SS.txt
+│       ├── combined.fromGTF.A5SS.txt
+│       ├── combined.fromGTF.RI.txt
+│       └── combined.fromGTF.SE.txt
+└── tmp
+    └── all_genes.txt
+```
 
 * add a bit more explanation about the file structure
   * directory for each gene in gene_files and the files populated
