@@ -29,14 +29,14 @@ Other packages:
 
 
 ## DEXSeq and rMATS
-DEXSeq 
+### DEXSeq 
+
+DEXSeq is a software that is used for finding differential exon usage using RNA-seq exon counts between samples with different experimental designs. It conducts statistical tests based on a model that uses the negative binomial distribution to estimate the variance between biological replicates and generalized linear models for testing. The output of DEXSeq is a matrix that has many features including coordinates, pvalue, padj, read counts, and more for every exon described in the GFF file. The GFF is prepared by annotating the GTF of a given dataset. GrASE will use the output of DEXSeq in order to map each exon to a graphML object.
 
 When running DEXSeq, preprocessing should be done with python to ensure full compatibility. When running `dexseq_prepare_annotation.py`, make sure to include `-r no` as an argument. This will ensure that the dexseq.gff output will be in a non-aggregated form (also to ensure compatibility with GrASE). The rest of the DEXSeq pipeline can be completed as normal. Make sure to create a dexseq_output.txt file when the pipeline is finished. GrASE will use this output file in its analysis. 
 
-* write brief explanation about DEXSeq and how GrASE uses it
-
-rMATS
-* write brief explanation about rMATS and how GrASE uses it
+### rMATS
+rMATS is a computational tool to detect differential alternative splicing events from RNA-Seq data. The statistical model of MATS calculates the P-value and false discovery rate that the difference in the isoform ratio of a gene between two conditions exceeds a given user-defined threshold. From the RNA-Seq data, MATS can automatically detect and analyze alternative splicing events corresponding to all major types of alternative splicing patterns. 
 
 ## Creating graphMLs
 GraphML is an XML-based file format for graphs. This step ensures that the coordinates of each gene are annotated and will be essential when creating the splicing graphs. It uses the [SplicingGraphs](https://bioconductor.org/packages/release/bioc/html/SplicingGraphs.html) R package to obtain the splice junctions and exons. 
