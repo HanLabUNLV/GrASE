@@ -55,19 +55,37 @@ bash creatingFilesByGene.sh -r /path/to/rmats/results -d /path/to/dexseq_prepare
 grase_results
 ├── gene_files
 │   ├── ENSG00000286751.1
+│   │   ├── ENSG00000286751.1.dexseq.gff
+│   │   ├── ENSG00000286751.1.graphml
+│   │   ├── ENSG00000286751.1.gtf
+│   │   ├── fromGTF.A3SS.txt
+│   │   ├── fromGTF.A5SS.txt
+│   │   ├── fromGTF.RI.txt
+│   │   ├── fromGTF.SE.txt
+│   │   └── output
 │   ├── ENSG00000287688.1
+│   │   ├── ENSG00000287688.1.dexseq.gff
+│   │   ├── ENSG00000287688.1.graphml
+│   │   ├── ENSG00000287688.1.gtf
+│   │   ├── fromGTF.A3SS.txt
+│   │   ├── fromGTF.A5SS.txt
+│   │   ├── fromGTF.RI.txt
+│   │   ├── fromGTF.SE.txt
+│   │   └── output
 │   └── ENSG00000288597.1
-├── results
-│   ├── DEX_to_rMATS_Events.txt
-│   ├── ExonParts
-│   ├── Mapped.EventsToExons.txt
-│   ├── Mapped.ExonsToEvents.txt
-│   ├── rMATS_to_DEX_Exons.txt
-│   ├── SplicingEvents
-│   ├── summary.txt
-│   └── tmp
-└── tmp
-    └── all_genes.txt
+│       ├── ENSG00000288597.1.dexseq.gff
+│       ├── ENSG00000288597.1.graphml
+│       ├── ENSG00000288597.1.gtf
+│       ├── fromGTF.A3SS.txt
+│       ├── fromGTF.A5SS.txt
+│       ├── fromGTF.RI.txt
+│       ├── fromGTF.SE.txt
+│       └── output
+└── results
+    ├── ExonParts
+    ├── SplicingEvents
+    └── tmp
+
 ```
 
 * add a bit more explanation about the file structure
