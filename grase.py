@@ -489,6 +489,26 @@ def mats_to_dex(file, eventType):
 	return df
 
 
+def filter_df(input_df, type, level, criteria):
+	df = input_df.copy()
+	df = df[eval(criteria)]
+
+	if type == "Event":
+		if level == "Secondary":
+			df = df.drop_duplicates(subset=["GeneID", "ID"], keep="first")
+			df = df[["GeneID", "ID", "FDR", "DexseqFragment","padj"]]
+		num_events = len(df)
+
+	if type == "Exon":
+		if level == "Secondary":
+			df = df.drop_duplicates(subset=["groupID", "featureID"], keep="first")
+			df = df[["groupID", "featureID", "padj", "rMATS_ID", "FDR"]]
+		num_events = len(df)
+
+	return df, num_events
+
+
+
 def get_grase_results(get_results_files):
 
 	(output_dir, dexseqResults,
@@ -497,7 +517,7 @@ def get_grase_results(get_results_files):
 	A3SS_to_dex, A5SS_to_dex, SE_to_dex, RI_to_dex) = get_results_files()
 
 
-	# exon counts ###############################################################################
+	# Exon Counts ###############################################################################
 	dex_to_SE_A5 = pd.merge(dex_to_SE, dex_to_A5SS, how="outer", on=["GeneID", "DexseqFragment"])
 	dex_to_SE_A5_A3 = pd.merge(dex_to_SE_A5, dex_to_A3SS, how="outer", on=["GeneID", "DexseqFragment"])
 	dex_to_rmats = pd.merge(dex_to_SE_A5_A3, dex_to_RI, how="outer", on=["GeneID", "DexseqFragment"])
@@ -514,127 +534,280 @@ def get_grase_results(get_results_files):
 	dex_to_rmats_dexRes = dex_to_rmats_dexRes.drop(columns=["GeneID", "DexseqFragment"])
 	dex_to_rmats_dexRes = dex_to_rmats_dexRes.sort_values(by=["groupID", "featureID"])
 	dex_to_rmats_dexRes = dex_to_rmats_dexRes.reset_index(drop=True)
-	num_exons = len(dex_to_rmats_dexRes)
-
-	exon_dex_sig = dex_to_rmats_dexRes.loc[dex_to_rmats_dexRes["padj"] <= .05]
-	num_exons_dex_sig = len(exon_dex_sig)
-
-	exon_rmats_detected = dex_to_rmats_dexRes[["groupID", "featureID", "padj", "rMATS_ID"]].loc[dex_to_rmats_dexRes["rMATS_ID"].notna()]
-	num_exons_rmats_detected = len(exon_rmats_detected)
-
-	exon_rmats_detected_dex_sig = exon_rmats_detected.loc[exon_rmats_detected["padj"] <= .05]
-	num_exons_dex_sig_rmats_detected = len(exon_rmats_detected_dex_sig)
+	del rmatsID_col
 
 	dex_to_rmats_exploded = dex_to_rmats.copy()
 	dex_to_rmats_exploded["rMATS_ID"] = dex_to_rmats_exploded["rMATS_ID"].str.split(",")
 	dex_to_rmats_exploded = dex_to_rmats_exploded.explode("rMATS_ID")
-	dex_to_rmats_exploded["rMATS_ID"] = dex_to_rmats_exploded["rMATS_ID"].astype(str)
-	dex_to_rmats_ex_A3 = dex_to_rmats_exploded.merge(A3SS_MATS, how="left", left_on=["GeneID", "rMATS_ID"], right_on=["GeneID", "ID"])
-	dex_to_rmats_ex_A5 = dex_to_rmats_exploded.merge(A5SS_MATS, how="left", left_on=["GeneID", "rMATS_ID"], right_on=["GeneID", "ID"])
-	dex_to_rmats_ex_SE = dex_to_rmats_exploded.merge(SE_MATS, how="left", left_on=["GeneID", "rMATS_ID"], right_on=["GeneID", "ID"])
-	dex_to_rmats_ex_RI = dex_to_rmats_exploded.merge(RI_MATS, how="left", left_on=["GeneID", "rMATS_ID"], right_on=["GeneID", "ID"])
+	dex_to_rmats_ex_A3 = dex_to_rmats_exploded.merge(A3SS_MATS, how="left",
+	                                                 left_on=["GeneID", "rMATS_ID"],
+	                                                 right_on=["GeneID", "ID"])
+	dex_to_rmats_ex_A5 = dex_to_rmats_exploded.merge(A5SS_MATS, how="left",
+	                                                 left_on=["GeneID", "rMATS_ID"],
+	                                                 right_on=["GeneID", "ID"])
+	dex_to_rmats_ex_SE = dex_to_rmats_exploded.merge(SE_MATS, how="left",
+	                                                 left_on=["GeneID", "rMATS_ID"],
+	                                                 right_on=["GeneID", "ID"])
+	dex_to_rmats_ex_RI = dex_to_rmats_exploded.merge(RI_MATS, how="left",
+	                                                 left_on=["GeneID", "rMATS_ID"],
+	                                                 right_on=["GeneID", "ID"])
+
 	dex_to_rmats_ex_MATS = pd.concat([dex_to_rmats_ex_A3, dex_to_rmats_ex_A5, dex_to_rmats_ex_SE, dex_to_rmats_ex_RI])
-	dex_to_rmats_ex_MATS = dex_to_rmats_ex_MATS.dropna(subset="ID.1")
-	del dex_to_rmats_ex_A3, dex_to_rmats_ex_A5, dex_to_rmats_ex_SE, dex_to_rmats_ex_RI
+	dex_to_rmats_ex_MATS.dropna(subset="ID.1", inplace=True)
+
+	del dex_to_rmats, dex_to_rmats_ex_A3, dex_to_rmats_ex_A5, dex_to_rmats_ex_SE, dex_to_rmats_ex_RI
 
 	dex_to_rmats_ex_dexRes = dex_to_rmats_dexRes.copy()
 	dex_to_rmats_ex_dexRes["rMATS_ID"] = dex_to_rmats_ex_dexRes["rMATS_ID"].str.split(",")
 	dex_to_rmats_ex_dexRes = dex_to_rmats_ex_dexRes.explode("rMATS_ID")
-	dex_to_rmats_ex_dexRes_MATS = dex_to_rmats_ex_dexRes.merge(dex_to_rmats_ex_MATS, how="left", left_on=["groupID", "rMATS_ID", "featureID"], right_on=["GeneID", "rMATS_ID", "DexseqFragment"])
+	dex_to_rmats_ex_dexRes_MATS = dex_to_rmats_ex_dexRes.merge(dex_to_rmats_ex_MATS, how="left",
+	                                                           left_on=["groupID", "rMATS_ID", "featureID"],
+	                                                           right_on=["GeneID", "rMATS_ID", "DexseqFragment"])
 	dex_to_rmats_ex_dexRes_MATS[["padj", "FDR"]] = dex_to_rmats_ex_dexRes_MATS[["padj", "FDR"]].apply(pd.to_numeric)
+	del dex_to_rmats_ex_dexRes, dex_to_rmats_ex_MATS
 
-	exon_rmats_tested = dex_to_rmats_ex_dexRes_MATS
+	num_exons_detected = len(dex_to_rmats_dexRes)
+
+	### rMATS Detected Exons
+	exon_rmats_detected, num_exons_rmats_detected = filter_df(dex_to_rmats_ex_dexRes_MATS, "Exon", "Secondary", "df['rMATS_ID'].notna()")
+	'''exon_rmats_detected = dex_to_rmats_ex_dexRes_MATS.copy()
+	exon_rmats_detected = exon_rmats_detected.loc[exon_rmats_detected["rMATS_ID"].notna()]
+	exon_rmats_detected_dedup = exon_rmats_detected.drop_duplicates(subset=["groupID", "featureID"], keep="first")
+	exon_rmats_detected_dedup = exon_rmats_detected_dedup[["groupID", "featureID", "padj", "rMATS_ID"]]
+	num_exons_rmats_detected = len(exon_rmats_detected_dedup)'''
+
+	### rMATS Tested Exons
+	exon_rmats_tested, num_exons_rmats_tested = filter_df(dex_to_rmats_ex_dexRes_MATS, "Exon", "Secondary", "df['ID.1'].notna()")
+	'''exon_rmats_tested = dex_to_rmats_ex_dexRes_MATS.copy()
 	exon_rmats_tested = exon_rmats_tested.dropna(subset="ID.1")
 	exon_rmats_tested_dedup = exon_rmats_tested.drop_duplicates(subset=["groupID", "featureID"], keep="first")
 	exon_rmats_tested_dedup = exon_rmats_tested_dedup[["groupID", "featureID", "padj", "rMATS_ID"]]
-	num_exons_rmats_tested = len(exon_rmats_tested_dedup)
+	num_exons_rmats_tested = len(exon_rmats_tested_dedup)'''
 
-	exon_rmats_tested_dex_sig = exon_rmats_tested.copy()
-	exon_rmats_tested_dex_sig = exon_rmats_tested_dex_sig.loc[exon_rmats_tested_dex_sig["padj"] <= .05]
-	exon_rmats_tested_dex_sig_dedup = exon_rmats_tested_dex_sig.drop_duplicates(subset=["groupID", "featureID"], keep="first")
-	exon_rmats_tested_dex_sig_dedup = exon_rmats_tested_dex_sig_dedup[["groupID", "featureID", "padj", "rMATS_ID"]]
-	num_exons_rmats_tested_dex_sig = len(exon_rmats_tested_dex_sig_dedup)
-
-	exon_rmats_sig = exon_rmats_tested
+	### rMATS Significant Exons
+	exon_rmats_sig, num_exons_rmats_sig = filter_df(dex_to_rmats_ex_dexRes_MATS, "Exon", "Secondary", "df['FDR'] <= .05")
+	'''exon_rmats_sig = dex_to_rmats_ex_dexRes_MATS.copy()
 	exon_rmats_sig = exon_rmats_sig.loc[exon_rmats_sig["FDR"] <= .05]
 	exon_rmats_sig_dedup = exon_rmats_sig.drop_duplicates(subset=["groupID", "featureID"], keep="first")
 	exon_rmats_sig_dedup = exon_rmats_sig_dedup.iloc[:, 19:]
-	num_exons_rmats_sig = len(exon_rmats_sig_dedup)
+	num_exons_rmats_sig = len(exon_rmats_sig_dedup)'''
 
-	exon_rmats_sig_dex_sig = exon_rmats_sig[["groupID", "featureID", "padj", "rMATS_ID"]].loc[exon_rmats_sig["padj"] <= .05].drop_duplicates(subset=["groupID", "featureID"], keep="first")
-	num_exons_dex_sig_rmats_sig = len(exon_rmats_sig_dex_sig)
+	### DEXSeq Tested Exons
+	exon_dex_tested, num_exons_dex_tested = filter_df(dex_to_rmats_ex_dexRes_MATS, "Exon", "Primary", "df['padj'].notna()")
+	'''exon_dex_tested = dex_to_rmats_ex_dexRes_MATS.copy()
+	exon_dex_tested = exon_dex_tested.dropna(subset="padj")
+	exon_dex_tested_dedup = exon_dex_tested.drop_duplicates(subset=["groupID", "featureID"], keep="first")
+	exon_dex_tested_dedup = exon_dex_tested_dedup[["groupID", "featureID", "padj", "rMATS_ID"]]
+	num_exons_dex_tested = len(exon_dex_tested_dedup)'''
 
+	### Get DEXSeq Tested Exons Intersected with rMATS DTS
+	exon_dex_tested_rmats_detected, num_exons_dex_tested_rmats_detected = filter_df(exon_dex_tested, "Exon", "Secondary", "df['rMATS_ID'].notna()")
+	'''exon_dex_tested_rmats_detected = exon_dex_tested.copy()
+	exon_dex_tested_rmats_detected = exon_dex_tested_rmats_detected.loc[exon_dex_tested_rmats_detected["rMATS_ID"].notna()]
+	exon_dex_tested_rmats_detected_dedup = exon_dex_tested_rmats_detected.drop_duplicates(subset=["groupID", "featureID"], keep="first")
+	exon_dex_tested_rmats_detected_dedup = exon_dex_tested_rmats_detected_dedup[["groupID", "featureID", "padj", "rMATS_ID"]]
+	num_exons_dex_tested_rmats_detected = len(exon_dex_tested_rmats_detected_dedup)'''
 
-	# event counts ##################################################################################
+	exon_dex_tested_rmats_tested, num_exons_dex_tested_rmats_tested = filter_df(exon_dex_tested, "Exon", "Secondary", "df['ID.1'].notna()")
+	'''exon_dex_tested_rmats_tested = exon_dex_tested.copy()
+	exon_dex_tested_rmats_tested = exon_dex_tested_rmats_tested.loc[exon_dex_tested_rmats_tested["ID.1"].notna()]
+	exon_dex_tested_rmats_tested_dedup = exon_dex_tested_rmats_tested.drop_duplicates(subset=["groupID", "featureID"], keep="first")
+	exon_dex_tested_rmats_tested_dedup = exon_dex_tested_rmats_tested_dedup[["groupID", "featureID", "padj", "rMATS_ID"]]
+	num_exons_dex_tested_rmats_tested = len(exon_dex_tested_rmats_tested_dedup)'''
+
+	exon_dex_tested_rmats_sig, num_exons_dex_tested_rmats_sig = filter_df(exon_dex_tested, "Exon", "Secondary", "df['FDR'] <= .05")
+	'''exon_dex_tested_rmats_sig = exon_dex_tested.copy()
+	exon_dex_tested_rmats_sig = exon_dex_tested_rmats_sig.loc[exon_dex_tested_rmats_sig["FDR"] <= .05]
+	exon_dex_tested_rmats_sig_dedup = exon_dex_tested_rmats_sig.drop_duplicates(subset=["groupID", "featureID"], keep="first")
+	exon_dex_tested_rmats_sig_dedup = exon_dex_tested_rmats_sig_dedup[["groupID", "featureID", "padj", "rMATS_ID"]]
+	num_exons_dex_tested_rmats_sig = len(exon_dex_tested_rmats_sig_dedup)'''
+
+	exon_dex_tested = exon_dex_tested[["groupID", "featureID", "padj", "rMATS_ID", "FDR"]]
+
+	### DEXSeq Significant Exons
+	exon_dex_sig, num_exons_dex_sig = filter_df(dex_to_rmats_ex_dexRes_MATS, "Exon", "Primary", "df['padj'] <= .05")
+	'''exon_dex_sig = dex_to_rmats_ex_dexRes_MATS.copy()
+	exon_dex_sig = exon_dex_sig.loc[exon_dex_sig["padj"] <= .05]
+	exon_dex_sig_dedup = exon_dex_sig.drop_duplicates(subset=["groupID", "featureID"], keep="first")
+	exon_dex_sig_dedup = exon_dex_sig_dedup[["groupID", "featureID", "padj", "rMATS_ID"]]
+	num_exons_dex_sig = len(exon_dex_sig_dedup)'''
+
+	### Get DEXSeq Significant Exons Intersected with rMATS DTS
+	exon_dex_sig_rmats_detected, num_exons_dex_sig_rmats_detected = filter_df(exon_dex_sig, "Exon", "Secondary", "df['rMATS_ID'].notna()")
+	'''exon_dex_sig_rmats_detected = exon_dex_sig.copy()
+	exon_dex_sig_rmats_detected = exon_dex_sig_rmats_detected.loc[exon_dex_sig_rmats_detected["rMATS_ID"].notna()]
+	exon_dex_sig_rmats_detected_dedup = exon_dex_sig_rmats_detected.drop_duplicates(subset=["groupID", "featureID"], keep="first")
+	exon_dex_sig_rmats_detected_dedup = exon_dex_sig_rmats_detected_dedup[["groupID", "featureID", "padj", "rMATS_ID"]]
+	num_exons_dex_sig_rmats_detected = len(exon_dex_sig_rmats_detected_dedup)'''
+
+	exon_dex_sig_rmats_tested, num_exons_dex_sig_rmats_tested = filter_df(exon_dex_sig, "Exon", "Secondary", "df['ID.1'].notna()")
+	'''exon_dex_sig_rmats_tested = exon_dex_sig.copy()
+	exon_dex_sig_rmats_tested = exon_dex_sig_rmats_tested.loc[exon_dex_sig_rmats_tested["ID.1"].notna()]
+	exon_dex_sig_rmats_tested_dedup = exon_dex_sig_rmats_tested.drop_duplicates(subset=["groupID", "featureID"], keep="first")
+	exon_dex_sig_rmats_tested_dedup = exon_dex_sig_rmats_tested_dedup[["groupID", "featureID", "padj", "rMATS_ID"]]
+	num_exons_dex_sig_rmats_tested = len(exon_dex_sig_rmats_tested_dedup)'''
+
+	exon_dex_sig_rmats_sig, num_exons_dex_sig_rmats_sig = filter_df(exon_dex_sig, "Exon", "Secondary", "df['FDR'] <= .05")
+	'''exon_dex_sig_rmats_sig = exon_dex_sig.copy()
+	exon_dex_sig_rmats_sig = exon_dex_sig_rmats_sig.loc[exon_dex_sig_rmats_sig["FDR"] <= .05]
+	exon_dex_sig_rmats_sig_dedup = exon_dex_sig_rmats_sig.drop_duplicates(subset=["groupID", "featureID"], keep="first")
+	exon_dex_sig_rmats_sig_dedup = exon_dex_sig_rmats_sig_dedup[["groupID", "featureID", "padj", "rMATS_ID"]]
+	num_exons_dex_sig_rmats_sig = len(exon_dex_sig_rmats_sig_dedup)'''
+
+	exon_dex_sig = exon_dex_sig[["groupID", "featureID", "padj", "rMATS_ID", "FDR"]]
+
+	# Event Counts ##################################################################################
 	rmats_to_dex = pd.concat([A3SS_to_dex, A5SS_to_dex, SE_to_dex, RI_to_dex])
 	rmats_to_dex = rmats_to_dex.sort_values(by=["GeneID", "ID"])
 	rmats_to_dex = rmats_to_dex.reset_index(drop=True)
 	num_events_rmats_detected = len(rmats_to_dex)
 	del A3SS_to_dex, A5SS_to_dex, SE_to_dex, RI_to_dex
 
-	rmats_to_dex_exploded = rmats_to_dex.copy()
-	rmats_to_dex_exploded["DexseqFragment"] = rmats_to_dex_exploded["DexseqFragment"].str.split(",")
-	rmats_to_dex_exploded = rmats_to_dex_exploded.explode("DexseqFragment")
-
-	rmats_to_dex_ex_dexRes = rmats_to_dex_exploded.merge(dexseqResults.rename(columns={"groupID":"GeneID", "featureID":"DexseqFragment"}), how="left", on=["GeneID", "DexseqFragment"])
-	rmats_to_dex_ex_dexRes[["padj"]] = rmats_to_dex_ex_dexRes[["padj"]].apply(pd.to_numeric)
-	events_rmats_detected_dex_sig = rmats_to_dex_ex_dexRes.loc[rmats_to_dex_ex_dexRes["padj"] <= .05]
-	events_rmats_detected_dex_sig_dedup = events_rmats_detected_dex_sig.drop_duplicates(subset=["GeneID", "ID"], keep="first")
-	events_rmats_detected_dex_sig_dedup = events_rmats_detected_dex_sig_dedup[["GeneID", "ID", "DexseqFragment", "padj"]]
-	num_events_rmats_detected_dex_sig = len(events_rmats_detected_dex_sig_dedup)
-
 	rmats_to_dex_A3 = rmats_to_dex.merge(A3SS_MATS, how="left", on=["GeneID", "ID"])
 	rmats_to_dex_A5 = rmats_to_dex.merge(A5SS_MATS, how="left", on=["GeneID", "ID"])
 	rmats_to_dex_SE = rmats_to_dex.merge(SE_MATS, how="left", on=["GeneID", "ID"])
 	rmats_to_dex_RI = rmats_to_dex.merge(RI_MATS, how="left", on=["GeneID", "ID"])
 	del A3SS_MATS, A5SS_MATS, SE_MATS, RI_MATS
+
 	rmats_to_dex_MATS = pd.concat([rmats_to_dex_A3, rmats_to_dex_A5, rmats_to_dex_SE, rmats_to_dex_RI])
 	rmats_to_dex_MATS = rmats_to_dex_MATS.dropna(subset="ID.1")
-	rmats_to_dex_MATS[["FDR"]] = rmats_to_dex_MATS[["FDR"]].apply(pd.to_numeric)
-	num_events_rmats_tested = len(rmats_to_dex_MATS)
 	del rmats_to_dex_A3, rmats_to_dex_A5, rmats_to_dex_SE, rmats_to_dex_RI
 
-	events_rmats_sig = rmats_to_dex_MATS.loc[rmats_to_dex_MATS["FDR"] <= .05]
-	num_events_rmats_sig = len(events_rmats_sig)
+	rmats_to_dex_exploded = rmats_to_dex.copy()
+	rmats_to_dex_exploded["DexseqFragment"] = rmats_to_dex_exploded["DexseqFragment"].str.split(",")
+	rmats_to_dex_exploded = rmats_to_dex_exploded.explode("DexseqFragment")
+
+	rmats_to_dex_ex_dexRes = rmats_to_dex_exploded.merge(dexseqResults.rename(columns={"groupID":"GeneID", "featureID":"DexseqFragment"}),
+	                                                     how="left", on=["GeneID", "DexseqFragment"])
+	rmats_to_dex_ex_dexRes[["padj"]] = rmats_to_dex_ex_dexRes[["padj"]].apply(pd.to_numeric)
+	del rmats_to_dex_exploded
 
 	rmats_to_dex_ex_MATS = rmats_to_dex_MATS.copy()
 	rmats_to_dex_ex_MATS["DexseqFragment"] = rmats_to_dex_ex_MATS["DexseqFragment"].str.split(",")
 	rmats_to_dex_ex_MATS = rmats_to_dex_ex_MATS.explode("DexseqFragment")
 
 	rmats_to_dex_ex_MATS_dexRes = rmats_to_dex_ex_MATS.merge(rmats_to_dex_ex_dexRes, how="outer", on=["GeneID", "ID", "DexseqFragment"])
+	rmats_to_dex_ex_MATS_dexRes[["padj", "FDR"]] = rmats_to_dex_ex_MATS_dexRes[["padj", "FDR"]].apply(pd.to_numeric)
 
-	events_rmats_tested_dex_sig = rmats_to_dex_ex_MATS_dexRes.loc[((rmats_to_dex_ex_MATS_dexRes["ID.1"].notna()) & (rmats_to_dex_ex_MATS_dexRes["padj"] <= .05))]
-	events_rmats_tested_dex_sig_dedup = events_rmats_tested_dex_sig.drop_duplicates(subset=["GeneID", "ID"])
-	events_rmats_tested_dex_sig_dedup = events_rmats_tested_dex_sig_dedup[["GeneID", "ID", "FDR", "DexseqFragment", "padj"]]
-	num_events_rmats_tested_dex_sig = len(events_rmats_tested_dex_sig_dedup)
+	num_events_detected = len(rmats_to_dex)
+	del rmats_to_dex, rmats_to_dex_ex_dexRes, rmats_to_dex_ex_MATS
 
-	events_rmats_sig_dex_sig = rmats_to_dex_ex_MATS_dexRes[["GeneID", "ID", "FDR" ,"DexseqFragment", "padj"]].loc[((rmats_to_dex_ex_MATS_dexRes["FDR"] <= .05) & (rmats_to_dex_ex_MATS_dexRes["padj"] <= .05))].drop_duplicates(subset=["GeneID", "ID"])
-	num_events_rmats_sig_dex_sig = len(events_rmats_sig_dex_sig)
+	### DEXSeq Tested Events
+	event_dex_tested, num_events_dex_tested = filter_df(rmats_to_dex_ex_MATS_dexRes, "Event", "Secondary", "df['padj'].notna()")
+	'''event_dex_tested = rmats_to_dex_ex_MATS_dexRes.copy()
+	event_dex_tested = event_dex_tested.loc[event_dex_tested["padj"].notna()]
+	event_dex_tested_dedup = event_dex_tested.drop_duplicates(subset=["GeneID", "ID"], keep="first")
+	event_dex_tested_dedup = event_dex_tested_dedup[["GeneID", "ID", "DexseqFragment","padj"]]
+	num_events_dex_tested = len(event_dex_tested_dedup)'''
+
+	### DEXSeq Significant Events
+	event_dex_sig, num_events_dex_sig = filter_df(rmats_to_dex_ex_MATS_dexRes, "Event", "Secondary", "df['padj'] <= .05")
+	'''event_dex_sig = rmats_to_dex_ex_MATS_dexRes.copy()
+	event_dex_sig = event_dex_sig.loc[event_dex_sig["padj"] <= .05]
+	event_dex_sig_dedup = event_dex_sig.drop_duplicates(subset=["GeneID", "ID"], keep="first")
+	event_dex_sig_dedup = event_dex_sig_dedup[["GeneID", "ID", "DexseqFragment","padj"]]
+	num_events_dex_sig = len(event_dex_sig_dedup)'''
+
+	### rMATS Tested Events
+	event_rmats_tested, num_events_rmats_tested = filter_df(rmats_to_dex_ex_MATS_dexRes, "Event", "Primary", "df['ID.1'].notna()")
+	'''event_rmats_tested = rmats_to_dex_ex_MATS_dexRes.copy()
+	event_rmats_tested = event_rmats_tested.dropna(subset="ID.1")
+	event_rmats_tested_dedup = event_rmats_tested.drop_duplicates(subset=["GeneID", "ID"], keep="first")
+	event_rmats_tested_dedup = event_rmats_tested_dedup[["GeneID", "ID", "FDR", "DexseqFragment","padj"]]
+	num_events_rmats_tested = len(event_rmats_tested_dedup)'''
+
+	### Get rMATS Tested Events Intersected with DEXSeq TS (D is just rmats_tested)
+	event_rmats_tested_dex_tested, num_events_rmats_tested_dex_tested = filter_df(event_rmats_tested, "Event", "Secondary", "df['padj'].notna()")
+	'''event_rmats_tested_dex_tested = event_rmats_tested.copy()
+	event_rmats_tested_dex_tested = event_rmats_tested_dex_tested.loc[event_rmats_tested_dex_tested["padj"].notna()]
+	event_rmats_tested_dex_tested_dedup = event_rmats_tested_dex_tested.drop_duplicates(subset=["GeneID", "ID"], keep="first")
+	event_rmats_tested_dex_tested_dedup = event_rmats_tested_dex_tested_dedup[["GeneID", "ID", "FDR", "DexseqFragment","padj"]]
+	num_events_rmats_tested_dex_tested = len(event_rmats_tested_dex_tested_dedup)'''
+
+	event_rmats_tested_dex_sig, num_events_rmats_tested_dex_sig = filter_df(event_rmats_tested, "Event", "Secondary", "df['padj'] <= .05")
+	'''event_rmats_tested_dex_sig = event_rmats_tested.copy()
+	event_rmats_tested_dex_sig = event_rmats_tested_dex_sig.loc[event_rmats_tested_dex_sig["padj"] <= .05]
+	event_rmats_tested_dex_sig_dedup = event_rmats_tested_dex_sig.drop_duplicates(subset=["GeneID", "ID"], keep="first")
+	event_rmats_tested_dex_sig_dedup = event_rmats_tested_dex_sig_dedup[["GeneID", "ID", "FDR", "DexseqFragment","padj"]]
+	num_events_rmats_tested_dex_sig = len(event_rmats_tested_dex_sig_dedup)'''
+
+	event_rmats_tested = event_rmats_tested[["GeneID", "ID", "FDR", "DexseqFragment","padj"]]
+
+	### rMATS Significant Events
+	event_rmats_sig, num_events_rmats_sig = filter_df(rmats_to_dex_ex_MATS_dexRes, "Event", "Primary", "df['FDR'] <= .05")
+	'''event_rmats_sig = rmats_to_dex_ex_MATS_dexRes.copy()
+	event_rmats_sig = event_rmats_sig.loc[event_rmats_sig["FDR"] <= .05]
+	event_rmats_sig_dedup = event_rmats_sig.drop_duplicates(subset=["GeneID", "ID"], keep="first")
+	event_rmats_sig_dedup = event_rmats_sig_dedup[["GeneID", "ID", "FDR", "DexseqFragment","padj"]]
+	num_events_rmats_sig = len(event_rmats_sig_dedup)'''
+
+	### Get rMATS Significant Events Intersected with DEXSeq TS (D is just rmats_sig)
+	event_rmats_sig_dex_tested, num_events_rmats_sig_dex_tested = filter_df(event_rmats_sig, "Event", "Secondary", "df['padj'].notna()")
+	'''event_rmats_sig_dex_tested = event_rmats_sig.copy()
+	event_rmats_sig_dex_tested = event_rmats_sig_dex_tested.loc[event_rmats_sig_dex_tested["padj"].notna()]
+	event_rmats_sig_dex_tested_dedup = event_rmats_sig_dex_tested.drop_duplicates(subset=["GeneID", "ID"], keep="first")
+	event_rmats_sig_dex_tested_dedup = event_rmats_sig_dex_tested_dedup[["GeneID", "ID", "FDR", "DexseqFragment","padj"]]
+	num_events_rmats_sig_dex_tested = len(event_rmats_sig_dex_tested_dedup)'''
+
+	event_rmats_sig_dex_sig, num_events_rmats_sig_dex_sig = filter_df(event_rmats_sig, "Event", "Secondary", "df['padj'] <= .05")
+	'''event_rmats_sig_dex_sig = event_rmats_sig.copy()
+	event_rmats_sig_dex_sig = event_rmats_sig_dex_sig.loc[event_rmats_sig_dex_sig["padj"] <= .05]
+	event_rmats_sig_dex_sig_dedup = event_rmats_sig_dex_sig.drop_duplicates(subset=["GeneID", "ID"], keep="first")
+	event_rmats_sig_dex_sig_dedup = event_rmats_sig_dex_sig_dedup[["GeneID", "ID", "FDR", "DexseqFragment","padj"]]
+	num_events_rmats_sig_dex_sig = len(event_rmats_sig_dex_sig_dedup)'''
+
+	event_rmats_sig = event_rmats_sig[["GeneID", "ID", "FDR", "DexseqFragment","padj"]]
 
 	# output results #############################################################################
-	data = [["", ""], ["TotalExons", num_exons],
-	        ["rMATS Detected Exons", num_exons_rmats_detected], ["rMATS Tested Exons", num_exons_rmats_tested], ["rMATS Sig Exons", num_exons_rmats_sig],
-	        ["DEXSeq Sig Exons", num_exons_dex_sig], ["DEXSeq Sig & rMATS Detected Exons", num_exons_dex_sig_rmats_detected],
-	        ["DEXSeq Sig & rMATS Tested Exons", num_exons_rmats_tested_dex_sig], ["DEXSeq Sig & rMATS Sig Exons", num_exons_dex_sig_rmats_sig],
+	data = [["", ""],
+	        ["Total Exons Detected", num_exons_detected],
+	        ["DEXSeq Tested Exons", num_exons_dex_tested],
+	        ["DEXSeq Sig Exons", num_exons_dex_sig],
+	        ["rMATS Detected Exons", num_exons_rmats_detected],
+	        ["rMATS Tested Exons", num_exons_rmats_tested],
+	        ["rMATS Sig Exons", num_exons_rmats_sig],
 	        ["", ""],
-	        ["Total Events (rMATS Detected)", num_events_rmats_detected], ["rMATS Tested Events", num_events_rmats_tested],
-	        ["rMATS Sig Events", num_events_rmats_sig], ["rMATS Detected & DEXSeq Sig Events", num_events_rmats_detected_dex_sig],
-	        ["rMATS Tested & DEXSeq Sig Events", num_events_rmats_tested_dex_sig], ["rMATS Sig & DEXSeq Sig Events", num_events_rmats_sig_dex_sig]]
+	        ["DEXSeq Tested & rMATS Detected Exons", num_exons_dex_tested_rmats_detected],
+	        ["DEXSeq Tested & rMATS Tested Exons", num_exons_dex_tested_rmats_tested],
+	        ["DEXSeq Tested & rMATS Sig Exons", num_exons_dex_tested_rmats_sig],
+	        ["DEXSeq Sig & rMATS Detected Exons", num_exons_dex_sig_rmats_detected],
+	        ["DEXSeq Sig & rMATS Tested Exons", num_exons_dex_sig_rmats_tested],
+	        ["DEXSeq Sig & rMATS Sig Exons", num_exons_dex_sig_rmats_sig],
+	        ["", ""],
+	        ["Total Events Detected", num_events_detected],
+	        ["rMATS Tested Events", num_events_rmats_tested],
+	        ["rMATS Sig Events", num_events_rmats_sig],
+	        ["DEXSeq Tested Events", num_events_dex_tested],
+	        ["DEXSeq Sig Events", num_events_dex_sig],
+	        ["", ""],
+	        ["rMATS Tested & DEXSeq Tested Events", num_events_rmats_tested_dex_tested],
+	        ["rMATS Tested & DEXSeq Sig Events", num_events_rmats_tested_dex_sig],
+	        ["rMATS Sig & DEXSeq Tested Events", num_events_rmats_sig_dex_tested],
+	        ["rMATS Sig & DEXSeq Sig Events", num_events_rmats_sig_dex_sig]]
+
 	summary_table = pd.DataFrame(data, columns=["CountType", "Counts"])
 	summary_table.to_csv(output_dir + "/summary.txt", sep='\t', index=False)
 
-	events_rmats_detected_dex_sig_dedup.to_csv(output_dir + "/SplicingEvents/rMATS_Detected__DexSigEvents.txt", sep='\t', index=False)
-	events_rmats_tested_dex_sig_dedup.to_csv(output_dir + "/SplicingEvents/rMATS_Tested__DexSigEvents.txt", sep='\t', index=False)
-	events_rmats_sig.to_csv(output_dir + "/SplicingEvents/rMATS_SigEvents.txt", sep='\t', index=False)
-	events_rmats_sig_dex_sig.to_csv(output_dir + "/SplicingEvents/rMATS_Sig__DexSigEvents.txt", sep='\t', index=False)
+	event_rmats_tested.to_csv(output_dir + "/SplicingEvents/rMATS_TestedEvents.txt", sep='\t', index=False)
+	event_rmats_sig.to_csv(output_dir + "/SplicingEvents/rMATS_SigEvents.txt", sep='\t', index=False)
+	event_dex_tested.to_csv(output_dir + "/SplicingEvents/DexTestedEvents.txt", sep='\t', index=False)
+	event_dex_sig.to_csv(output_dir + "/SplicingEvents/DexSigEvents.txt", sep='\t', index=False)
+	event_rmats_tested_dex_tested.to_csv(output_dir + "/SplicingEvents/rMATS_Tested__DexTestedEvents.txt", sep='\t', index=False)
+	event_rmats_tested_dex_sig.to_csv(output_dir + "/SplicingEvents/rMATS_Tested__DexSigEvents.txt", sep='\t', index=False)
+	event_rmats_sig_dex_tested.to_csv(output_dir + "/SplicingEvents/rMATS_Sig__DexTestedEvents.txt", sep='\t', index=False)
+	event_rmats_sig_dex_sig.to_csv(output_dir + "/SplicingEvents/rMATS_Sig__DexSigEvents.txt", sep='\t', index=False)
 
+	exon_dex_tested.to_csv(output_dir + "/ExonParts/DexTestedExons.txt", sep='\t', index=False)
 	exon_dex_sig.to_csv(output_dir + "/ExonParts/DexSigExons.txt", sep='\t', index=False)
 	exon_rmats_detected.to_csv(output_dir + "/ExonParts/rMATS_DetectedExons.txt", sep='\t', index=False)
-	exon_rmats_tested_dedup.to_csv(output_dir + "/ExonParts/rMATS_TestedExons.txt", sep='\t', index=False)
-	exon_rmats_sig_dedup.to_csv(output_dir + "/ExonParts/rMATS_SigExons.txt", sep='\t', index=False)
-	exon_rmats_detected_dex_sig.to_csv(output_dir + "/ExonParts/DexSig__rMATS_DetectedExons.txt", sep='\t', index=False)
-	exon_rmats_tested_dex_sig_dedup.to_csv(output_dir + "/ExonParts/DexSig__rMATS_TestedExons.txt", sep='\t', index=False)
-	exon_rmats_sig_dex_sig.to_csv(output_dir + "/ExonParts/DexSig__rMATS_SigExons.txt", sep='\t', index=False)
+	exon_rmats_tested.to_csv(output_dir + "/ExonParts/rMATS_TestedExons.txt", sep='\t', index=False)
+	exon_rmats_sig.to_csv(output_dir + "/ExonParts/rMATS_SigExons.txt", sep='\t', index=False)
+	exon_dex_tested_rmats_detected.to_csv(output_dir + "/ExonParts/DexTested__rMATS_DetectedExons.txt", sep='\t', index=False)
+	exon_dex_tested_rmats_tested.to_csv(output_dir + "/ExonParts/DexTested__rMATS_TestedExons.txt", sep='\t', index=False)
+	exon_dex_tested_rmats_sig.to_csv(output_dir + "/ExonParts/DexTested__rMATS_SigExons.txt", sep='\t', index=False)
+	exon_dex_tested_rmats_detected.to_csv(output_dir + "/ExonParts/DexSig__rMATS_DetectedExons.txt", sep='\t', index=False)
+	exon_dex_tested_rmats_tested.to_csv(output_dir + "/ExonParts/DexSig__rMATS_TestedExons.txt", sep='\t', index=False)
+	exon_dex_tested_rmats_sig.to_csv(output_dir + "/ExonParts/DexSig__rMATS_SigExons.txt", sep='\t', index=False)
 
 	dex_to_rmats_dexRes.to_csv(output_dir + "/DEX_to_rMATS_Events.txt", sep='\t', index=False)
 	rmats_to_dex_MATS.to_csv(output_dir + "/rMATS_to_DEX_Exons.txt", sep='\t', index=False)
