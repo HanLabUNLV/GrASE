@@ -51,6 +51,11 @@ GrASE will process every gene in your dataset that produces results in DEXSeq an
 ```
 bash creatingFilesByGene.sh -r /path/to/rmats/results -d /path/to/dexseq_prepare_annotation.py -a /path/to/annotation/file.gtf -g /path/to/graphml/directory -p number_of_threads
 ```
+
+This script will create the `grase results` directory, which will contain: 
+* `gene_files`, a directory for each relevant gene to be processed in your dataset (taken from rMATS and DEXSeq results)
+* `results`, a directory that will hold the final results after running grase.py (next step)
+
 ```bash
 grase_results
 ├── gene_files
