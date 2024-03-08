@@ -6,13 +6,13 @@ library(tidyverse)
 #reference txdb file
 txdb = loadDb(file = 'txdb.gencode34.sqlite')
 #choose the chromosome of interest for your gene
-isActiveSeq(txdb)[-match("chr8", names(isActiveSeq(txdb)))] <- FALSE #just make chr1 active
+isActiveSeq(txdb)[-match("chr1", names(isActiveSeq(txdb)))] <- FALSE #make chromosome of interest active
 #create splicing graph object
 sg <- SplicingGraphs(txdb)
 edges_by_gene <- sgedgesByGene(sg)
 
 #obtain splice graph info from gene of interest
-geneID <- "ENSG00000147485.13" #change this to gene of interest
+geneID <- "ENSG00000228336.2" #change this to gene of interest
 edg_gene <- as.data.frame(sgedges(sg[geneID]))
 
 #obtain how many transcripts in gene
