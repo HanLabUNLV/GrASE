@@ -97,8 +97,9 @@ usage:
 ```
 python3 grase.py -g <gene_files> --rmats <rmats_results_directory> --dexseq <dexseq_results.txt> --nthread <number_of_threads>
 ```
-* graph output in each gene directory
-  * images?
+
+Example of an output graph for a simple gene: 
+![alt text](docs/E "Logo Title Text 1")
     
 ## Usage
 ### All Arguments
