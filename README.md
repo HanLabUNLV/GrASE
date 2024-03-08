@@ -99,7 +99,7 @@ python3 grase.py -g <gene_files> --rmats <rmats_results_directory> --dexseq <dex
 ```
 
 Example of an output graph for a simple gene: 
-![alt text](docs/E "Logo Title Text 1")
+![alt text](docs/graph.ENSG00000287356.1.png "Logo Title Text 1")
     
 ## Usage
 ### All Arguments
