@@ -148,15 +148,26 @@ options:
 *  `Mapped.ExonsToEvents.txt`:
 *  `Mapped.EventsToExons.txt`:
 
-`grase_results/results/ExonParts` contains the output files that informed our Exon counts in `summary.txt`
-*  `DexSigExons.txt`:
+`grase_results/results/SplicingEvents` contains the output files that informed our Exon counts in `summary.txt`
+*  `DexSigEvents.txt`:
+*  `DexTestedEvents.txt`:
+*  `rMATS_Detected__DexSigEvents.txt`:
+*  `rMATS_Sig__DexSigEvents.txt`:
+*  `rMATS_Sig__DexTestedEvents.txt`:
+*  `rMATS_SigEvents.txt`:
+*  `rMATS_Tested__DexSigEvents.txt`:
+*  `rMATS_Tested__DexTestedEvents.txt`:
+*  `rMATS_TestedEvents.txt`:
+
+`grase_results/results/ExonParts` contains the output files that informed our Events counts in `summary.txt`
+*  `DexSigEvents.txt`:
+*  `rDexSig__rMATS_DetectedExons.txt`:
+*  `DexSig__rMATS_SigExons.txt`:
+*  `DexSig__rMATS_TestedExons.txt`:
+*  `DexTestedExons.txt`:
+*  `DexTested__rMATS_DetectedExons.txt`:
+*  `DexTested__rMATS_SigExons.txt`:
+*  `DexTested__rMATS_TestedExons.txt`:
+*  `rMATS_DetectedExons.txt`:
 *  `rMATS_SigExons.txt`:
 *  `rMATS_TestedExons.txt`:
-*  `rMATS_Tested__DexSigExons.txt`:
-*  `rMATS_Sig__DexSigExons.txt`:
-
-`grase_results/results/SplicingEvents` contains the output files that informed our Events counts in `summary.txt`
-*  `DexSigEvents.txt`:
-*  `rMATS_SigEvents.txt`:
-*  `rMATS_Sig__DexSigEvents.txt`:
-
