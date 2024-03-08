@@ -1,6 +1,5 @@
 library(tidyverse)
 library(pheatmap)
-setwd("/mnt/storage/jaquino/GrASE_results_bonnal/grase_results_v2")
 
 #DEXSeq significant exons heatmap
 dexseq_res_all <- read.table("Mapped.ExonsToEvents.txt",
