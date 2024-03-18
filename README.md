@@ -113,19 +113,22 @@ usage: Rscript SplicingGraphs.igraph.R [options]
 
 options:
  GTF                               An annotation of genes and transcripts in GTF format
- Genus
- species
+ Genus                             Genus of the organism being studied
+ species                           Species of the organism being studied
  Output Directory                  The directory where all of the created graphML files
                                    will be placed
 
 usage: bash creatingFilesByGene [options]
 
 options:
- -r rMATS_results
- -d dexseq_prepare_annotation.py
- -a GTF
- -g graphML Directory
- -p NPROCS
+ -r rMATS_results                  The OD directory that holds the final output of the
+                                   post step of rMATS
+ -d dexseq_prepare_annotation.py   A script that comes as part of the DEXSeq package
+ -a GTF                            An annotation of genes and transcripts in GTF format
+ -g graphML Directory              The output directory of the SplicingGraphs.igraph.R
+                                   script, where graphML objects for each gene are.
+ -p NPROCS                         The number of threads. The optimal number of threads
+                                    should be equal to the number of cpu cores.
 
 usage: python grase.py [options]
 
