@@ -145,25 +145,24 @@ options:
 
 ## Final Output
 `grase_results/results` contains the final output files from GrASE
-*  `summary.txt`:
-*  `DEX_to_rMATS_Events.txt`:
-*  `rMATS_to_DEX_Exons.txt`:
-*  `Mapped.ExonsToEvents.txt`:
-*  `Mapped.EventsToExons.txt`:
+*  `summary.txt`: Final output results table that contains the list of Event and Exon counts based on DEXSeq/rMATS filtering criteria. (Significant is represented by padj values <= 0.05 in DEXSeq and FDR values <= 0.05 in rMATS; Tested is represented by having a padj value in DEXSeq and having an FDR value in rMATS; Detected is represented by having an exon part in the DEXSeq gff file and having an event in the rMATS fromGTF.*.txt files).
+*  `DEX_to_rMATS_Events.txt`: Final output that contains DEXSeq results for the dataset with an appended column for rMATS events that match to each exon part.
+*  `rMATS_to_DEX_Exons.txt`: Final output that contains rMATS results for the dataset with an appended column for DEXSeq exon parts that match to each event.
+*  `Mapped.ExonsToEvents.txt`: Final output that contains each DEXSeq exon part in the dataset, mapped to each rMATS event that spans the exon part. Results from both DEXSeq and rMATS are shown for each row.
+*  `Mapped.EventsToExons.txt`: Final output that contains each rMATS event in the dataset, mapped to each DEXSeq exon part that spans the event. Results from both rMATS and DEXSeq are shown for each row.
 
 `grase_results/results/SplicingEvents` contains the output files that informed our Exon counts in `summary.txt`
-*  `DexSigEvents.txt`:
-*  `DexTestedEvents.txt`:
-*  `rMATS_Detected__DexSigEvents.txt`:
-*  `rMATS_Sig__DexSigEvents.txt`:
-*  `rMATS_Sig__DexTestedEvents.txt`:
-*  `rMATS_SigEvents.txt`:
-*  `rMATS_Tested__DexSigEvents.txt`:
-*  `rMATS_Tested__DexTestedEvents.txt`:
-*  `rMATS_TestedEvents.txt`:
+*  `DexSigEvents.txt`: Mapped table that shows each rMATS event that has at least one significant DEXSeq exon part. A significant DEXSeq exon part with its padj value, as well as the rMATS event it maps to (with its FDR value), is shown for each row.
+*  `DexTestedEvents.txt`: Mapped table that shows each rMATS event that has at least one tested DEXSeq exon part. A tested DEXSeq exon part with its padj value, as well as the rMATS event it maps to (with its FDR value), is shown for each row.
+*  `rMATS_Sig__DexSigEvents.txt`: Mapped table that shows each significant rMATS event that has at least one significant DEXSeq exon part. A significant DEXSeq exon part with its padj value, as well as the significant rMATS event it maps to (with its FDR value), is shown for each row.
+*  `rMATS_Sig__DexTestedEvents.txt`: Mapped table that shows each significant rMATS event that has at least one tested DEXSeq exon part. A tested DEXSeq exon part with its padj value, as well as the significant rMATS event it maps to (with its FDR value), is shown for each row.
+*  `rMATS_SigEvents.txt`: Mapped table that shows each significant rMATS event. A DEXSeq exon part with its padj value, as well as the significant rMATS event it maps to (with its FDR value), is shown for each row.
+*  `rMATS_Tested__DexSigEvents.txt`: Mapped table that shows each tested rMATS event that has at least one significant DEXSeq exon part. A significant DEXSeq exon part with its padj value, as well as the tested rMATS event it maps to (with its FDR value), is shown for each row.
+*  `rMATS_Tested__DexTestedEvents.txt`: Mapped table that shows each tested rMATS event that has at least one tested DEXSeq exon part. A tested DEXSeq exon part with its padj value, as well as the tested rMATS event it maps to (with its FDR value), is shown for each row.
+*  `rMATS_TestedEvents.txt`: Mapped table that shows each tested rMATS event. A DEXSeq exon part with its padj value, as well as the tested rMATS event it maps to (with its FDR value), is shown for each row.
 
 `grase_results/results/ExonParts` contains the output files that informed our Events counts in `summary.txt`
-*  `DexSigEvents.txt`:
+*  `DexSigEvents.txt`: Mapped table that shows each significant DEXSeq exon part. An rMATS event with its FDR value, as well as the significant DEXSeq exon part it maps to (with its padj value), is shown for each row.
 *  `rDexSig__rMATS_DetectedExons.txt`:
 *  `DexSig__rMATS_SigExons.txt`:
 *  `DexSig__rMATS_TestedExons.txt`:
