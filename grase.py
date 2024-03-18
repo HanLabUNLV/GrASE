@@ -582,14 +582,18 @@ def get_grase_results(get_results_files):
 	exon_dex_tested_rmats_detected, num_exons_dex_tested_rmats_detected = filter_df(exon_dex_tested, "Exon", "Secondary", "df['rMATS_ID'].notna()")
 	exon_dex_tested_rmats_tested, num_exons_dex_tested_rmats_tested = filter_df(exon_dex_tested, "Exon", "Secondary", "df['ID.1'].notna()")
 	exon_dex_tested_rmats_sig, num_exons_dex_tested_rmats_sig = filter_df(exon_dex_tested, "Exon", "Secondary", "df['FDR'] <= .05")
+	exon_dex_tested = exon_dex_tested.drop_duplicates(subset=["groupID", "featureID"], keep="first")
 	exon_dex_tested = exon_dex_tested[["groupID", "featureID", "padj", "rMATS_ID", "FDR"]]
+	num_exons_dex_tested = len(exon_dex_tested)
 
 	### Get DEXSeq Significant Exons Intersected with rMATS Detected, Tested, Significant
 	exon_dex_sig, num_exons_dex_sig = filter_df(dex_to_rmats_ex_dexRes_MATS, "Exon", "Primary", "df['padj'] <= .05")
 	exon_dex_sig_rmats_detected, num_exons_dex_sig_rmats_detected = filter_df(exon_dex_sig, "Exon", "Secondary", "df['rMATS_ID'].notna()")
 	exon_dex_sig_rmats_tested, num_exons_dex_sig_rmats_tested = filter_df(exon_dex_sig, "Exon", "Secondary", "df['ID.1'].notna()")
 	exon_dex_sig_rmats_sig, num_exons_dex_sig_rmats_sig = filter_df(exon_dex_sig, "Exon", "Secondary", "df['FDR'] <= .05")
+	exon_dex_sig = exon_dex_sig.drop_duplicates(subset=["groupID", "featureID"], keep="first")
 	exon_dex_sig = exon_dex_sig[["groupID", "featureID", "padj", "rMATS_ID", "FDR"]]
+	num_exons_dex_sig = len(exon_dex_sig)
 
 
 	# Event Counts ##################################################################################
@@ -637,13 +641,17 @@ def get_grase_results(get_results_files):
 	event_rmats_tested, num_events_rmats_tested = filter_df(rmats_to_dex_ex_MATS_dexRes, "Event", "Primary", "df['ID.1'].notna()")
 	event_rmats_tested_dex_tested, num_events_rmats_tested_dex_tested = filter_df(event_rmats_tested, "Event", "Secondary", "df['padj'].notna()")
 	event_rmats_tested_dex_sig, num_events_rmats_tested_dex_sig = filter_df(event_rmats_tested, "Event", "Secondary", "df['padj'] <= .05")
+	event_rmats_tested = event_rmats_tested.drop_duplicates(subset=["GeneID", "ID"], keep="first")
 	event_rmats_tested = event_rmats_tested[["GeneID", "ID", "FDR", "DexseqFragment","padj"]]
+	num_events_rmats_tested = len(event_rmats_tested)
 
 	### Get rMATS Significant Events Intersected with DEXSeq Tested, Significant (Detected is just rmats_sig)
 	event_rmats_sig, num_events_rmats_sig = filter_df(rmats_to_dex_ex_MATS_dexRes, "Event", "Primary", "df['FDR'] <= .05")
 	event_rmats_sig_dex_tested, num_events_rmats_sig_dex_tested = filter_df(event_rmats_sig, "Event", "Secondary", "df['padj'].notna()")
 	event_rmats_sig_dex_sig, num_events_rmats_sig_dex_sig = filter_df(event_rmats_sig, "Event", "Secondary", "df['padj'] <= .05")
+	event_rmats_sig = event_rmats_sig.drop_duplicates(subset=["GeneID", "ID"], keep="first")
 	event_rmats_sig = event_rmats_sig[["GeneID", "ID", "FDR", "DexseqFragment","padj"]]
+	num_events_rmats_sig = len(event_rmats_sig)
 
 	# output results #############################################################################
 	data = [["", ""],
