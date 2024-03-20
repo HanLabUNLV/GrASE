@@ -151,6 +151,7 @@ options:
     *  `rMATS_to_DEX_Exons.txt`: Final output that contains rMATS results for the dataset with an appended column for DEXSeq exon parts that match to each event.
     *  `Mapped.ExonsToEvents.txt`: Final output that contains each DEXSeq exon part in the dataset, mapped to each rMATS event that spans the exon part. Results from both DEXSeq and rMATS are shown for each row.
     *  `Mapped.EventsToExons.txt`: Final output that contains each rMATS event in the dataset, mapped to each DEXSeq exon part that spans the event. Results from both rMATS and DEXSeq are shown for each row.
+      
 
 * `grase_results/results/SplicingEvents` contains the output files that informed our Exon counts in `summary.txt`
     *  `DexSigEvents.txt`: Mapped table that shows each rMATS event that has at least one significant DEXSeq exon part. A significant DEXSeq exon part with its padj value, as well as the rMATS event it maps to (with its FDR value), is shown for each row.
