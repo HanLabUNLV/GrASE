@@ -147,7 +147,8 @@ options:
 ### Primary Results
 * `grase_results/results` contains the final output files from GrASE
     *  `summary.txt`: Final output results table that contains the list of Event and Exon counts based on DEXSeq/rMATS filtering criteria. (Significant is represented by padj values <= 0.05 in DEXSeq and FDR values <= 0.05 in rMATS; Tested is represented by having a padj value in DEXSeq and having an FDR value in rMATS; Detected is represented by having an exon part in the DEXSeq gff file and having an event in the rMATS fromGTF.*.txt files).
-    *  `intersections.txt`: Final output table that contains Event and Exon counts for specific intersections only based on the results in `summary.txt`. Example: ![]() 
+    *  `intersections.txt`: Final output table that contains Event and Exon counts for specific intersections only. This can help in understanding what counts will exist in certain sections of a venn diagram, based on the results in `summary.txt`.
+          Example: ![]() 
     *  `DEX_to_rMATS_Events.txt`: Final output that contains DEXSeq results for the dataset with an appended column for rMATS events that match to each exon part.
     *  `rMATS_to_DEX_Exons.txt`: Final output that contains rMATS results for the dataset with an appended column for DEXSeq exon parts that match to each event.
     *  `Mapped.ExonsToEvents.txt`: Final output that contains each DEXSeq exon part in the dataset, mapped to each rMATS event that spans the exon part. Results from both DEXSeq and rMATS are shown for each row.
