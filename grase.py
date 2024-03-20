@@ -654,34 +654,67 @@ def get_grase_results(get_results_files):
 	num_events_rmats_sig = len(event_rmats_sig)
 
 	# output results #############################################################################
-	data = [["", ""],
-	        ["Total Exons Detected", num_exons_detected],
-	        ["DEXSeq Tested Exons", num_exons_dex_tested],
-	        ["DEXSeq Sig Exons", num_exons_dex_sig],
+	data = [["Total Exons Detected", num_exons_detected],
+
 	        ["rMATS Detected Exons", num_exons_rmats_detected],
 	        ["rMATS Tested Exons", num_exons_rmats_tested],
 	        ["rMATS Sig Exons", num_exons_rmats_sig],
-	        ["", ""],
+
+	        ["DEXSeq Tested Exons", num_exons_dex_tested],
 	        ["DEXSeq Tested & rMATS Detected Exons", num_exons_dex_tested_rmats_detected],
 	        ["DEXSeq Tested & rMATS Tested Exons", num_exons_dex_tested_rmats_tested],
 	        ["DEXSeq Tested & rMATS Sig Exons", num_exons_dex_tested_rmats_sig],
+
+	        ["DEXSeq Sig Exons", num_exons_dex_sig],
 	        ["DEXSeq Sig & rMATS Detected Exons", num_exons_dex_sig_rmats_detected],
 	        ["DEXSeq Sig & rMATS Tested Exons", num_exons_dex_sig_rmats_tested],
 	        ["DEXSeq Sig & rMATS Sig Exons", num_exons_dex_sig_rmats_sig],
-	        ["", ""],
+
 	        ["Total Events Detected", num_events_detected],
-	        ["rMATS Tested Events", num_events_rmats_tested],
-	        ["rMATS Sig Events", num_events_rmats_sig],
+
 	        ["DEXSeq Tested Events", num_events_dex_tested],
 	        ["DEXSeq Sig Events", num_events_dex_sig],
-	        ["", ""],
+
+	        ["rMATS Tested Events", num_events_rmats_tested],
 	        ["rMATS Tested & DEXSeq Tested Events", num_events_rmats_tested_dex_tested],
 	        ["rMATS Tested & DEXSeq Sig Events", num_events_rmats_tested_dex_sig],
+
+	        ["rMATS Sig Events", num_events_rmats_sig],
 	        ["rMATS Sig & DEXSeq Tested Events", num_events_rmats_sig_dex_tested],
 	        ["rMATS Sig & DEXSeq Sig Events", num_events_rmats_sig_dex_sig]]
 
 	summary_table = pd.DataFrame(data, columns=["CountType", "Counts"])
 	summary_table.to_csv(output_dir + "/summary.txt", sep='\t', index=False)
+
+	intersections = [["DEXSeq Detected Exons Only", num_exons_detected - num_exons_rmats_detected - num_exons_dex_tested + num_exons_dex_tested_rmats_detected],
+	                 ["DEXSeq Detected & rMATS Detected Exons Only", num_exons_rmats_detected - num_exons_dex_tested_rmats_detected - num_exons_rmats_tested + num_exons_dex_tested_rmats_tested],
+	                 ["DEXSeq Detected & rMATS Tested Exons Only", num_exons_rmats_tested - num_exons_dex_tested_rmats_tested - num_exons_rmats_sig + num_exons_dex_tested_rmats_sig],
+	                 ["DEXSeq Detected & rMATS Sig Exons Only", num_exons_rmats_sig - num_exons_dex_tested_rmats_sig],
+
+	                 ["DEXSeq Tested Exons Only", num_exons_dex_tested - num_exons_dex_tested_rmats_detected - num_exons_dex_sig + num_exons_dex_sig_rmats_detected],
+	                 ["DEXSeq Tested & rMATS Detected Exons Only", num_exons_dex_tested_rmats_detected - num_exons_dex_tested_rmats_tested - num_exons_dex_sig_rmats_detected + num_exons_dex_sig_rmats_tested],
+	                 ["DEXSeq Tested & rMATS Tested Exons Only", num_exons_dex_tested_rmats_tested - num_exons_dex_tested_rmats_sig - num_exons_dex_sig_rmats_tested + num_exons_dex_sig_rmats_sig],
+	                 ["DEXSeq Tested & rMATS Sig Exons Only", num_exons_dex_tested_rmats_sig - num_exons_dex_sig_rmats_sig],
+
+	                 ["DEXSeq Sig Exons Only", num_exons_dex_sig - num_exons_dex_sig_rmats_detected],
+	                 ["DEXSeq Sig & rMATS Detected Exons Only", num_exons_dex_sig_rmats_detected - num_exons_dex_sig_rmats_tested],
+	                 ["DEXSeq Sig & rMATS Tested Exons Only", num_exons_dex_sig_rmats_tested - num_exons_dex_sig_rmats_sig],
+	                 ["DEXSeq Sig & rMATS Sig Exons", num_exons_dex_sig_rmats_sig],
+
+	                 ["rMATS Detected Events Only", num_events_detected - num_events_dex_tested - num_events_rmats_tested + num_events_rmats_tested_dex_tested],
+	                 ["rMATS Detected & DEXSeq Tested Events Only", num_events_dex_tested - num_events_dex_sig - num_events_rmats_tested_dex_tested + num_events_rmats_tested_dex_sig],
+	                 ["rMATS Detected & DEXSeq Sig Events Only", num_events_dex_sig - num_events_rmats_tested_dex_sig],
+
+	                 ["rMATS Tested Events Only", num_events_rmats_tested - num_events_rmats_tested_dex_tested - num_events_rmats_sig + num_events_rmats_sig_dex_tested],
+	                 ["rMATS Tested & DEXSeq Tested Events Only", num_events_rmats_tested_dex_tested - num_events_rmats_tested_dex_sig - num_events_rmats_sig_dex_tested + num_events_rmats_sig_dex_sig],
+	                 ["rMATS Tested & DEXSeq Sig Events Only", num_events_rmats_tested_dex_sig - num_events_rmats_sig_dex_sig],
+
+	                 ["rMATS Sig Events Only", num_events_rmats_sig - num_events_rmats_sig_dex_tested],
+	                 ["rMATS Sig & DEXSeq Tested Events Only", num_events_rmats_sig_dex_tested - num_events_rmats_sig_dex_sig],
+	                 ["rMATS Sig & DEXSeq Sig Events Only", num_events_rmats_sig_dex_sig]]
+
+	intersection_table = pd.DataFrame(intersections, columns=["Intersection", "Counts"])
+	intersection_table.to_csv(output_dir + "/intersections.txt", sep='\t', index=False)
 
 	event_rmats_tested.to_csv(output_dir + "/SplicingEvents/rMATS_TestedEvents.txt", sep='\t', index=False)
 	event_rmats_sig.to_csv(output_dir + "/SplicingEvents/rMATS_SigEvents.txt", sep='\t', index=False)
