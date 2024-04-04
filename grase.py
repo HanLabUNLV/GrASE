@@ -464,6 +464,7 @@ def style_and_plot(g, gene):
 	layout.rotate(270)
 
 	ig.plot(g,gene + "/output/graph." + g["gene"] + ".png", layout=layout, **visual_style)
+	g.write_graphml(f"{gene}/output/{g['gene']}.graphml")
 
 
 
