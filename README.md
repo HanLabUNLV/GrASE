@@ -2,7 +2,7 @@
 Graph of Alternative Splice junctions and Exonic parts
 
 ## About
-GrASE is a tool that bridges the gap between the splice-junction approach of software like [rMATS](https://rnaseq-mats.sourceforge.io/index.html) and the exon-fragment approach of software like [DEXSeq](https://bioconductor.org/packages/release/bioc/vignettes/DEXSeq/inst/doc/DEXSeq.html). Specifically, this tool uses both rMATS and DEXSeq in order to map splicing events to the exons they encompass and vice versa. Before using GrASE, you must run rMATS on your data in order to get an rmats_output directory. In addition, you must also run DEXSeq on your data, and then output the results into a txt file. GrASE will use the output of both software in order to do its job. 
+GrASE is a tool that bridges the gap between the splice-junction approach of software like [rMATS](https://rnaseq-mats.sourceforge.io/index.html) or [MAJIQ](https://majiq.biociphers.org/) and the exon-fragment approach of software like [DEXSeq](https://bioconductor.org/packages/release/bioc/vignettes/DEXSeq/inst/doc/DEXSeq.html). Specifically, this tool uses either rMATS and DEXSeq or MAJIQ and DEXSeq in order to map splicing events to the exons they encompass and vice versa. Before using GrASE, you must run rMATS / MAJIQ on your data in order to get an rmats_output / majiq_output directory, respectively. In addition, you must also run DEXSeq on your data, and then output the results into a txt file. GrASE will use the output of both approach's representative software in order to do its job. 
 
 * Container used for running GrASE can be found here: [GrASE Container](https://drive.google.com/drive/folders/10H6NxN0T1cP0O68VwhCh55KVVb08Iqzb)
 
@@ -27,7 +27,7 @@ Python packages:
 Other packages:
 * STAR   (optional - 2.7.10b)
 
-## DEXSeq and rMATS
+## DEXSeq and rMATS / MAJIQ
 ### DEXSeq 
 DEXSeq is a software that is used for finding differential exon usage using RNA-seq exon counts between samples with different experimental designs. It conducts statistical tests based on a model that uses the negative binomial distribution to estimate the variance between biological replicates and generalized linear models for testing. The output of DEXSeq is a matrix that has many features including coordinates, pvalue, padj, read counts, and more for every exon described in the GFF file. The GFF is prepared by annotating the GTF of a given dataset. GrASE will use the output of DEXSeq in order to map each exon to a graphML object. This will be compared to rMATS results in order to map DEXSeq exons to rMATS events. 
 
@@ -53,14 +53,14 @@ GrASE will process every gene in your dataset that produces results in DEXSeq an
 
 Usage:
 ```
-bash creatingFilesByGene.sh -r /path/to/rmats/results -d /path/to/dexseq_prepare_annotation.py -a /path/to/annotation/file.gtf -g /path/to/graphml/directory -p number_of_threads
+bash creatingFilesByGene.sh [-r (if using rMATS) or -m (if using MAJIQ)] -s /path/to/splicing/results -d /path/to/dexseq_prepare_annotation.py -a /path/to/annotation/file.gtf -g /path/to/graphml/directory -p number_of_threads
 ```
 
 This script will create the `grase results` directory, which will contain: 
 * `gene_files`, a directory for each relevant gene to be processed in your dataset (taken from rMATS and DEXSeq results)
 * `results`, a directory that will hold the final results after running grase.py (next step)
 
-Here is an example of a toy file structure:
+Here is an example of a toy file structure using rMATS:
 ```bash
 grase_results
 ├── gene_files
@@ -98,7 +98,7 @@ grase_results
 ```
 
 ## Running GrASE
-Now that the file structure is prepared, grase.py is ready to be ran. This is where the DEXSeq exon and rMATS event mapping and processing will be done. Each gene in gene_files will be processed, and the output directory of each will be populated with results tables and a graph png of the gene's structure after mapping. 
+Now that the file structure is prepared, grase.py is ready to be ran. This is where the DEXSeq exon and rMATS / MAJIQ event mapping and processing will be done. Each gene in gene_files will be processed, and the output directory of each will be populated with results tables and a graph png of the gene's structure after mapping. 
   
 Usage:
 ```
