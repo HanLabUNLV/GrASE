@@ -999,7 +999,7 @@ def get_grase_results_majiq():
 	dex_to_majiq_ex_deltapsi = dex_to_majiq_exploded.merge(majiq_output, how="left",
 													 on=["GeneID", "LSV_ID"])
 
-	dex_to_majiq_ex_deltapsi.dropna(subset="LSV_ID", inplace=True)
+	dex_to_majiq_ex_deltapsi.dropna(subset=["LSV_ID"], inplace=True)
 
 	dex_to_majiq_ex_dexRes = dex_to_majiq_dexRes.copy()
 	dex_to_majiq_ex_dexRes["LSV_ID"] = dex_to_majiq_ex_dexRes["LSV_ID"].str.split(",")
