@@ -6,8 +6,6 @@ import pandas as pd
 import argparse
 import os
 
-from gensim.models.ldaseqmodel import df_obs
-
 """
 Vocabulary:
 	rMATS - (fromGTF)
@@ -1029,23 +1027,20 @@ def get_grase_results_majiq():
 
 	num_exons_detected = len(dex_to_majiq_dexRes)
 
-	### MAJIQ Detected Exons
-	exon_majiq_detected, num_exons_majiq_detected = filter_df_majiq(dex_to_majiq_ex_dexRes_deltapsi, "Exon", "Secondary",
-																	"df['LSV_ID'].notna()")
-
 	### MAJIQ Tested Exons
-	exon_majiq_tested, num_exons_majiq_tested = exon_majiq_detected, num_exons_majiq_detected
+	exon_majiq_tested, num_exons_majiq_tested = filter_df_majiq(dex_to_majiq_ex_dexRes_deltapsi, "Exon", "Secondary",
+																	"df['LSV_ID'].notna()")
 
 	### MAJIQ Significant Exons
 	exon_majiq_sig, num_exons_majiq_sig = filter_df_majiq(dex_to_majiq_ex_dexRes_deltapsi, "Exon", "Secondary",
 														  "df['P(|dPSI|>=0.20) per LSV junction'] >= .9")
 
-	### Get DEXSeq Tested Exons Intersected with MAJIQ Detected, Tested, Significant
+	### Get DEXSeq Tested Exons Intersected with MAJIQ Tested, Significant
 	exon_dex_tested, num_exons_dex_tested = filter_df_majiq(dex_to_majiq_ex_dexRes_deltapsi, "Exon", "Primary",
 															"df['padj'].notna()")
-	exon_dex_tested_majiq_detected, num_exons_dex_tested_majiq_detected = filter_df_majiq(exon_dex_tested, "Exon",
-																						  "Secondary",
-																						  "df['LSV_ID'].notna()")
+	#exon_dex_tested_majiq_detected, num_exons_dex_tested_majiq_detected = filter_df_majiq(exon_dex_tested, "Exon", "Secondary",
+	#																					  "df['LSV_ID'].notna()")
+
 	exon_dex_tested_majiq_tested, num_exons_dex_tested_majiq_tested = filter_df_majiq(exon_dex_tested, "Exon",
 																					  "Secondary", "df['LSV_ID'].notna()")
 	exon_dex_tested_majiq_sig, num_exons_dex_tested_majiq_sig = filter_df_majiq(exon_dex_tested, "Exon", "Secondary",
@@ -1054,11 +1049,11 @@ def get_grase_results_majiq():
 	exon_dex_tested = exon_dex_tested[["groupID", "featureID", "padj", "LSV_ID", "P(|dPSI|>=0.20) per LSV junction"]]
 	num_exons_dex_tested = len(exon_dex_tested)
 
-	### Get DEXSeq Significant Exons Intersected with MAJIQ Detected, Tested, Significant
+	### Get DEXSeq Significant Exons Intersected with MAJIQ Tested, Significant
 	exon_dex_sig, num_exons_dex_sig = filter_df_majiq(dex_to_majiq_ex_dexRes_deltapsi, "Exon", "Primary",
 													  "df['padj'] <= .05")
-	exon_dex_sig_majiq_detected, num_exons_dex_sig_majiq_detected = filter_df_majiq(exon_dex_sig, "Exon", "Secondary",
-																					"df['LSV_ID'].notna()")
+	#exon_dex_sig_majiq_detected, num_exons_dex_sig_majiq_detected = filter_df_majiq(exon_dex_sig, "Exon", "Secondary",
+	#																					"df['LSV_ID'].notna()")
 	exon_dex_sig_majiq_tested, num_exons_dex_sig_majiq_tested = filter_df_majiq(exon_dex_sig, "Exon", "Secondary",
 																				"df['LSV_ID'].notna()")
 	exon_dex_sig_majiq_sig, num_exons_dex_sig_majiq_sig = filter_df_majiq(exon_dex_sig, "Exon", "Secondary",
@@ -1136,7 +1131,7 @@ def get_grase_results_majiq():
 	event_dex_sig, num_events_dex_sig = filter_df_majiq(majiq_to_dex_ex_deltapsi_dexRes, "Event", "Secondary",
 														"df['padj'] <= .05")
 
-	### Get rMATS Tested Events Intersected with DEXSeq Tested, Significant (Detected is just rmats_tested)
+	### Get MAJIQ Tested Events Intersected with DEXSeq Tested, Significant (Detected is just rmats_tested)
 	event_majiq_tested, num_events_majiq_tested = filter_df_majiq(majiq_to_dex_ex_deltapsi_dexRes, "Event", "Primary",
 																  "df['LSV_ID'].notna()")
 	event_majiq_tested_dex_tested, num_events_majiq_tested_dex_tested = filter_df_majiq(event_majiq_tested, "Event",
@@ -1162,17 +1157,14 @@ def get_grase_results_majiq():
 	# output results #############################################################################
 	data = [["Total Exons Detected", num_exons_detected],
 
-			["MAJIQ Detected Exons", num_exons_majiq_detected],
 			["MAJIQ Tested Exons", num_exons_majiq_tested],
 			["MAJIQ Sig Exons", num_exons_majiq_sig],
 
 			["DEXSeq Tested Exons", num_exons_dex_tested],
-			["DEXSeq Tested & MAJIQ Detected Exons", num_exons_dex_tested_majiq_detected],
 			["DEXSeq Tested & MAJIQ Tested Exons", num_exons_dex_tested_majiq_tested],
 			["DEXSeq Tested & MAJIQ Sig Exons", num_exons_dex_tested_majiq_sig],
 
 			["DEXSeq Sig Exons", num_exons_dex_sig],
-			["DEXSeq Sig & MAJIQ Detected Exons", num_exons_dex_sig_majiq_detected],
 			["DEXSeq Sig & MAJIQ Tested Exons", num_exons_dex_sig_majiq_tested],
 			["DEXSeq Sig & MAJIQ Sig Exons", num_exons_dex_sig_majiq_sig],
 
@@ -1193,34 +1185,22 @@ def get_grase_results_majiq():
 	summary_table.to_csv(output_dir + "/summary.txt", sep='\t', index=False)
 
 	intersections = [["DEXSeq Detected Exons Only",
-					  num_exons_detected - num_exons_majiq_detected - num_exons_dex_tested + num_exons_dex_tested_majiq_detected],
-					 ["DEXSeq Detected & MAJIQ Detected Exons Only",
-					  num_exons_majiq_detected - num_exons_dex_tested_majiq_detected - num_exons_majiq_tested + num_exons_dex_tested_majiq_tested],
+					  num_exons_detected - num_exons_majiq_tested - num_exons_dex_tested + num_exons_dex_tested_majiq_tested],
 					 ["DEXSeq Detected & MAJIQ Tested Exons Only",
 					  num_exons_majiq_tested - num_exons_dex_tested_majiq_tested - num_exons_majiq_sig + num_exons_dex_tested_majiq_sig],
 					 ["DEXSeq Detected & MAJIQ Sig Exons Only", num_exons_majiq_sig - num_exons_dex_tested_majiq_sig],
 
 					 ["DEXSeq Tested Exons Only",
-					  num_exons_dex_tested - num_exons_dex_tested_majiq_detected - num_exons_dex_sig + num_exons_dex_sig_majiq_detected],
-					 ["DEXSeq Tested & MAJIQ Detected Exons Only",
-					  num_exons_dex_tested_majiq_detected - num_exons_dex_tested_majiq_tested - num_exons_dex_sig_majiq_detected + num_exons_dex_sig_majiq_tested],
+					  num_exons_dex_tested - num_exons_dex_tested_majiq_tested - num_exons_dex_sig + num_exons_dex_sig_majiq_tested],
 					 ["DEXSeq Tested & MAJIQ Tested Exons Only",
 					  num_exons_dex_tested_majiq_tested - num_exons_dex_tested_majiq_sig - num_exons_dex_sig_majiq_tested + num_exons_dex_sig_majiq_sig],
 					 ["DEXSeq Tested & MAJIQ Sig Exons Only",
 					  num_exons_dex_tested_majiq_sig - num_exons_dex_sig_majiq_sig],
 
-					 ["DEXSeq Sig Exons Only", num_exons_dex_sig - num_exons_dex_sig_majiq_detected],
-					 ["DEXSeq Sig & MAJIQ Detected Exons Only",
-					  num_exons_dex_sig_majiq_detected - num_exons_dex_sig_majiq_tested],
+					 ["DEXSeq Sig Exons Only", num_exons_dex_sig - num_exons_dex_sig_majiq_tested],
 					 ["DEXSeq Sig & MAJIQ Tested Exons Only",
 					  num_exons_dex_sig_majiq_tested - num_exons_dex_sig_majiq_sig],
 					 ["DEXSeq Sig & MAJIQ Sig Exons", num_exons_dex_sig_majiq_sig],
-
-					 ["MAJIQ Detected Events Only",
-					  num_events_detected - num_events_dex_tested - num_events_majiq_tested + num_events_majiq_tested_dex_tested],
-					 ["MAJIQ Detected & DEXSeq Tested Events Only",
-					  num_events_dex_tested - num_events_dex_sig - num_events_majiq_tested_dex_tested + num_events_majiq_tested_dex_sig],
-					 ["MAJIQ Detected & DEXSeq Sig Events Only", num_events_dex_sig - num_events_majiq_tested_dex_sig],
 
 					 ["MAJIQ Tested Events Only",
 					  num_events_majiq_tested - num_events_majiq_tested_dex_tested - num_events_majiq_sig + num_events_majiq_sig_dex_tested],
@@ -1251,16 +1231,11 @@ def get_grase_results_majiq():
 
 	exon_dex_tested.to_csv(output_dir + "/ExonParts/DexTestedExons.txt", sep='\t', index=False)
 	exon_dex_sig.to_csv(output_dir + "/ExonParts/DexSigExons.txt", sep='\t', index=False)
-	exon_majiq_detected.to_csv(output_dir + "/ExonParts/MAJIQ_DetectedExons.txt", sep='\t', index=False)
 	exon_majiq_tested.to_csv(output_dir + "/ExonParts/MAJIQ_TestedExons.txt", sep='\t', index=False)
 	exon_majiq_sig.to_csv(output_dir + "/ExonParts/MAJIQ_SigExons.txt", sep='\t', index=False)
-	exon_dex_tested_majiq_detected.to_csv(output_dir + "/ExonParts/DexTested__MAJIQ_DetectedExons.txt", sep='\t',
-										  index=False)
 	exon_dex_tested_majiq_tested.to_csv(output_dir + "/ExonParts/DexTested__MAJIQ_TestedExons.txt", sep='\t',
 										index=False)
 	exon_dex_tested_majiq_sig.to_csv(output_dir + "/ExonParts/DexTested__MAJIQ_SigExons.txt", sep='\t', index=False)
-	exon_dex_tested_majiq_detected.to_csv(output_dir + "/ExonParts/DexSig__MAJIQ_DetectedExons.txt", sep='\t',
-										  index=False)
 	exon_dex_tested_majiq_tested.to_csv(output_dir + "/ExonParts/DexSig__MAJIQ_TestedExons.txt", sep='\t', index=False)
 	exon_dex_tested_majiq_sig.to_csv(output_dir + "/ExonParts/DexSig__MAJIQ_SigExons.txt", sep='\t', index=False)
 
@@ -1292,14 +1267,11 @@ def main():
 	else:
 		print(f"\nProcessing genes (using {args.nthread} threads)...\n")
 
-	'''remove_files_dir = os.path.join(os.path.abspath(os.path.join(args.gene_files_directory, os.pardir)) + "/results/tmp")
+	remove_files_dir = os.path.join(os.path.abspath(os.path.join(args.gene_files_directory, os.pardir)) + "/results/tmp")
 	for file in os.listdir(remove_files_dir):
 		os.remove(os.path.join(remove_files_dir, file))
 	p = Pool(args.nthread)
-	p.map(process_gene, genes)'''
-
-	'''for gene in genes:
-		process_gene(gene)'''
+	p.map(process_gene, genes)
 
 	print("Done processing genes.\n")
 	print("Processing results...\n")
