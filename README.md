@@ -53,7 +53,7 @@ GrASE will process every gene in your dataset that produces results in DEXSeq an
 
 Usage:
 ```
-bash creatingFilesByGene.sh [ -r (if using rMATS) or -m (if using MAJIQ) ] -s /path/to/splicing/results -d /path/to/dexseq_prepare_annotation.py -a /path/to/annotation/file.gtf -g /path/to/graphml/directory -p number_of_threads
+bash creatingFilesByGene.sh [ -r (if using rMATS) OR -m (if using MAJIQ) ] -s /path/to/splicing/results -d /path/to/dexseq_prepare_annotation.py -a /path/to/annotation/file.gtf -g /path/to/graphml/directory -p number_of_threads
 ```
 
 This script will create the `grase results` directory, which will contain: 
@@ -102,7 +102,7 @@ Now that the file structure is prepared, grase.py is ready to be ran. This is wh
   
 Usage:
 ```
-python3 grase.py -g <gene_files> --rmats <rmats_results_directory> --dexseq <dexseq_results.txt> --nthread <number_of_threads>
+python3 grase.py -g <gene_files> -s <splicing_software (r for rMATS or m for MAJIQ)> [ --rmats <rmats_results_directory> OR --majiq <majiq_results_directory> ] --dexseq <dexseq_results.txt> --nthread <number_of_threads>
 ```
 
 Example of an output graph for a simple gene: 
@@ -124,8 +124,12 @@ options:
 usage: bash creatingFilesByGene [options]
 
 options:
- -r rMATS_results                  The OD directory that holds the final output of the
-                                   post step of rMATS
+ -r rMATS option                   Selecting this optional flag will indicate that
+                                   you will be using rMATS results for splicing
+ -m MAJIQ option                   Selecting this optional flag will indicate that
+                                   you will be using MAJIQ results for splicing
+ -s Splicing Directory             The OD directory that holds the final output of
+                                   rMATS or MAJIQ
  -d dexseq_prepare_annotation.py   A script that comes as part of the DEXSeq package
  -a GTF                            An annotation of genes and transcripts in GTF format
  -g graphML Directory              The output directory of the SplicingGraphs.igraph.R
@@ -139,9 +143,14 @@ options:
  -h, --help                         Display a help message and exit
  -g Gene Files Directory            The gene_files directory inside grase_results that
                                     was created by creatingFilesByGene.sh
+ -s r OR m                          Choosing r or m for this argument will indicate that
+                                    you will be using rMATS or MAJIQ results for
+                                    splicing, respectively
  --rmats rMATS Results Directory    The OD directory that holds the final output of the
                                     post step of rMATS
- --dexseq Dexseq Results File       The file that holds results from DEXSeq
+ --majiq MAJIQ Results Directory    The OD directory that holds the final output of
+                                    MAJIQ (including Builder and Quantifier
+ --dexseq Dexseq Results File       The file that holds results from DEXSeq    
  --nthread NTHREAD                  The number of threads. The optimal number of threads
                                     should be equal to the number of cpu cores. Default: 1
 ```
