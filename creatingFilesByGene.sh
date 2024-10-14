@@ -116,7 +116,8 @@ cat grase_results/tmp/all_genes.txt | while read line; do
 		grep -w 'Gene ID' $splicing_dir/majiq_delta_psi/*.deltapsi.tsv > grase_results/gene_files/$line/$line.deltapsi.tsv
 		grep -w $line $splicing_dir/majiq_delta_psi/*.deltapsi.tsv >> grase_results/gene_files/$line/$line.deltapsi.tsv
 		awk '{if (($9 == "True" && $10 == "False" && $11 == "False" && $3 !~ /i/) || ($9 == "False" && $10 == "True" && $11 == "False" && $3 !~ /i/) || ($9 == "False" && $10 == "False" && $11 == "True" && $3 !~ /i/) || ($9 == "False" && $10 == "False" && $11 == "False") || ($1 == "Gene")) print }' grase_results/gene_files/$line/$line.deltapsi.tsv > grase_results/gene_files/$line/tmp.txt && mv grase_results/gene_files/$line/tmp.txt grase_results/gene_files/$line/$line.deltapsi.tsv
-	
+		awk -F\| 'NF < 4 || NR == 1 {print}' grase_results/gene_files/$line/$line.deltapsi.tsv > grase_results/gene_files/$line/tmp.txt && mv grase_results/gene_files/$line/tmp.txt grase_results/gene_files/$line/$line.deltapsi.tsv
+		
 		delta_psi="grase_results/gene_files/$line/$line.deltapsi.tsv"	
 		num_lines=$(wc -l < "$delta_psi")
 		if [[ $num_lines -lt 2 ]] ; then
