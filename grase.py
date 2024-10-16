@@ -1063,21 +1063,6 @@ def get_grase_results_majiq():
 	num_exons_dex_sig = len(exon_dex_sig)
 
 	# Event Counts ##################################################################################
-	'''rmats_to_dex = pd.concat([A3SS_to_dex, A5SS_to_dex, SE_to_dex, RI_to_dex])
-	rmats_to_dex = rmats_to_dex.sort_values(by=["GeneID", "ID"])
-	rmats_to_dex = rmats_to_dex.reset_index(drop=True)
-	del A3SS_to_dex, A5SS_to_dex, SE_to_dex, RI_to_dex
-
-	rmats_to_dex_A3 = rmats_to_dex.merge(A3SS_MATS, how="left", on=["GeneID", "ID"])
-	rmats_to_dex_A5 = rmats_to_dex.merge(A5SS_MATS, how="left", on=["GeneID", "ID"])
-	rmats_to_dex_SE = rmats_to_dex.merge(SE_MATS, how="left", on=["GeneID", "ID"])
-	rmats_to_dex_RI = rmats_to_dex.merge(RI_MATS, how="left", on=["GeneID", "ID"])
-	del A3SS_MATS, A5SS_MATS, SE_MATS, RI_MATS'''
-
-	'''rmats_to_dex_MATS = pd.concat([rmats_to_dex_A3, rmats_to_dex_A5, rmats_to_dex_SE, rmats_to_dex_RI])
-	rmats_to_dex_MATS = rmats_to_dex_MATS.dropna(subset="ID.1")
-	del rmats_to_dex_A3, rmats_to_dex_A5, rmats_to_dex_SE, rmats_to_dex_RI'''
-
 	majiq_to_dex_exploded = majiq_to_dex.copy()
 	majiq_to_dex_exploded["DexseqFragment"] = majiq_to_dex_exploded["DexseqFragment"].str.split(",")
 	majiq_to_dex_exploded = majiq_to_dex_exploded.explode("DexseqFragment")
@@ -1088,7 +1073,7 @@ def get_grase_results_majiq():
 	majiq_to_dex_ex_dexRes[["padj"]] = majiq_to_dex_ex_dexRes[["padj"]].apply(pd.to_numeric)
 	del majiq_to_dex_exploded
 
-	majiq_to_dex_deltapsi = pd.merge(majiq_to_dex, majiq_output, how="outer", on=["GeneID", "LSV_ID"])
+	majiq_to_dex_deltapsi = pd.merge(majiq_to_dex, majiq_output, how="left", on=["GeneID", "LSV_ID"])
 	majiq_to_dex_ex_deltapsi = majiq_to_dex_deltapsi.copy()
 	majiq_to_dex_ex_deltapsi["DexseqFragment"] = majiq_to_dex_ex_deltapsi["DexseqFragment"].str.split(",")
 	majiq_to_dex_ex_deltapsi = majiq_to_dex_ex_deltapsi.explode("DexseqFragment")
@@ -1172,10 +1157,6 @@ def get_grase_results_majiq():
 
 			["DEXSeq Tested Events", num_events_dex_tested],
 			["DEXSeq Sig Events", num_events_dex_sig],
-
-			["MAJIQ Tested Events", num_events_majiq_tested],
-			["MAJIQ Tested & DEXSeq Tested Events", num_events_majiq_tested_dex_tested],
-			["MAJIQ Tested & DEXSeq Sig Events", num_events_majiq_tested_dex_sig],
 
 			["MAJIQ Sig Events", num_events_majiq_sig],
 			["MAJIQ Sig & DEXSeq Tested Events", num_events_majiq_sig_dex_tested],
@@ -1262,7 +1243,7 @@ def main():
 
 	genes = os.listdir(args.gene_files_directory)
 
-	if args.nthread == 1:
+	'''if args.nthread == 1:
 		print(f"\nProcessing genes (using {args.nthread} thread)...\n")
 	else:
 		print(f"\nProcessing genes (using {args.nthread} threads)...\n")
@@ -1273,7 +1254,7 @@ def main():
 	p = Pool(args.nthread)
 	p.map(process_gene, genes)
 
-	print("Done processing genes.\n")
+	print("Done processing genes.\n")'''
 	print("Processing results...\n")
 
 	if args.splicing_software == 'r':
