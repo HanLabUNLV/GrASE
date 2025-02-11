@@ -182,6 +182,8 @@ def map_DEXSeq_from_gff(g, gff):
 	leftCoords = []
 	rightCoords = []
 	dex_frag = []
+	transcripts = []
+
 
 	g.es["dexseq_fragment"] = ''
 	for x in gff:
@@ -192,18 +194,23 @@ def map_DEXSeq_from_gff(g, gff):
 			leftCoords.append(x.split()[3])
 			rightCoords.append(x.split()[4])
 			dex_frag.append(x.split()[-1].strip('\"'))
+			transcripts.append(x.split()[11].strip(';').strip('\"').split("+"))
 
 	if g["strand"] == '-':
 		for x in range(len(rightCoords)):
 			rightCoords[x] = str(int(rightCoords[x]) + 1)
 			g.add_edges([(rightCoords[x], leftCoords[x])])
 			g.es[-1]["dexseq_fragment"] = dex_frag[x]
+			for transcript in transcripts[x]:
+				g.es[-1][transcript] = True
 
 	if g["strand"] == '+':
 		for x in range(len(rightCoords)):
 			rightCoords[x] = str(int(rightCoords[x]) + 1)
 			g.add_edges([(leftCoords[x], rightCoords[x])])
 			g.es[-1]["dexseq_fragment"] = dex_frag[x]
+			for transcript in transcripts[x]:
+				g.es[-1][transcript] = True
 
 	return g
 
@@ -1247,7 +1254,11 @@ def main():
 
 	genes = os.listdir(args.gene_files_directory)
 
-	if args.nthread == 1:
+	gene = [x for x in genes if 'ENSG00000148680.16' in x][0]
+
+	process_gene(gene)
+
+	'''if args.nthread == 1:
 		print(f"\nProcessing genes (using {args.nthread} thread)...\n")
 	else:
 		print(f"\nProcessing genes (using {args.nthread} threads)...\n")
@@ -1266,7 +1277,7 @@ def main():
 	if args.splicing_software == 'm':
 		get_grase_results_majiq()
 
-	print("Done processing results.\n")
+	print("Done processing results.\n")'''
 
 
 if __name__ == "__main__":
