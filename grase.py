@@ -555,7 +555,8 @@ def map_rMATS_event_full_fragment(g, fromGTF, eventType, gene, gff, grase_output
 
 
 def map_rMATS(g, gene, gff, fromGTF_A3SS, fromGTF_A5SS, fromGTF_SE, fromGTF_RI, grase_output_dir):
-	g.es["rmats"] = g.es["event"] = g.es["A3SS"] = g.es["A5SS"] = g.es["SE"] = g.es["RI"] = ""
+	g.es["rmats"] = ""
+	g.es["A3SS"] = g.es["A5SS"] = g.es["SE"] = g.es["RI"] = False
 
 	if fromGTF_A3SS:
 		g = map_rMATS_event_overhang(g, fromGTF_A3SS, "A3SS", gene, gff, grase_output_dir)
@@ -620,12 +621,13 @@ def style_and_plot(g, gene):
 		order_dict[name] = int(order_dict[name])
 
 	if args.splicing_software == 'r':
-		curved_dict = {"ex": -0.3, "in": -0.3, "NA": False, None: 0}
+		curved_dict = {"ex": -0.3, "in": 0, "NA": False, None: 0}
 		visual_style = {"edge_curved": [curved_dict[ex_or_in] for ex_or_in in g.es["ex_or_in"]],
 						"edge_color": [color_dict[ex_or_in] for ex_or_in in g.es["ex_or_in"]],
 						"edge_width": [width_dict[ex_or_in] for ex_or_in in g.es["ex_or_in"]],
 						"order": [order_dict[order] for order in g.vs["name"]],
 						"vertex_label": g.vs["id"], "vertex_label_size": 65, "vertex_label_dist": 1.7,
+						"edge_lty": "dashed",
 						"vertex_shape": "hidden",
 						"edge_label": edge_labels, "edge_label_size": 65,
 						"edge_arrow_size": 0.001,
@@ -647,8 +649,10 @@ def style_and_plot(g, gene):
 	layout = g.layout_sugiyama()
 	layout.rotate(270)
 
-	ig.plot(g,gene + "/output/graph." + g["gene"] + ".png", layout=layout, **visual_style)
+	ig.plot(g, gene + "/output/graph." + g["gene"] + ".png", layout=layout, **visual_style)
 	g.write_graphml(f"{gene}/output/{g['gene']}.graphml")
+
+	return 0
 
 
 
@@ -1218,7 +1222,7 @@ def get_grase_results_majiq():
 										index=False)
 	exon_dex_tested_majiq_sig.to_csv(output_dir + "/ExonParts/DexTested__MAJIQ_SigExons.txt", sep='\t', index=False)
 	exon_dex_tested_majiq_tested.to_csv(output_dir + "/ExonParts/DexSig__MAJIQ_TestedExons.txt", sep='\t', index=False)
-	exon_dex_tested_majiq_sig.to_csv(output_dir + "/ExonParts/DexSig__MAJIQ_SigExons.txt", sep='\t', index=False)
+	exon_dex_sig_majiq_sig.to_csv(output_dir + "/ExonParts/DexSig__MAJIQ_SigExons.txt", sep='\t', index=False)
 
 	dex_to_majiq_dexRes.to_csv(output_dir + "/DEX_to_MAJIQ_Events.txt", sep='\t', index=False)
 	majiq_to_dex_deltapsi.to_csv(output_dir + "/MAJIQ_to_DEX_Exons.txt", sep='\t', index=False)
@@ -1243,7 +1247,7 @@ def main():
 
 	genes = os.listdir(args.gene_files_directory)
 
-	'''if args.nthread == 1:
+	if args.nthread == 1:
 		print(f"\nProcessing genes (using {args.nthread} thread)...\n")
 	else:
 		print(f"\nProcessing genes (using {args.nthread} threads)...\n")
@@ -1254,7 +1258,7 @@ def main():
 	p = Pool(args.nthread)
 	p.map(process_gene, genes)
 
-	print("Done processing genes.\n")'''
+	print("Done processing genes.\n")
 	print("Processing results...\n")
 
 	if args.splicing_software == 'r':
