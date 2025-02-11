@@ -1254,11 +1254,8 @@ def main():
 
 	genes = os.listdir(args.gene_files_directory)
 
-	gene = [x for x in genes if 'ENSG00000148680.16' in x][0]
 
-	process_gene(gene)
-
-	'''if args.nthread == 1:
+	if args.nthread == 1:
 		print(f"\nProcessing genes (using {args.nthread} thread)...\n")
 	else:
 		print(f"\nProcessing genes (using {args.nthread} threads)...\n")
@@ -1277,7 +1274,7 @@ def main():
 	if args.splicing_software == 'm':
 		get_grase_results_majiq()
 
-	print("Done processing results.\n")'''
+	print("Done processing results.\n")
 
 
 if __name__ == "__main__":
