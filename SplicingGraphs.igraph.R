@@ -8,6 +8,7 @@ library(AnnotationDbi)
 library(GenomicFeatures)
 library(SplicingGraphs)
 library(igraph)
+library(txdbmaker)
 
 options(scipen=50)
 
@@ -60,7 +61,7 @@ SG2igraph <- function(geneID, sg, edges_by_gene) {
 
   drops <- c("seqnames","strand", "tx_id")
   g1.df = g1.df[ , !(names(g1.df) %in% drops)]
-  g <- graph.data.frame(g1.df, directed=TRUE, vertices=nodes.df)
+  g <- graph_from_data_frame(g1.df, directed=TRUE, vertices=nodes.df)
   write_graph(g, paste0(args[4], geneID, ".graphml"), "graphml")
 
   roots = nodes.df$ID[!(nodes.df$ID %in% c(g1.df$to, "R", "L"))] 
