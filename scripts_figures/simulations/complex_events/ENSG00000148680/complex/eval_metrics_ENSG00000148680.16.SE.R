@@ -4,7 +4,7 @@ library(tidyr)
 library(gtools)
 
 #DEXSeq simulation runs - combined A3SS
-dxr1 <- read.table("/home/dwito/GrASE_package/SplicingGraphs/candidate_genes/_simulations/dexseq/ENSG00000148680.16/ENSG00000148680.16_dexseq_corrected_padj.txt", header=TRUE, sep="\t")
+dxr1 <- read.table("/home/dwito/GrASE_package/SplicingGraphs/candidate_genes/_simulations/dexseq/ENSG00000148680.16_complex/ENSG00000148680.16_dexseq_corrected_padj.txt", header=TRUE, sep="\t")
 
 dxr1 <- dxr1 %>% 
   separate_wider_delim(groupID, ".", names = c("ID", "groupID", "extra"))
@@ -25,7 +25,7 @@ dexseq_FC_RD_freq <- data.frame(table(dxr1_exon6$FoldChange, dxr1_exon6$ReadDept
 dexseq_FC_RD_freq$ID <- "DEXSeq"
 
 #rMATS simulation runs - A3SS JCEC & JC
-jcec <- read.table("/home/dwito/GrASE_package/SplicingGraphs/candidate_genes/_simulations/rmats/ENSG00000148680.16/SE.MATS.JCEC.txt", header=TRUE, sep="\t")
+jcec <- read.table("/home/dwito/GrASE_package/SplicingGraphs/candidate_genes/_simulations/rmats/ENSG00000148680.16_complex/SE.MATS.JCEC.txt", header=TRUE, sep="\t")
 jcec <- jcec %>% 
   separate_wider_delim(ID, "_", names = c("FoldChange", "ReadDepth", "SimRun"))
 jcec$ReadDepth <- as.numeric(gsub("RD","", jcec$ReadDepth))
@@ -37,7 +37,7 @@ jcec$FoldChange <- as.numeric(jcec$FoldChange)
 rMATS_FC_RD_freq <- data.frame(table(jcec$FoldChange, jcec$ReadDepth))
 rMATS_FC_RD_freq$ID <- "rMATS"
 
-jc <- read.table("/home/dwito/GrASE_package/SplicingGraphs/candidate_genes/_simulations/rmats/ENSG00000148680.16/SE.MATS.JC.txt", header=TRUE, sep="\t")
+jc <- read.table("/home/dwito/GrASE_package/SplicingGraphs/candidate_genes/_simulations/rmats/ENSG00000148680.16_complex/SE.MATS.JC.txt", header=TRUE, sep="\t")
 jc <- jc %>% 
   separate_wider_delim(ID, "_", names = c("FoldChange", "ReadDepth", "SimRun"))
 jc$ReadDepth <- as.numeric(gsub("RD","", jc$ReadDepth))
@@ -47,7 +47,7 @@ jc$FoldChange <- gsub("FC","", jc$FoldChange)
 jc$FoldChange <- as.numeric(jc$FoldChange)
 
 #total simulations
-folders_50K_A3SS <- read.table("/home/dwito/GrASE_package/SplicingGraphs/candidate_genes/_simulations/ENSG00000148680.16/folders_50k.txt")
+folders_50K_A3SS <- read.table("/home/dwito/GrASE_package/SplicingGraphs/candidate_genes/_simulations/ENSG00000148680.16_complex/folders_50k.txt")
 total_sim <- folders_50K_A3SS %>% 
   separate_wider_delim(V1, "_", names = c("FoldChange", "ReadDepth", "SimRun"))
 total_sim$ReadDepth <- as.numeric(gsub("RD","", total_sim$ReadDepth))
@@ -67,7 +67,7 @@ ggplot(combined_sim , aes(x=Var2, y=Freq, fill=ID)) +
   labs(title="Total Simulation Runs vs Successful DEXSeq and rMATS Runs", x="Read Depth", fill = "Simulations") +
   theme_bw() +
   scale_fill_manual(values=c("cyan3", "cornflowerblue", "darkorchid2")) 
-ggsave("SE_simulation_dist.pdf", width = 14, height = 8, dpi = 100, units = "in", device='pdf') 
+# ggsave("SE_simulation_dist.pdf", width = 14, height = 8, dpi = 100, units = "in", device='pdf') 
 
 ########################################################################################################################
 # dexseq exon 6 (spliced exon) table
@@ -262,7 +262,7 @@ ggplot(specificity_tbl, aes(group=var, y=val, x=ReadDepth)) +
   scale_color_discrete(name = "Software", labels=c("DEXSeq", "rMATS JC", "rMATS JCEC")) +
   ylim(0,1)+
   theme_bw() 
-ggsave("SE_Spec_pvalue_lineplot.pdf", width = 20, height = 5, dpi = 100, units = "in", device='pdf')
+ggsave("SE_Spec_pvalue_lineplot.pdf", width = 6, height = 5, dpi = 300, units = "in", device='pdf')
 
 #A3SS false negatives and true positives
 Foldchanges <- c(-8, -4, -2, -1, 8, 4, 2, 1)
@@ -361,7 +361,7 @@ ggplot(sens_tbl, aes(group=var, y=val, x=ReadDepth)) +
   ylim(0,1)+
   theme_bw() +
   facet_wrap(~FoldChange, nrow=2)
-ggsave("SE_Sens_lineplot.pdf", width = 25, height = 7, dpi = 100, units = "in", device='pdf')
+ggsave("SE_Sens_lineplot.pdf", width = 18, height = 7, dpi = 300, units = "in", device='pdf')
 
 #######################################################################################################################
 # specificity and sensitivity for adjusted pvalues
@@ -461,7 +461,7 @@ ggplot(sens_tbl, aes(group=var, y=val, x=ReadDepth)) +
   ylim(0,1)+
   theme_bw() +
   facet_wrap(~FoldChange, nrow=2)
-ggsave("SE_Sens_adjpvalue_lineplot.pdf", width = 25, height = 7, dpi = 100, units = "in", device='pdf')
+ggsave("SE_Sens_adjpvalue_lineplot.pdf", width = 18, height = 7, dpi = 300, units = "in", device='pdf')
 
 #specificity
 DEXSeqTN=c()
@@ -553,4 +553,4 @@ ggplot(specificity_tbl, aes(group=var, y=val, x=ReadDepth)) +
   scale_color_discrete(name = "Software", labels=c("DEXSeq", "rMATS JC", "rMATS JCEC")) +
   ylim(0,1)+
   theme_bw()
-ggsave("SE_Spec_adjpvalue_lineplot.pdf", width = 20, height = 5, dpi = 100, units = "in", device='pdf')
+ggsave("SE_Spec_adjpvalue_lineplot.pdf", width = 6, height = 5, dpi = 300, units = "in", device='pdf')
