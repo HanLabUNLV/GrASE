@@ -13,6 +13,7 @@ sim_deds <- read.table(paste0(indir,"genelist"), header=TRUE, sep="\t")
 gene_summary = sim_deds %>% group_by(geneID)
 genes =  unique(gene_summary$geneID)
 gene = 'ENSG00000006744.19'
+gene = 'ENSG00000000003.15'
 gene = 'ENSG00000016490.16'
 
 num_cores <- 10

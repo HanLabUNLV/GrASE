@@ -120,6 +120,7 @@ focal_exons_gene_ovr <- function(gene, g, sg, outdir) {
   bubbles_df <- SplicingGraphs::bubbles(sg)
 
   txpaths <- lapply(SplicingGraphs::txpath(sg), as.character)
+  tx_exon_paths <- grase::txpath_from_edgeattr(g)
   tx_exonpaths = lapply(txpaths, from_vpath_to_exon_path, g=g)
   tx_ex_parts = lapply(tx_exonpaths, from_exon_path_to_exonic_part_path, g=g)
 
@@ -352,13 +353,17 @@ focal_exons_gene_powerset <- function(gene, g, sg, outdir, max_powerset = 10000)
 
 
   focalexons_df <- data.frame()
-  bubbles_df <- SplicingGraphs::bubbles(sg)
+
+  txpaths <- grase::txpath_from_edgeattr(g)
+  txmat <- grase::make_matrix_from_txpath_igraph(txpaths)
+  bubble_df <- grase::detect_bubbles_from_mat(txmat)
+
   if ( nrow(bubbles_df) == 0) {
     print("single transcript, no bubbles")
     return (NULL) 
   }
 
-  txpaths <- lapply(SplicingGraphs::txpath(sg), as.character)
+  #txpaths <- lapply(SplicingGraphs::txpath(sg), as.character)
   tx_exonpaths = lapply(txpaths, from_vpath_to_exon_path, g=g)
   tx_ex_parts = lapply(tx_exonpaths, from_exon_path_to_exonic_part_path, g=g)
 
@@ -459,6 +464,10 @@ focal_exons_gene_powerset <- function(gene, g, sg, outdir, max_powerset = 10000)
       focalexons_df <- rbind(focalexons_df, new_row)
     }
     rm(valid_splits)
+    # collapse source to sink on graph
+    # collapse source to sink on txmat
+    # update bubble_df
+
   }
 
   if (nrow(focalexons_df) > 0) {

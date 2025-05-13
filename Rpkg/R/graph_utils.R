@@ -81,13 +81,17 @@ map_DEXSeq_from_gff <- function(g, gff) {
   # The function will create edges on the igraph object based on DEXSeq exon fragments.
   # Fragments are labeled with a "dexseq_fragment" attribute.
 
+  attrs <- igraph::edge_attr_names(g)
+  excluded <- c("sgedge_id", "ex_or_in", "from_pos", "to_pos", "dexseq_fragment")
+  trans <- setdiff(attrs, excluded)
+ 
   leftCoords <- c()
   rightCoords <- c()
   dex_frag <- c()
   transcripts <- c()
 
   # Set empty dexseq_fragment for edges
-  E(g)$dexseq_fragment <- ''
+  igraph::E(g)$dexseq_fragment <- ''
 
   for (x in 1:length(gff)) {
     # Split each line from the gff
@@ -115,12 +119,16 @@ map_DEXSeq_from_gff <- function(g, gff) {
     # For negative strand, reverse the orientation
     for (x in 1:length(rightCoords)) {
       rightCoords[x] <- as.character(as.numeric(rightCoords[x]) + 1)
-      v_right = V(g)[V(g)$position == rightCoords[x]]
-      v_left = V(g)[V(g)$position == leftCoords[x]]
-      g <- add_edges(g, c(v_right, v_left), attr = list(ex_or_in = c("ex_part")))
-      edge_attr(g)$dexseq_fragment[length(E(g))] <- dex_frag[x]
-      for (transcript in transcripts[[x]]) {
-        edge_attr(g)[[transcript]][length(E(g))] <- TRUE
+      v_right = igraph::V(g)[igraph::V(g)$position == rightCoords[x]]
+      v_left = igraph::V(g)[igraph::V(g)$position == leftCoords[x]]
+      g <- igraph::add_edges(g, c(v_right, v_left), attr = list(ex_or_in = c("ex_part"), dexseq_fragment = c(dex_frag[x])))
+      eid = which(igraph::edge_attr(g, 'dexseq_fragment') == dex_frag[x])
+      for (tid in trans) {
+        if (tid %in%  transcripts[[x]]) {
+          igraph::edge_attr(g, tid, index=eid) <- TRUE
+        } else {
+          igraph::edge_attr(g, tid, index=eid) <- FALSE
+        }
       }
     }
   }
@@ -129,12 +137,16 @@ map_DEXSeq_from_gff <- function(g, gff) {
     # For positive strand, retain the orientation
     for (x in 1:length(rightCoords)) {
       rightCoords[x] <- as.character(as.numeric(rightCoords[x]) + 1)
-      v_right = V(g)[V(g)$position == rightCoords[x]]
-      v_left = V(g)[V(g)$position == leftCoords[x]]
-      g <- add_edges(g, c(v_left, v_right), attr = list(ex_or_in = c("ex_part")))
-      edge_attr(g)$dexseq_fragment[length(E(g))] <- dex_frag[x]
-      for (transcript in transcripts[[x]]) {
-        edge_attr(g)[[transcript]][length(E(g))] <- TRUE
+      v_right = igraph::V(g)[igraph::V(g)$position == rightCoords[x]]
+      v_left = igraph::V(g)[igraph::V(g)$position == leftCoords[x]]
+      g <- igraph::add_edges(g, c(v_left, v_right), attr = list(ex_or_in = c("ex_part"), dexseq_fragment = c(dex_frag[x])))
+      eid = which(igraph::edge_attr(g, 'dexseq_fragment') == dex_frag[x])
+      for (tid in trans) {
+        if (tid %in%  transcripts[[x]]) {
+          igraph::edge_attr(g, tid, index=eid) <- TRUE
+        } else {
+          igraph::edge_attr(g, tid, index=eid) <- FALSE
+        }
       }
     }
   }
