@@ -7,10 +7,10 @@
 #' @export
 SG2igraph <- function(geneID,  gene_sg, gene_graph) {
 
-  nodes = sgnodes(gene_sg)
+  nodes = SplicingGraphs::sgnodes(gene_sg)
   g1 = as.data.frame(gene_graph)
 
-  g1.df <- as.data.frame(sgedges(gene_sg))
+  g1.df <- as.data.frame(SplicingGraphs::sgedges(gene_sg))
   g1.ncol = ncol(g1.df)
   tx_ids = unique(unlist(g1.df$tx_id))
   for (tx_id in tx_ids) {
@@ -46,6 +46,13 @@ SG2igraph <- function(geneID,  gene_sg, gene_graph) {
   g1.df[g1.df$from == 'R',]['ex_or_in'] = 'R'
   g1.df[g1.df$to == 'L',]['ex_or_in'] = 'L'
 
+  g1.df["tx_id"] <- sapply(g1.df["tx_id"], function(x) {
+    if (length(x)==0) {
+      NA_character_
+    } else {
+      paste(x, collapse=";")    # you can choose comma or other separator
+    }
+  }, USE.NAMES = FALSE)
   write.table(g1.df, paste0(geneID, ".edgetable.txt"),  row.names=FALSE, sep="\t", quote=FALSE, col.names = TRUE)
 
   node_coord = node_coord[!duplicated(node_coord$coord),] 
@@ -54,8 +61,13 @@ SG2igraph <- function(geneID,  gene_sg, gene_graph) {
 
   drops <- c("seqnames","strand", "tx_id")
   g1.df = g1.df[ , !(names(g1.df) %in% drops)]
-  g <- graph_from_data_frame(g1.df, directed=TRUE, vertices=nodes.df)
-  vertex_attr(g)$position = node_coord[vertex_attr(g)$name, 'coord']
+  g <- igraph::graph_from_data_frame(g1.df, directed=TRUE, vertices=nodes.df)
+  igraph::vertex_attr(g)$position = node_coord[igraph::vertex_attr(g)$name, 'coord']
+
+  igraph::vertex_attr(g)$sg_id = igraph::vertex_attr(g)$name
+  igraph::vertex_attr(g)$sg_id[1] <- 0
+  igraph::vertex_attr(g)$sg_id[length(igraph::vertex_attr(g)$sg_id)] <- as.numeric(igraph::vertex_attr(g)$sg_id[length(igraph::vertex_attr(g)$sg_id)-1])+1
+  igraph::vertex_attr(g)$sg_id <- as.numeric(igraph::vertex_attr(g)$sg_id)
 
   return (g)
 }
@@ -164,10 +176,12 @@ dict_node2pos <- function(sg, gene) {
 
 #' Convert vertex path to exon path
 #' @export
-from_vpath_to_exon_path <- function(g, bubblepath, node2pos) {
+from_vpath_to_exon_path <- function(g, bubblepath) {
   path <- c()
   for (i in 1:(length(bubblepath) - 1)) {
-    edges <- igraph::E(g)[node2pos[bubblepath[i]] %--% node2pos[bubblepath[i + 1]]]
+    pos_start = igraph::vertex_attr(g, 'position', index=bubblepath[i])
+    pos_end = igraph::vertex_attr(g, 'position', index=bubblepath[i + 1])
+    edges <- igraph::E(g)[bubblepath[i] %--% bubblepath[i + 1]]
     edges <- edges[igraph::edge_attr(g)$ex_or_in[as.numeric(edges)] != "ex_part"]
     path <- c(path, as.numeric(edges))
   }

@@ -21,7 +21,6 @@ run_grase <- function(task, gene, indir, outdir, tx_ids = NULL) {
   gr <- gr[!(rtracklayer::mcols(gr)$type %in% c("start_codon", "stop_codon"))]
   txdb <- txdbmaker::makeTxDbFromGRanges(gr)
   sg <- SplicingGraphs::SplicingGraphs(txdb, min.ntx = 1)
-  node2pos <- dict_node2pos(sg)
 
   if (task == "plot_graphs") {
     style_and_plot(g, gene, file.path(outdir, "graseplot"))
@@ -33,11 +32,11 @@ run_grase <- function(task, gene, indir, outdir, tx_ids = NULL) {
 
   if (task == "find_focal_exons_between_tx") {
     stopifnot(!is.null(tx_ids) && length(tx_ids) == 2)
-    return(focal_exons_between_tx(gene, g, sg, node2pos, tx_ids, outdir))
+    return(focal_exons_between_tx(gene, g, sg, tx_ids, outdir))
   }
 
   if (task == "find_focal_exons_gene") {
-    return(focal_exons_gene(gene, g, sg, node2pos, outdir))
+    return(focal_exons_gene(gene, g, sg, outdir))
   }
   stop("Unsupported task: ", task)
 }

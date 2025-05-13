@@ -4,7 +4,7 @@
 \alias{bubble_ordering}
 \title{hierarchical ordering of bubbles in the DAG grase graph from innermost to outermost based on nesting relationships.}
 \usage{
-bubble_ordering(g, bubbles_df, node2pos)
+bubble_ordering(g, bubbles_df)
 }
 \description{
 hierarchical ordering of bubbles in the DAG grase graph from innermost to outermost based on nesting relationships.

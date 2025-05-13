@@ -169,7 +169,7 @@ detect_bubbles_from_mat <- function (txpathmat)
 
 
 # 5. Wrapper: detect bubbles on igraph DAG
-detect_bubbles_igraph <- function(g, tx_exons, node2pos) {
+detect_bubbles_igraph <- function(g, tx_exons) {
   if (!is_directed(g)) stop("Graph must be directed DAG")
   # generate txpaths
   txpaths <- txpath_from_edgeattr(g)

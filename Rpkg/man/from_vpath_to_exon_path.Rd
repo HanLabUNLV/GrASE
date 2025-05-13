@@ -4,7 +4,7 @@
 \alias{from_vpath_to_exon_path}
 \title{Convert vertex path to exon path}
 \usage{
-from_vpath_to_exon_path(g, bubblepath, node2pos)
+from_vpath_to_exon_path(g, bubblepath)
 }
 \description{
 Convert vertex path to exon path

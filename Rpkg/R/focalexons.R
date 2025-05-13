@@ -11,19 +11,19 @@ count_items <- function(x) {
 
 #' Find reference exonic part near bubble region
 #' @export
-find_reference_exonic_part <- function(source, sink, ex_part1_set, ex_part2_set, tx_ex_part1_set, tx_ex_part2_set, g, node2pos) {
+find_reference_exonic_part <- function(source, sink, ex_part1_set, ex_part2_set, tx_ex_part1_set, tx_ex_part2_set, g) {
   source_adj_exonic_part <- c()
   sink_adj_exonic_part <- c()
   common_edges <- intersect(ex_part1_set, ex_part2_set)
   common_exonic_part <- common_edges[igraph::edge_attr(g)$ex_or_in[as.numeric(common_edges)] == "ex_part"]
 
-  node_current_pos <- node2pos[source] 
-  incident_edges <- igraph::incident(g, node_current_pos, mode = 'in')
+  node_current_pos <- igraph::vertex_attr(g, 'position', index=source) 
+  incident_edges <- igraph::incident(g, source, mode = 'in')
   source_adj_exonic_part <- incident_edges[igraph::edge_attr(g)$ex_or_in[as.numeric(incident_edges)] == "ex_part"]
   source_adj_exonic_part <- intersect(source_adj_exonic_part, intersect(tx_ex_part1_set, tx_ex_part2_set))
 
-  node_current_pos <- node2pos[sink] 
-  incident_edges <- igraph::incident(g, node_current_pos, mode = 'out')
+  node_current_pos <- igraph::vertex_attr(g, 'position', index=sink) 
+  incident_edges <- igraph::incident(g, sink, mode = 'out')
   sink_adj_exonic_part <- incident_edges[igraph::edge_attr(g)$ex_or_in[as.numeric(incident_edges)] == "ex_part"]
   sink_adj_exonic_part <- intersect(sink_adj_exonic_part, intersect(tx_ex_part1_set, tx_ex_part2_set))
 
@@ -34,11 +34,11 @@ find_reference_exonic_part <- function(source, sink, ex_part1_set, ex_part2_set,
 
 #' Compute focal exons from graph and splicing structure
 #' @export
-focal_exons_between_tx <- function(gene, g, sg, node2pos, tx_ids, outdir) {
+focal_exons_between_tx <- function(gene, g, sg, tx_ids, outdir) {
 
   bubbles_df <- SplicingGraphs::bubbles(sg)
-  tx_ex_part1 <- from_exon_path_to_exonic_part_path(g, from_vpath_to_exon_path(g, as.character(SplicingGraphs::txpath(sg)[[tx_ids[1]]]), node2pos))
-  tx_ex_part2 <- from_exon_path_to_exonic_part_path(g, from_vpath_to_exon_path(g, as.character(SplicingGraphs::txpath(sg)[[tx_ids[2]]]), node2pos))
+  tx_ex_part1 <- from_exon_path_to_exonic_part_path(g, from_vpath_to_exon_path(g, as.character(SplicingGraphs::txpath(sg)[[tx_ids[1]]])))
+  tx_ex_part2 <- from_exon_path_to_exonic_part_path(g, from_vpath_to_exon_path(g, as.character(SplicingGraphs::txpath(sg)[[tx_ids[2]]])))
 
   focalexons_df <- data.frame()
   for (bubble_idx in seq_along(bubbles_df$partitions)) {
@@ -55,8 +55,8 @@ focal_exons_between_tx <- function(gene, g, sg, node2pos, tx_ids, outdir) {
       rows_with_true <- apply(contains_matrix, 2, function(col) which(col))
       vpath1 <- c(source, parsed_paths[[rows_with_true[[1]]]], sink)
       vpath2 <- c(source, parsed_paths[[rows_with_true[[2]]]], sink)
-      epath1 <- from_vpath_to_exon_path(g, vpath1, node2pos)
-      epath2 <- from_vpath_to_exon_path(g, vpath2, node2pos)
+      epath1 <- from_vpath_to_exon_path(g, vpath1)
+      epath2 <- from_vpath_to_exon_path(g, vpath2)
       ex_part1 <- from_exon_path_to_exonic_part_path(g, epath1)
       ex_part2 <- from_exon_path_to_exonic_part_path(g, epath2)
 
@@ -76,7 +76,6 @@ focal_exons_between_tx <- function(gene, g, sg, node2pos, tx_ids, outdir) {
         tx_ex_part1_set = tx_ex_part1, 
         tx_ex_part2_set = tx_ex_part2, 
         g = g, 
-        node2pos = node2pos
       ) 
       ref_ex_part_set <- unique(c(ref_ex_part$common, ref_ex_part$source, ref_ex_part$sink))
       ref_ex_part_set_ID <- if (length(ref_ex_part_set) > 0) paste0("E", paste(igraph::edge_attr(g)$dexseq_fragment[ref_ex_part_set], collapse=",E")) else ""
@@ -116,12 +115,12 @@ focal_exons_between_tx <- function(gene, g, sg, node2pos, tx_ids, outdir) {
 
 #' Compute focal exons from graph and splicing structure
 #' @export
-focal_exons_gene_ovr <- function(gene, g, sg, node2pos, outdir) {
+focal_exons_gene_ovr <- function(gene, g, sg, outdir) {
 
   bubbles_df <- SplicingGraphs::bubbles(sg)
 
   txpaths <- lapply(SplicingGraphs::txpath(sg), as.character)
-  tx_exonpaths = lapply(txpaths, from_vpath_to_exon_path, g=g, node2pos=node2pos)
+  tx_exonpaths = lapply(txpaths, from_vpath_to_exon_path, g=g)
   tx_ex_parts = lapply(tx_exonpaths, from_exon_path_to_exonic_part_path, g=g)
 
   focalexons_df <- data.frame()
@@ -144,8 +143,8 @@ focal_exons_gene_ovr <- function(gene, g, sg, node2pos, outdir) {
       vpath1 = c(source, parsed_paths[[i]], sink)
       vpath_rest = lapply(parsed_paths[seq_along(parsed_partitions)[-i]], function(vec) c(source, vec, sink)) 
    
-      epath1 <- from_vpath_to_exon_path(g, vpath1, node2pos)
-      epath_rest = lapply(vpath_rest, from_vpath_to_exon_path, g=g, node2pos=node2pos) 
+      epath1 <- from_vpath_to_exon_path(g, vpath1)
+      epath_rest = lapply(vpath_rest, from_vpath_to_exon_path, g=g) 
      
       ex_part1 <- from_exon_path_to_exonic_part_path(g, epath1) 
       ex_part_rest <- lapply(epath_rest, from_exon_path_to_exonic_part_path, g=g) 
@@ -171,7 +170,6 @@ focal_exons_gene_ovr <- function(gene, g, sg, node2pos, outdir) {
         tx_ex_part1_set = tx_ex_part1, 
         tx_ex_part2_set = tx_ex_part2, 
         g = g, 
-        node2pos = node2pos
       ) 
  
       ref_ex_part_set <- unique(unlist(c(ref_ex_part$common, ref_ex_part$source, ref_ex_part$sink)))
@@ -211,8 +209,8 @@ focal_exons_gene_ovr <- function(gene, g, sg, node2pos, outdir) {
 
 
 
-get_interval <- function(bubble, topo_idx, node2pos) {
-  vals = c(topo_idx[node2pos[bubble$source]], topo_idx[node2pos[bubble$sink]])
+get_interval <- function(bubble, topo_idx) {
+  vals = c(topo_idx[bubble$source], topo_idx[bubble$sink])
   vals <- setNames(vals, c("start", "end"))
   return (vals)
 }
@@ -237,13 +235,13 @@ get_depths <- function(intervals) {
 
 #' hierarchical ordering of bubbles in the DAG grase graph from innermost to outermost based on nesting relationships. 
 #' @export
-bubble_ordering <- function(g, bubbles_df, node2pos) {
+bubble_ordering <- function(g, bubbles_df) {
 
   topo <- igraph::topo_sort(g, mode = "out")
   topo_idx <- setNames(seq_along(topo), names(topo))
 
   bubbles_list = split(as.data.frame(bubbles_df), seq(nrow(bubbles_df)))
-  bubble_intervals <- lapply(bubbles_list, get_interval, topo_idx = topo_idx, node2pos=node2pos)
+  bubble_intervals <- lapply(bubbles_list, get_interval, topo_idx = topo_idx)
   bubble_depths <- get_depths(bubble_intervals)
   ordered_bubbles <- bubbles_list[order(-bubble_depths)]
   do.call(rbind.data.frame, ordered_bubbles)
@@ -297,6 +295,8 @@ path_subset_relation <-function(sets) {
 }
 
 
+#' find valid partitions that represents the hierarchical relationship between paths 
+#' @export
 valid_partitions <- function(g, max_powerset) {
 
   nodes <- igraph::V(g)$name
@@ -348,7 +348,7 @@ valid_partitions <- function(g, max_powerset) {
 
 #' Compute focal exons from graph and splicing structure
 #' @export
-focal_exons_gene_power <- function(gene, g, sg, node2pos, outdir, max_powerset = 10000) {
+focal_exons_gene_powerset <- function(gene, g, sg, outdir, max_powerset = 10000) {
 
 
   focalexons_df <- data.frame()
@@ -359,10 +359,10 @@ focal_exons_gene_power <- function(gene, g, sg, node2pos, outdir, max_powerset =
   }
 
   txpaths <- lapply(SplicingGraphs::txpath(sg), as.character)
-  tx_exonpaths = lapply(txpaths, from_vpath_to_exon_path, g=g, node2pos=node2pos)
+  tx_exonpaths = lapply(txpaths, from_vpath_to_exon_path, g=g)
   tx_ex_parts = lapply(tx_exonpaths, from_exon_path_to_exonic_part_path, g=g)
 
-  bubbles_ordered = bubble_ordering(g, bubbles_df, node2pos)
+  bubbles_ordered = bubble_ordering(g, bubbles_df)
   for (bubble_idx in seq_along(bubbles_ordered$partitions)) {
     source <- bubbles_ordered$source[[bubble_idx]]
     sink <- bubbles_ordered$sink[[bubble_idx]]
@@ -379,9 +379,9 @@ focal_exons_gene_power <- function(gene, g, sg, node2pos, outdir, max_powerset =
     vpaths = lapply(parsed_paths, function(vec) c(source, vec, sink))
 
 
-    #epath1 <- from_vpath_to_exon_path(g, vpath1, node2pos)
-    #epath_rest = lapply(vpath_rest, from_vpath_to_exon_path, g=g, node2pos=node2pos) 
-    epaths = lapply(vpaths, from_vpath_to_exon_path, g=g, node2pos=node2pos) 
+    #epath1 <- from_vpath_to_exon_path(g, vpath1)
+    #epath_rest = lapply(vpath_rest, from_vpath_to_exon_path, g=g) 
+    epaths = lapply(vpaths, from_vpath_to_exon_path, g=g) 
 
    
     #ex_part1 <- from_exon_path_to_exonic_part_path(g, epath1) 
@@ -411,8 +411,8 @@ focal_exons_gene_power <- function(gene, g, sg, node2pos, outdir, max_powerset =
       vpath1 = lapply(parsed_paths[seq_along(parsed_partitions)[group1]], function(vec) c(source, vec, sink)) 
       vpath2 = lapply(parsed_paths[seq_along(parsed_partitions)[group2]], function(vec) c(source, vec, sink)) 
    
-      epath1 = lapply(vpath1, from_vpath_to_exon_path, g=g, node2pos=node2pos) 
-      epath2 = lapply(vpath2, from_vpath_to_exon_path, g=g, node2pos=node2pos) 
+      epath1 = lapply(vpath1, from_vpath_to_exon_path, g=g) 
+      epath2 = lapply(vpath2, from_vpath_to_exon_path, g=g) 
      
       ex_part1 <- lapply(epath1, from_exon_path_to_exonic_part_path, g=g) 
       ex_part1 <- lapply(ex_part1, function(x) {return (x[igraph::edge_attr(g)$ex_or_in[x] == 'ex_part'])})
@@ -439,8 +439,7 @@ focal_exons_gene_power <- function(gene, g, sg, node2pos, outdir, max_powerset =
         ex_part2_set = ex_part2_set, 
         tx_ex_part1_set = tx_ex_part1, 
         tx_ex_part2_set = tx_ex_part2, 
-        g = g, 
-        node2pos = node2pos
+        g = g 
       ) 
  
       ref_ex_part_set <- unique(unlist(c(ref_ex_part$common, ref_ex_part$source, ref_ex_part$sink)))

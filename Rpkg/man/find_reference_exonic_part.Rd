@@ -11,8 +11,7 @@ find_reference_exonic_part(
   ex_part2_set,
   tx_ex_part1_set,
   tx_ex_part2_set,
-  g,
-  node2pos
+  g
 )
 }
 \description{

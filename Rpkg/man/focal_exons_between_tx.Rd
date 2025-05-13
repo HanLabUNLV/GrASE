@@ -4,7 +4,7 @@
 \alias{focal_exons_between_tx}
 \title{Compute focal exons from graph and splicing structure}
 \usage{
-focal_exons_between_tx(gene, g, sg, node2pos, tx_ids, outdir)
+focal_exons_between_tx(gene, g, sg, tx_ids, outdir)
 }
 \description{
 Compute focal exons from graph and splicing structure

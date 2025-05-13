@@ -4,7 +4,7 @@
 \alias{focal_exons_gene_ovr}
 \title{Compute focal exons from graph and splicing structure}
 \usage{
-focal_exons_gene_ovr(gene, g, sg, node2pos, outdir)
+focal_exons_gene_ovr(gene, g, sg, outdir)
 }
 \description{
 Compute focal exons from graph and splicing structure
