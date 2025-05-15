@@ -4,7 +4,14 @@
 \alias{focal_exons_gene_powerset}
 \title{Compute focal exons from graph and splicing structure}
 \usage{
-focal_exons_gene_powerset(gene, g, sg, outdir, max_powerset = 10000)
+focal_exons_gene_powerset(
+  gene,
+  g,
+  sg,
+  outdir,
+  max_powerset = 10000,
+  collapse_bubbles = TRUE
+)
 }
 \description{
 Compute focal exons from graph and splicing structure

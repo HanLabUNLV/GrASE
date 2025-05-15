@@ -18,9 +18,11 @@ txpath_from_edgeattr <- function(g, type="exon") {
     ex_bools <- igraph::edge_attr(g, 'ex_or_in') != 'ex_part' 
     expart_bools <- igraph::edge_attr(g, 'ex_or_in') != 'ex'
     exon_ids = igraph::E(g)[which(tx_bools & ex_bools)]
+    print (paste("exon_ids", paste(exon_ids)))
     expart_ids = igraph::E(g)[which(tx_bools & expart_bools)]
     if (type == "exon") {
       subg  <- igraph::subgraph_from_edges(g, exon_ids, delete.vertices = FALSE)
+      print (paste("subg", subg))
     }
     else if (type == "expart") {
       subg  <- igraph::subgraph_from_edges(g, expart_ids, delete.vertices = FALSE)
@@ -31,6 +33,7 @@ txpath_from_edgeattr <- function(g, type="exon") {
     }
     spath    <- igraph::shortest_paths(subg, from = root, to = leaf, mode = "out")$vpath[[1]]
     txpaths[[tx]] <- igraph::V(g)$name[spath]
+    print(txpaths)
   }
   txpaths = lapply(txpaths, function(x) { x[2:(length(x)-1)] }) # get rid of first and last (R and L)
   txpaths
@@ -40,19 +43,19 @@ txpath_from_edgeattr <- function(g, type="exon") {
 
 #' Build transcript-path logical matrix from index lists
 #' @export
-make_matrix_from_txpath_igraph <- function(txpath_idx_list) {
-  SSids <- as.numeric( sort(unique(unlist(txpath_idx_list))))
+make_matrix_from_txpath_igraph <- function(txpath_vertex_list) {
+  SSids <- as.numeric( sort(unique(unlist(txpath_vertex_list))))
   SSids <- SSids[!is.na(SSids)]
   SSids <- SSids[order(SSids)]
   cols  <- c("R", as.character(SSids), "L")
   mat <- matrix(FALSE,
-                nrow = length(txpath_idx_list),
+                nrow = length(txpath_vertex_list),
                 ncol = length(cols),
-                dimnames = list(names(txpath_idx_list), cols))
+                dimnames = list(names(txpath_vertex_list), cols))
   mat[, "R"] <- TRUE
   mat[, "L"] <- TRUE
-  for (i in seq_along(txpath_idx_list)) {
-    vids <- txpath_idx_list[[i]]
+  for (i in seq_along(txpath_vertex_list)) {
+    vids <- txpath_vertex_list[[i]]
     cmatch <- match(as.character(vids), cols)
     mat[i, cmatch] <- TRUE
   }

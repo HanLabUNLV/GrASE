@@ -204,7 +204,6 @@ from_vpath_to_exon_path <- function(g, bubblepath) {
 #' @export
 from_exon_path_to_exonic_part_path <- function(g, exonpath) {
   exonic_part_path <- c()
-  vpaths_list <- c()
 
   if (length(exonpath) > 0) {
     for (i in 1:length(exonpath)) {
@@ -219,13 +218,14 @@ from_exon_path_to_exonic_part_path <- function(g, exonpath) {
         sublist = sg_id_list[idx_start:idx_end]
         # now go node by node and find the exonic paths.
         # this only works because the nodes are ordered by their genomic positions
+        current_vpaths_list <- c()
         for (x in 1:(length(sublist)-1)) {
           current_start <- igraph::V(g)[sg_id == sublist[x]]
           current_end <- igraph::V(g)[sg_id == sublist[x+1]]
-          vpaths_list <- c(vpaths_list, igraph::all_simple_paths(g, current_start, current_end, cutoff = 2))
+          current_vpaths_list <- c(current_vpaths_list, igraph::all_simple_paths(g, current_start, current_end, cutoff = 2))
         }
-        for (x in 1:length(vpaths_list)) {
-          exonic_edge <- igraph::E(g)[vpaths_list[[x]][1] %--% vpaths_list[[x]][2]]
+        for (x in 1:length(current_vpaths_list)) {
+          exonic_edge <- igraph::E(g)[current_vpaths_list[[x]][1] %--% current_vpaths_list[[x]][2]]
           exonic_part_path <- c(exonic_part_path, exonic_edge[igraph::edge_attr(g)$ex_or_in[exonic_edge] == "ex_part"])
         }
       } else if (igraph::edge_attr(g)$ex_or_in[edge] %in% c("in", "R", "L")) {

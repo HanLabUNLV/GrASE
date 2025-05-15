@@ -65,7 +65,7 @@ results <- foreach(
   g <- igraph::read_graph(graph_path, format = "graphml")
 
   # call your downstream function, fully namespaced
-  cat("  calling grase::focal_exons_gene_nested()\n"); flush.console()
+  cat("  calling grase::focal_exons_gene_powerset()\n"); flush.console()
   res <- tryCatch({
     grase::focal_exons_gene_powerset(
       gene     = gene,

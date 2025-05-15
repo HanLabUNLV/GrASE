@@ -4,7 +4,7 @@
 \alias{make_matrix_from_txpath_igraph}
 \title{Build transcript-path logical matrix from index lists}
 \usage{
-make_matrix_from_txpath_igraph(txpath_idx_list)
+make_matrix_from_txpath_igraph(txpath_vertex_list)
 }
 \description{
 Build transcript-path logical matrix from index lists
