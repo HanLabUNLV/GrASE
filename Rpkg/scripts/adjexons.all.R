@@ -4,6 +4,7 @@
 library(dplyr)
 library(doParallel)
 library(foreach)
+library(grase)
 
 indir = '/mnt/storage/jaquino/scRNAseq_sim_pt2/grase/graphml.dexseq.v34/'
 outdir = '/mnt/storage/jaquino/scRNAseq_sim_pt2/grase/graphml.dexseq.v34/'
@@ -12,12 +13,13 @@ outdir = '/mnt/storage/jaquino/scRNAseq_sim_pt2/grase/graphml.dexseq.v34/'
 sim_deds <- read.table(paste0(indir,"genelist"), header=TRUE, sep="\t")
 gene_summary = sim_deds %>% group_by(geneID)
 genes =  unique(gene_summary$geneID)
-gene = 'ENSG00000006744.19'
-gene = 'ENSG00000000003.15'
-gene = 'ENSG00000016490.16'
+#gene = 'ENSG00000006744.19'
+#gene = 'ENSG00000000003.15'
+#gene = 'ENSG00000016490.16'
+gene = 'ENSG00000005302.19'
 
-num_cores <- 10
-cl <- makeCluster(num_cores, outfile = "worker4.log")
+num_cores <- 5
+cl <- makeCluster(num_cores, outfile = "worker5.log")
 registerDoParallel(cl)
 
 results <- foreach(
@@ -37,6 +39,7 @@ results <- foreach(
   }
 
   gtf_path <- file.path(indir, "gtf", paste0(gene, ".gtf"))
+  gff_path <- file.path(indir, "dexseq.gff", paste0(gene, ".dexseq.gff"))
   graph_path <- file.path(indir, "graphml", paste0(gene, ".dexseq.graphml"))
 
   gr <- rtracklayer::import(gtf_path)
@@ -56,8 +59,7 @@ results <- foreach(
   sgigraph = grase::SG2igraph(gene, gene_sg, gene_graph)
   
   # now add dexseq edges 
-  gff_filename = paste0(gene,".dexseq.gff") 
-  gff <- readLines(gff_filename)
+  gff <- readLines(gff_path)
   sgigraph = grase::map_DEXSeq_from_gff(sgigraph, gff)
   igraph::write_graph(sgigraph, graph_path, "graphml")
 
@@ -82,6 +84,7 @@ results <- foreach(
   rm(txdb)
   rm(sg)
   rm(g)
+  gc()
   return (gene)
 
 }

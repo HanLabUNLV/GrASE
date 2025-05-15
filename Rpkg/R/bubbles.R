@@ -22,7 +22,7 @@ txpath_from_edgeattr <- function(g, type="exon") {
     expart_ids = igraph::E(g)[which(tx_bools & expart_bools)]
     if (type == "exon") {
       subg  <- igraph::subgraph_from_edges(g, exon_ids, delete.vertices = FALSE)
-      print (paste("subg", subg))
+      print (paste("subg", igraph::V(subg)))
     }
     else if (type == "expart") {
       subg  <- igraph::subgraph_from_edges(g, expart_ids, delete.vertices = FALSE)
