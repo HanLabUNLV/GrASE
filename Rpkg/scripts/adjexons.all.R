@@ -1,13 +1,14 @@
 #devtools::document()
 #devtools::install()
 
+.libPaths('/home/mhan/R/singularity-library/4.4.2/Bioc')
 library(dplyr)
 library(doParallel)
 library(foreach)
 library(grase)
 
-indir = '/mnt/storage/jaquino/scRNAseq_sim_pt2/grase/graphml.dexseq.v34/'
-outdir = '/mnt/storage/jaquino/scRNAseq_sim_pt2/grase/graphml.dexseq.v34/'
+indir = '/data2/han_lab/stevepark/SplicingGraphs/indir/'
+outdir = '/data2/han_lab/stevepark/SplicingGraphs/indir/'
 
 #sim_deds <- read.table("simulation_deds.cell150.txt", header=TRUE, sep="\t")
 sim_deds <- read.table(paste0(indir,"genelist"), header=TRUE, sep="\t")
@@ -16,9 +17,9 @@ genes =  unique(gene_summary$geneID)
 #gene = 'ENSG00000006744.19'
 #gene = 'ENSG00000000003.15'
 #gene = 'ENSG00000016490.16'
-gene = 'ENSG00000005302.19'
+#gene = 'ENSG00000005302.19'
 
-num_cores <- 5
+num_cores <- 20
 cl <- makeCluster(num_cores, outfile = "worker5.log")
 registerDoParallel(cl)
 
@@ -29,8 +30,8 @@ results <- foreach(
 #  .verbose  = TRUE
 ) %dopar% {
 
-  indir = '/mnt/storage/jaquino/scRNAseq_sim_pt2/grase/graphml.dexseq.v34/'
-  outdir = '/mnt/storage/jaquino/scRNAseq_sim_pt2/grase/graphml.dexseq.v34/'
+  indir = '/data2/han_lab/stevepark/SplicingGraphs/indir/'
+  outdir = '/data2/han_lab/stevepark/SplicingGraphs/indir/'
 
   filename = file.path(outdir, "focalexons", paste0(gene, ".focalexons.txt"))
   if (file.exists(filename)) {

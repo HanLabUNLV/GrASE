@@ -368,14 +368,12 @@ remove_symmetric_splits <- function(splits){
 }
 
 #' @export
-find_focal_and_ref_exparts_for_split <- function(g, source, sink, a_split, a_parsed_partitions, a_parsed_paths, a_tx_ex_parts, a_tx_to_replace, a_exonpath_to_remove, a_expartpath_to_replace, a_focalexons_df) {
+find_focal_and_ref_exparts_for_split <- function(g, source, sink, a_split, a_parsed_partitions, a_parsed_paths, a_tx_ex_parts, a_exonpath_to_remove, a_expartpath_to_replace, a_focalexons_df) {
 
       group1 = as.numeric(a_split$group1)
       group2 = as.numeric(a_split$group2)
       tx1 = unique(unlist( a_parsed_partitions[group1]))
       tx2 = unique(unlist( a_parsed_partitions[group2]))
-      a_tx_to_replace <- c(a_tx_to_replace, tx1)
-      a_tx_to_replace <- c(a_tx_to_replace, tx2)
       print (tx1)
       print (tx2)
 
@@ -437,7 +435,7 @@ find_focal_and_ref_exparts_for_split <- function(g, source, sink, a_split, a_par
       )
       print(new_row)
       a_focalexons_df <- rbind(a_focalexons_df, new_row)
-  return(list(tx_to_replace = a_tx_to_replace, exonpath_to_remove = a_exonpath_to_remove, expartpath_to_replace = a_expartpath_to_replace, focalexons_df = a_focalexons_df))
+  return(list(exonpath_to_remove = a_exonpath_to_remove, expartpath_to_replace = a_expartpath_to_replace, focalexons_df = a_focalexons_df))
 }
 
 
@@ -503,12 +501,12 @@ replace_edges_after_bubble_collapse <- function(g, edges_to_replace) {
 
 
 #' @export
-update_txpaths_after_bubble_collapse <- function(g, tx_to_replace, subnamelist, txmat) {
+update_txpaths_after_bubble_collapse <- function(g, tx_to_update, subnamelist, txmat) {
   for (x in 1:(length(subnamelist)-1)) {
     e = igraph::E(g)[ .from(subnamelist[x]) & .to(subnamelist[x+1]) & (igraph::E(g)$ex_or_in != 'ex_part') ]
     for (tx in rownames(txmat)) {
       igraph::edge_attr(g, tx, index = e) <- (txmat[tx,subnamelist[x]] && txmat[tx,subnamelist[x+1]])
-      if (tx %in% tx_to_replace) {
+      if (tx %in% tx_to_update) {
         igraph::edge_attr(g, tx, index = e) <- TRUE
       }
     }
@@ -516,6 +514,21 @@ update_txpaths_after_bubble_collapse <- function(g, tx_to_replace, subnamelist, 
   return (g)
 }
 
+
+#' @export
+edge_in_txpath <- function(g, trans, e){
+   sapply(igraph::edge_attr(g)[trans], `[`, e)
+}
+
+
+#' @export
+find_tx_to_update <- function(g, trans, edges_to_remove) {
+  tx_to_update = c()
+  for ( e in edges_to_remove) {
+    tx_to_update = c(tx_to_update, trans[edge_in_txpath(g, trans, e)])
+  }
+  unique(tx_to_update)
+}
 
 
 #' Compute focal exons from graph and splicing structure
@@ -547,34 +560,32 @@ focal_exons_gene_powerset <- function(gene, g, sg, outdir, max_powerset = 10000,
 
     #txpaths <- lapply(SplicingGraphs::txpath(sg), as.character)
     txpaths <- grase::txpath_from_edgeattr(g)
-    tx_exonpaths = lapply(txpaths, from_vpath_to_exon_path, g=g)
-    tx_ex_parts = lapply(tx_exonpaths, from_exon_path_to_exonic_part_path, g=g)
+    tx_exonpaths = lapply(txpaths, grase::from_vpath_to_exon_path, g=g)
+    tx_ex_parts = lapply(tx_exonpaths, grase::from_exon_path_to_exonic_part_path, g=g)
 
     parsed_paths <- lapply(bubbles_ordered$paths[[bubble_idx]], function(x) strsplit(gsub("[{}]", "", x), ",")[[1]])
     parsed_partitions <- lapply(bubbles_ordered$partitions[[bubble_idx]], function(x) strsplit(gsub("[{}]", "", x), ",")[[1]])
     n_partitions = length(parsed_partitions)
     vpaths = lapply(parsed_paths, function(vec) c(source, vec, sink))
-    epaths = lapply(vpaths, from_vpath_to_exon_path, g=g) 
-    ex_part_paths <- lapply(epaths, from_exon_path_to_exonic_part_path, g=g)
+    epaths = lapply(vpaths, grase::from_vpath_to_exon_path, g=g) 
+    ex_part_paths <- lapply(epaths, grase::from_exon_path_to_exonic_part_path, g=g)
     ex_index = igraph::edge_attr(g)$ex_or_in == 'ex_part'
     ex_part_paths <- lapply(ex_part_paths, function(x) {return (x[igraph::edge_attr(g)$ex_or_in[x] == 'ex_part'])})
     names(ex_part_paths)  = sapply(parsed_partitions, function(vec) paste(vec, collapse=","))
     names(ex_part_paths)  = 1:length(ex_part_paths) 
 
     print (paste("ex_part_paths len:", length(ex_part_paths)))
-    contain_dag <- path_subset_relation(ex_part_paths) 
+    contain_dag <- grase::path_subset_relation(ex_part_paths) 
     print (paste("contain_dag len:", length(igraph::E(g))))
-    valid_splits <- valid_partitions(contain_dag, max_powerset)
-    valid_splits <- remove_symmetric_splits(valid_splits)
+    valid_splits <- grase::valid_partitions(contain_dag, max_powerset)
+    valid_splits <- grase::remove_symmetric_splits(valid_splits)
     rm(contain_dag)
     
     exonpath_to_remove <- integer(0)
     expartpath_to_replace <- integer(0)
-    tx_to_replace <- integer(0)
     for (split in valid_splits) {
 
-      retval = find_focal_and_ref_exparts_for_split(g=g, source=source, sink=sink,  a_split=split, a_parsed_partitions=parsed_partitions, a_parsed_paths=parsed_paths, a_tx_ex_parts=tx_ex_parts, a_tx_to_replace=tx_to_replace, a_exonpath_to_remove=exonpath_to_remove, a_expartpath_to_replace=expartpath_to_replace, a_focalexons_df=focalexons_df) 
-      tx_to_replace = retval$tx_to_replace
+      retval = grase::find_focal_and_ref_exparts_for_split(g=g, source=source, sink=sink,  a_split=split, a_parsed_partitions=parsed_partitions, a_parsed_paths=parsed_paths, a_tx_ex_parts=tx_ex_parts, a_exonpath_to_remove=exonpath_to_remove, a_expartpath_to_replace=expartpath_to_replace, a_focalexons_df=focalexons_df) 
       exonpath_to_remove = retval$exonpath_to_remove 
       expartpath_to_replace = retval$expartpath_to_replace 
       focalexons_df = retval$focalexons_df
@@ -584,23 +595,28 @@ focal_exons_gene_powerset <- function(gene, g, sg, outdir, max_powerset = 10000,
       # collapse source to sink on graph
       # remove edges that are part of the bubble and replace with exon edges
       edges_to_remove = unique(unlist(exonpath_to_remove))
+      print('edges_to_remove')
+      print(igraph::E(g)[edges_to_remove])
+      tx_to_update <- grase::find_tx_to_update(g, trans, edges_to_remove)
       g <- igraph::delete_edges(g, edges_to_remove)
       # replace missing edges
-      retval = find_edges_to_replace_after_bubble_collapse(g, source, sink)
+      retval = grase::find_edges_to_replace_after_bubble_collapse(g, source, sink)
       edges_to_replace = retval$edges_to_replace
       subnamelist = retval$subnamelist
-      g <- replace_edges_after_bubble_collapse(g, edges_to_replace) 
-      g <- update_txpaths_after_bubble_collapse(g, tx_to_replace, subnamelist, txmat) 
+      #print('edges_to_replace')
+      #print(matrix(unlist(edges_to_replace), ncol = 5, byrow = TRUE))
+      g <- grase::replace_edges_after_bubble_collapse(g, edges_to_replace) 
+      g <- grase::update_txpaths_after_bubble_collapse(g, tx_to_update, subnamelist, txmat) 
 
       # collapse source to sink on txmat
-      txmat[tx_to_replace, subnamelist] = TRUE
+      txmat[tx_to_update, subnamelist] = TRUE
       # update bubbles_df
       bubbles_updated <- grase::detect_bubbles_from_mat(txmat)
       if (nrow(bubbles_updated) == 0) {
         print ("collapsed all bubbles. exiting the loop")
         break
       }
-      bubbles_updated_ordered = bubble_ordering(g, bubbles_updated)     
+      bubbles_updated_ordered = grase::bubble_ordering(g, bubbles_updated)     
       bubbles_ordered = rbind.data.frame(bubbles_ordered[(1:bubble_idx),],bubbles_updated_ordered)
     }
   }
