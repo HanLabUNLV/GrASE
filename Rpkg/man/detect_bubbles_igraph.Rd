@@ -2,10 +2,10 @@
 % Please edit documentation in R/bubbles.R
 \name{detect_bubbles_igraph}
 \alias{detect_bubbles_igraph}
-\title{Wrapper: detect bubbles on igraph DAG}
+\title{Main bubble detection from matrix}
 \usage{
 detect_bubbles_igraph(g)
 }
 \description{
-Wrapper: detect bubbles on igraph DAG
+Main bubble detection from matrix
 }

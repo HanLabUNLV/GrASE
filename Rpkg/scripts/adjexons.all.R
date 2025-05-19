@@ -6,6 +6,7 @@ library(dplyr)
 library(doParallel)
 library(foreach)
 library(grase)
+library(SplicingGraphs)
 
 indir = '/data2/han_lab/stevepark/SplicingGraphs/indir/'
 outdir = '/data2/han_lab/stevepark/SplicingGraphs/indir/'
@@ -52,6 +53,9 @@ results <- foreach(
   gr <- gr[!(rtracklayer::mcols(gr)$type %in% c("start_codon", "stop_codon"))]
   txdb <- txdbmaker::makeTxDbFromGRanges(gr)
   sg <- SplicingGraphs::SplicingGraphs(txdb, min.ntx = 1)
+  png(paste0(gene, ".sg.pdf"), width = 5000, height = 5000)
+  plot(SplicingGraphs::sgraph(sg))
+  dev.off()
 
 
   edges_by_gene <- SplicingGraphs::sgedgesByGene(sg)
