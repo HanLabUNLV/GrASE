@@ -130,6 +130,8 @@ is_bubble <- function (txpathmat, i, j)
 
 
 
+
+
 #' copied from SplicingGraphs
 #' @export
 get_bubble_variants <- function (txpathmat, sgnodetypes, i, j) 
@@ -282,19 +284,29 @@ get_bubble_variants_igraph <- function (g, v_start, v_end)
   excluded <- c("name", "position", "sg_id", "id")
   trans <- setdiff(attrs, excluded)
 
-  txbase <- trans[unlist(igraph::vertex_attr(g, index=v_start)[trans]) & unlist(igraph::vertex_attr(g, index=v_end)[trans])] 
+  v_names = igraph::V(g)$name
+  txbase <- unlist(igraph::vertex_attr(g, index=v_start)[trans]) & unlist(igraph::vertex_attr(g, index=v_end)[trans])
+  txbase_names <- trans[txbase] 
   internal_nodes = igraph::V(g)[v_names[(as.integer(v_start)+1):(as.integer(v_end)-1)]]$name
-  bubble_submat <- igraph::vertex_attr(g, index=internal_nodes)[txbase]  
+ 
+  for (n in internal_nodes) { 
+    tx_internal = unlist(igraph::vertex_attr(g, index=n)[trans])
+    if (all(tx_internal >= txbase))
+      return (list())
+  } 
+
+  bubble_submat <- igraph::vertex_attr(g, index=internal_nodes)[txbase_names]  
   if (length(bubble_submat) == 0)
     return (list())
   bubble_submat <- matrix(unlist(bubble_submat), nrow=length(bubble_submat), byrow=TRUE)
-  rownames(bubble_submat) = txbase
+  rownames(bubble_submat) = txbase_names
   colnames(bubble_submat) = internal_nodes
   bubble_submat <- bubble_submat[, colSums(bubble_submat) != 0L, drop = FALSE] # only keep nodes that are present in txbase
   if (length(bubble_submat) == 0)
     return (list())
 
   bubble_submat <- bubble_submat+0
+  bubble_submat_colnames = colnames(bubble_submat)
   row_strs   <- apply(bubble_submat, 1, paste, collapse = "")
   patterns <- unique(row_strs)
 
@@ -327,15 +339,16 @@ get_bubble_variants_igraph_slow <- function (g, bubble_paths, v_start, v_end)
 
 #' bubble detection between v_start and v_end
 #' @export
-detect_bubbles_i_j_igraph <- function(v_start, v_end, g, sgnodetypes)
+detect_bubbles_i_j_igraph <- function(v_start, v_end, g)
 {
+  
     #bubble_paths = bubble_paths_igraph(g, v_start, v_end)
-    print(paste("check", v_start, v_end))
-    bubble_variants <- get_bubble_variants_igraph(g, v_start, v_end)
+    #print(paste("check", v_start, v_end))
+    bubble_variants <- grase::get_bubble_variants_igraph(g, v_start, v_end)
     bubble_d <- length(bubble_variants$partition)
     if (bubble_d <= 1L) 
         return (NULL)
-    print(paste("bubble", v_start, v_end))
+    #print(paste("bubble", v_start, v_end))
     ans_source <- v_start$name
     ans_sink <- v_end$name
     ans_d <- bubble_d
@@ -366,7 +379,7 @@ detect_bubbles_igraph <- function (g)
   ex_parts = igraph::E(g_tmp)[igraph::edge_attr(g_tmp)$ex_or_in == 'ex_part']
   g_tmp = igraph::delete_edges(g_tmp, ex_parts)
  
-  sgnodetypes <- grase::get_sgnodetypes_igraph(g_tmp)
+  #sgnodetypes <- grase::get_sgnodetypes_igraph(g_tmp)
   ans_source <- ans_sink <- ans_AScode <- character(0)
   ans_d <- integer(0)
   ans_partitions <- ans_paths <- IRanges::CharacterList()
@@ -377,7 +390,7 @@ detect_bubbles_igraph <- function (g)
     for (j in (i + 2L):n_nodes) {
       v_start = igraph::V(g_tmp)[i]
       v_end = igraph::V(g_tmp)[j]
-      retval = detect_bubbles_i_j_igraph(v_start, v_end, g_tmp, sgnodetypes)
+      retval = grase::detect_bubbles_i_j_igraph(v_start, v_end, g_tmp)
       if (is.null(retval)) 
         next
       

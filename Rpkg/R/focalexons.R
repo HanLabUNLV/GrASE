@@ -659,7 +659,7 @@ focal_exons_gene_powerset <- function(gene, g, sg, outdir, max_powerset = 10000,
   txmat <- grase::make_matrix_from_txpath_igraph(txpaths)
   txmat_orig = txmat 
   trans <- rownames(txmat)
-  bubbles_df <- grase::detect_bubble_igraph_wrapper(g)
+  bubbles_df <- grase::detect_bubbles_igraph_wrapper(g)
   #bubbles_ordered = grase::bubble_ordering(g, bubbles_df)
   bubbles_ordered = grase::bubble_ordering3(g, bubbles_df)
   bubbles_orig = bubbles_ordered

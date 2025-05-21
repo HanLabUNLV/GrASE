@@ -4,7 +4,7 @@
 \alias{detect_bubbles_i_j_igraph}
 \title{bubble detection between v_start and v_end}
 \usage{
-detect_bubbles_i_j_igraph(v_start, v_end, g, sgnodetypes)
+detect_bubbles_i_j_igraph(v_start, v_end, g)
 }
 \description{
 bubble detection between v_start and v_end

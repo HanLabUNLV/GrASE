@@ -53,7 +53,7 @@ results <- foreach(
   gr <- gr[!(rtracklayer::mcols(gr)$type %in% c("start_codon", "stop_codon"))]
   txdb <- txdbmaker::makeTxDbFromGRanges(gr)
   sg <- SplicingGraphs::SplicingGraphs(txdb, min.ntx = 1)
-  png(paste0(gene, ".sg.pdf"), width = 5000, height = 5000)
+  pdf(paste0(gene, ".sg.pdf"))
   plot(SplicingGraphs::sgraph(sg))
   dev.off()
 
