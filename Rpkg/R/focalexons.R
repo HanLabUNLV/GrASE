@@ -726,7 +726,12 @@ focal_exons_gene_powerset <- function(gene, g, sg, outdir, max_powerset = 10000,
     return (NULL) 
   }
 
-  for (bubble_idx in seq_along(bubbles_ordered$partitions)) {
+  for (bubble_idx in 1:nrow(bubbles_ordered)) {
+
+    if (bubble_idx > nrow(bubbles_ordered)) {
+        print ("collapsed all bubbles. exiting the loop 1")
+        break
+    }
     source <- bubbles_ordered$source[[bubble_idx]]
     sink <- bubbles_ordered$sink[[bubble_idx]]
     if (source == "R" && sink == "L") next
@@ -762,15 +767,10 @@ focal_exons_gene_powerset <- function(gene, g, sg, outdir, max_powerset = 10000,
     }
 
     if (collapse_bubbles) {
-      # collapse source to sink on graph
-      # remove edges that are part of the bubble and keep one representative path.
       if (source == "R" || sink == "L") next
-
       n_partitions = length(parsed_partitions)
       tx_counts = unlist(lapply(parsed_partitions, length))
-      # find the appropriate paths to remove
       ordered_idx = order(tx_counts)
-      # find the right epaths to remove.
       txs_with_epath = grase::find_tx_with_epath(g, trans, epaths)
       idx_to_remove = c()
       idx_to_keep = c() 
@@ -780,8 +780,6 @@ focal_exons_gene_powerset <- function(gene, g, sg, outdir, max_powerset = 10000,
         # if so cannot remove the path, if not can remove.
         all_vec <- sort(unique(unlist(tx_list)))
         parsed_part <- sort(parsed_partitions[[idx]])
-        #first_vec <- tx_list[[1]]
-        #all_equal <- all(sapply(tx_list, function(v) identical(v, first_vec)))
         if (identical(all_vec, parsed_part)) {
           # all the edges are covered by same transcripts. no partial coverage. can remove the edge.
           idx_to_remove = c(idx_to_remove, idx)
@@ -798,7 +796,6 @@ focal_exons_gene_powerset <- function(gene, g, sg, outdir, max_powerset = 10000,
         print("no edges to remove: next")
         next;
       }
-     
       tx_to_update = txs_with_epath[idx_to_remove] 
       for (edges in epaths[idx_to_remove]) {
         g <- igraph::delete_edges(g, edges)
@@ -816,7 +813,7 @@ focal_exons_gene_powerset <- function(gene, g, sg, outdir, max_powerset = 10000,
       finished_bubbles_idx = (bubbles_updated_ordered$source %in% finished_sources) & (bubbles_updated_ordered$sink %in% finished_sinks)
       bubbles_updated_ordered = bubbles_updated_ordered[!finished_bubbles_idx,]
       if (nrow(bubbles_updated_ordered) == 0) {
-        print ("collapsed all bubbles. exiting the loop")
+        print ("collapsed all bubbles. exiting the loop 2")
         break
       }
       bubbles_ordered = rbind.data.frame(bubbles_ordered[1:bubble_idx,1:ncol(bubbles_df)],bubbles_updated_ordered[,1:ncol(bubbles_df)])
