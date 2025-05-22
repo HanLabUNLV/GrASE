@@ -390,9 +390,64 @@ path_subset_relation <-function(sets) {
 }
 
 
+
+
+#' @export
+valid_partitions <- function(dag) {
+  nodes <- igraph::V(dag)$name
+  n     <- length(nodes)
+
+  # reverse the graph so that "downward-closed" in dag becomes "lower set" in dag_rev
+  dag_rev <- igraph::reverse_edges(dag)
+
+  # get a topological ordering of dag_rev
+  topo <- igraph::topo_sort(dag_rev, mode="out")$name
+
+  # for each node, precompute its direct predecessors in dag_rev
+  preds <- lapply(topo, function(v) {
+    igraph::neighbors(dag_rev, v, mode="in")$name
+  })
+  names(preds) <- topo
+
+  valid_splits <- vector("list", 0)
+  split_idx    <- 1L
+
+  # recursively build all lower‐sets (order ideals) in dag_rev
+  recurse <- function(i, current_set) {
+    if (i > n) {
+      # record only non‐empty, non‐full sets
+      k <- length(current_set)
+      if (k > 0 && k < n) {
+        # inside your leaf handler
+        valid_splits[[split_idx]] <<- list(
+          group1 = sort(current_set),
+          group2 = sort(setdiff(nodes, current_set))
+        )
+        split_idx <<- split_idx + 1L
+      }
+      return()
+    }
+
+    v <- topo[i]
+    # if all predecessors of v are already in current_set, we *can* include v
+    if (all(preds[[v]] %in% current_set)) {
+      recurse(i + 1L, c(current_set, v))
+    }
+    # always also branch on *not* including v
+    recurse(i + 1L, current_set)
+  }
+
+  recurse(1L, character(0))
+  valid_splits
+}
+
+
+
+
+
 #' find valid partitions that represents the hierarchical relationship between paths 
 #' @export
-valid_partitions <- function(g, max_powerset) {
+valid_partitions_slow <- function(g, max_powerset) {
 
   nodes <- igraph::V(g)$name
   edges <- igraph::E(g)
@@ -697,7 +752,7 @@ focal_exons_gene_powerset <- function(gene, g, sg, outdir, max_powerset = 10000,
     print (paste("ex_part_paths len:", length(ex_part_paths)))
     contain_dag <- grase::path_subset_relation(ex_part_paths) 
     print (paste("contain_dag len:", length(igraph::E(g))))
-    valid_splits <- grase::valid_partitions(contain_dag, max_powerset)
+    valid_splits <- grase::valid_partitions(contain_dag)
     valid_splits <- grase::remove_symmetric_splits(valid_splits)
     rm(contain_dag)
     
@@ -755,15 +810,15 @@ focal_exons_gene_powerset <- function(gene, g, sg, outdir, max_powerset = 10000,
       # update bubbles_df
       g <- grase::set_txpath_to_vertex_attr(g)
       bubbles_updated <- grase::detect_bubbles_igraph(g)
-      if (nrow(bubbles_updated) == 0) {
-        print ("collapsed all bubbles. exiting the loop")
-        break
-      }
       bubbles_updated_ordered = grase::bubble_ordering3(g, bubbles_updated)     
       finished_sources = bubbles_ordered$source[(1:bubble_idx)]
       finished_sinks = bubbles_ordered$sink[(1:bubble_idx)]
       finished_bubbles_idx = (bubbles_updated_ordered$source %in% finished_sources) & (bubbles_updated_ordered$sink %in% finished_sinks)
       bubbles_updated_ordered = bubbles_updated_ordered[!finished_bubbles_idx,]
+      if (nrow(bubbles_updated_ordered) == 0) {
+        print ("collapsed all bubbles. exiting the loop")
+        break
+      }
       bubbles_ordered = rbind.data.frame(bubbles_ordered[1:bubble_idx,1:ncol(bubbles_df)],bubbles_updated_ordered[,1:ncol(bubbles_df)])
     }
   }
