@@ -749,7 +749,7 @@ focal_exons_gene_powerset <- function(gene, g, sg, outdir, max_powerset = 10000,
         g <- igraph::delete_edges(g, edges)
       }
       epaths = lapply(vpaths, grase::from_vpath_to_exon_path, g=g) 
-      epaths_to_keep = epaths[[idx_to_keep]]
+      epaths_to_keep = epaths[idx_to_keep]
       g <- grase::update_txpaths_after_bubble_collapse2(g, tx_to_update, epaths_to_keep) 
 
       # update bubbles_df
