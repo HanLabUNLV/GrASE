@@ -649,7 +649,7 @@ update_txpaths_after_bubble_collapse2 <- function(g, tx_list, epath) {
 
 #' Compute focal exons from graph and splicing structure
 #' @export
-focal_exons_gene_powerset <- function(gene, g, sg, outdir, max_powerset = 1000, collapse_bubbles=TRUE) {
+focal_exons_gene_powerset <- function(gene, g, sg, outdir, max_powerset = 10000, collapse_bubbles=TRUE) {
 
 
   focalexons_df <- data.frame()
@@ -717,14 +717,17 @@ focal_exons_gene_powerset <- function(gene, g, sg, outdir, max_powerset = 1000, 
       ordered_idx = order(tx_counts)
       # find the right epaths to remove.
       txs_with_epath = grase::find_tx_with_epath(g, trans, epaths)
-      edges_to_remove = list()
       idx_to_remove = c()
       idx_to_keep = c() 
       for (idx in ordered_idx) {
         tx_list = txs_with_epath[[idx]]
-        first_vec <- tx_list[[1]]
-        all_equal <- all(sapply(tx_list, function(v) identical(v, first_vec)))
-        if (all_equal) {
+        # have to check if there are any other transcripts using these edges outside of the bubble. 
+        # if so cannot remove the path, if not can remove.
+        all_vec <- sort(unique(unlist(tx_list)))
+        parsed_part <- sort(parsed_partitions[[idx]])
+        #first_vec <- tx_list[[1]]
+        #all_equal <- all(sapply(tx_list, function(v) identical(v, first_vec)))
+        if (identical(all_vec, parsed_part)) {
           # all the edges are covered by same transcripts. no partial coverage. can remove the edge.
           idx_to_remove = c(idx_to_remove, idx)
         }
@@ -735,16 +738,14 @@ focal_exons_gene_powerset <- function(gene, g, sg, outdir, max_powerset = 1000, 
       if(length(idx_to_keep) == 0) {
         idx_to_keep = idx_to_remove[length(idx_to_remove)]
         idx_to_remove = idx_to_remove[-length(idx_to_remove)]
-        edges_to_keep = epaths[idx_to_keep]
-        edges_to_remove = epaths[idx_to_remove]
       }
-      if ((length(edges_to_remove) == 0) || (length(edges_to_keep) == 0)) {
+      if ((length(idx_to_remove) == 0) || (length(idx_to_keep) == 0)) {
         print("no edges to remove: next")
         next;
       }
      
       tx_to_update = txs_with_epath[idx_to_remove] 
-      for (edges in edges_to_remove) {
+      for (edges in epaths[idx_to_remove]) {
         g <- igraph::delete_edges(g, edges)
       }
       epaths = lapply(vpaths, grase::from_vpath_to_exon_path, g=g) 
