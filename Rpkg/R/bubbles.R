@@ -374,11 +374,17 @@ detect_bubbles_i_j_igraph <- function(v_start, v_end, g)
 #' @export
 detect_bubbles_igraph <- function (g) 
 {
+  # set transcript vertex_attr 
+  if (length(igraph::vertex_attr_names(g)) == 4)  {
+    g <- grase::set_txpath_to_vertex_attr(g)
+  }
+ 
   g_tmp = g
   # lose all expart edges
   ex_parts = igraph::E(g_tmp)[igraph::edge_attr(g_tmp)$ex_or_in == 'ex_part']
   g_tmp = igraph::delete_edges(g_tmp, ex_parts)
- 
+
+
   #sgnodetypes <- grase::get_sgnodetypes_igraph(g_tmp)
   ans_source <- ans_sink <- ans_AScode <- character(0)
   ans_d <- integer(0)
@@ -407,15 +413,4 @@ detect_bubbles_igraph <- function (g)
 }
 
 
-
-
-#' Wrapper: detect bubbles on igraph DAG
-#' @export
-detect_bubbles_igraph_wrapper <- function(g) {
-  if (!igraph::is_directed(g)) stop("Graph must be directed DAG")
-  # generate txpaths
-  g <- grase::set_txpath_to_vertex_attr(g)
-  bubbles_df <- grase::detect_bubbles_igraph(g)
-  bubbles_df
-}
 

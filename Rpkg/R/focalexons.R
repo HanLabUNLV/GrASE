@@ -244,7 +244,7 @@ bubble_ordering <- function(g, bubbles_df) {
   topo_idx <- setNames(seq_along(topo), names(topo))
 
   bubbles_list = split(as.data.frame(bubbles_df), seq(nrow(bubbles_df)))
-  bubble_topo_intervals <- lapply(bubbles_list, get_bubble_topo_interval, topo_idx = topo_idx)
+  bubble_topo_intervals <- lapply(bubbles_list, grase::get_bubble_topo_interval, topo_idx = topo_idx)
   bubble_depths <- get_bubble_depths(bubble_topo_intervals)
   ordered_bubbles <- bubbles_list[order(-bubble_depths)]
   do.call(rbind.data.frame, ordered_bubbles)
@@ -546,6 +546,7 @@ find_tx_with_epath <- function(g, trans, edges_list) {
       print(e)
       tx_to_update[[epath_name]] <- append(tx_to_update[[epath_name]], list(trans[grase::edge_in_txpath(g, trans, e)]))
     }
+    names(tx_to_update[[epath_name]]) = edges
   }
   tx_to_update
 }
@@ -648,7 +649,7 @@ update_txpaths_after_bubble_collapse2 <- function(g, tx_list, epath) {
 
 #' Compute focal exons from graph and splicing structure
 #' @export
-focal_exons_gene_powerset <- function(gene, g, sg, outdir, max_powerset = 10000, collapse_bubbles=TRUE) {
+focal_exons_gene_powerset <- function(gene, g, sg, outdir, max_powerset = 1000, collapse_bubbles=TRUE) {
 
 
   focalexons_df <- data.frame()
@@ -659,7 +660,7 @@ focal_exons_gene_powerset <- function(gene, g, sg, outdir, max_powerset = 10000,
   txmat <- grase::make_matrix_from_txpath_igraph(txpaths)
   txmat_orig = txmat 
   trans <- rownames(txmat)
-  bubbles_df <- grase::detect_bubbles_igraph_wrapper(g)
+  bubbles_df <- grase::detect_bubbles_igraph(g)
   #bubbles_ordered = grase::bubble_ordering(g, bubbles_df)
   bubbles_ordered = grase::bubble_ordering3(g, bubbles_df)
   bubbles_orig = bubbles_ordered
@@ -714,9 +715,8 @@ focal_exons_gene_powerset <- function(gene, g, sg, outdir, max_powerset = 10000,
       tx_counts = unlist(lapply(parsed_partitions, length))
       # find the appropriate paths to remove
       ordered_idx = order(tx_counts)
-      epaths_ordered = epaths[ordered_idx]
       # find the right epaths to remove.
-      txs_with_epath = grase::find_tx_with_epath(g, trans, epaths_ordered)
+      txs_with_epath = grase::find_tx_with_epath(g, trans, epaths)
       edges_to_remove = list()
       idx_to_remove = c()
       idx_to_keep = c() 
@@ -735,8 +735,8 @@ focal_exons_gene_powerset <- function(gene, g, sg, outdir, max_powerset = 10000,
       if(length(idx_to_keep) == 0) {
         idx_to_keep = idx_to_remove[length(idx_to_remove)]
         idx_to_remove = idx_to_remove[-length(idx_to_remove)]
-        edges_to_keep = epaths_ordered[idx_to_keep]
-        edges_to_remove = epaths_ordered[idx_to_remove]
+        edges_to_keep = epaths[idx_to_keep]
+        edges_to_remove = epaths[idx_to_remove]
       }
       if ((length(edges_to_remove) == 0) || (length(edges_to_keep) == 0)) {
         print("no edges to remove: next")
@@ -751,11 +751,9 @@ focal_exons_gene_powerset <- function(gene, g, sg, outdir, max_powerset = 10000,
       epaths_to_keep = epaths[[idx_to_keep]]
       g <- grase::update_txpaths_after_bubble_collapse2(g, tx_to_update, epaths_to_keep) 
 
-      # replace source to sink on txmat
-      txmat <- grase::update_txmat_after_bubble_collapse2(g, tx_to_update, parsed_partitions[[idx_to_keep]], source, sink, txmat) 
-
       # update bubbles_df
-      bubbles_updated <- grase::detect_bubble_igraph(g)
+      g <- grase::set_txpath_to_vertex_attr(g)
+      bubbles_updated <- grase::detect_bubbles_igraph(g)
       if (nrow(bubbles_updated) == 0) {
         print ("collapsed all bubbles. exiting the loop")
         break
