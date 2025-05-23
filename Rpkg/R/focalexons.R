@@ -517,7 +517,7 @@ remove_symmetric_splits <- function(splits){
 }
 
 #' @export
-find_focal_and_ref_exparts_for_split <- function(g, source, sink, a_split, a_parsed_partitions, a_parsed_paths, a_tx_ex_parts, a_focalexons_df) {
+find_focal_and_ref_exparts_for_split <- function(g, source, sink, a_split, a_parsed_partitions, a_parsed_paths, a_tx_ex_parts, a_focalexons_df, gene=gene) {
 
       group1 = as.numeric(a_split$group1)
       group2 = as.numeric(a_split$group2)
@@ -763,7 +763,7 @@ focal_exons_gene_powerset <- function(gene, g, sg, outdir, max_powerset = 10000,
     rm(contain_dag)
     
     for (split in valid_splits) {
-      retval = grase::find_focal_and_ref_exparts_for_split(g=g, source=source, sink=sink,  a_split=split, a_parsed_partitions=parsed_partitions, a_parsed_paths=parsed_paths, a_tx_ex_parts=tx_ex_parts, a_focalexons_df=focalexons_df) 
+      retval = grase::find_focal_and_ref_exparts_for_split(g=g, source=source, sink=sink,  a_split=split, a_parsed_partitions=parsed_partitions, a_parsed_paths=parsed_paths, a_tx_ex_parts=tx_ex_parts, a_focalexons_df=focalexons_df, gene=gene) 
       focalexons_df = retval$focalexons_df
     }
 
