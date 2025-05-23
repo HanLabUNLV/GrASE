@@ -18,7 +18,7 @@ transcripts_from_igraph <- function(g) {
 txpath_from_edgeattr <- function(g, type="exon") {
 
   # Identify transcript attributes on edges (exclude known graph attrs)
-  trans <- igraph::transcripts_from_igraph(g)
+  trans <- grase::transcripts_from_igraph(g)
   # Determine root and leaf vertices
   root <- if ("R" %in% igraph::V(g)$name) "R" else stop("No root 'R' vertex found")
   leaf <- if ("L" %in% igraph::V(g)$name) "L" else stop("No leaf 'L' vertex found")
