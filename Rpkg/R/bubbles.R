@@ -1,13 +1,23 @@
 # R/bubbles.R
 
 
-#' Generate transcript-paths from igraph edge attributes
+
+
 #' @export
-txpath_from_edgeattr <- function(g, type="exon") {
-  # Identify transcript attributes on edges (exclude known graph attrs)
+transcripts_from_igraph <- function(g) {
   attrs <- igraph::edge_attr_names(g)
   excluded <- c("sgedge_id", "ex_or_in", "from_pos", "to_pos", "dexseq_fragment")
   trans <- setdiff(attrs, excluded)
+}
+
+
+
+#' Generate transcript-paths from igraph edge attributes
+#' @export
+txpath_from_edgeattr <- function(g, type="exon") {
+
+  # Identify transcript attributes on edges (exclude known graph attrs)
+  trans <- igraph::transcripts_from_igraph(g)
   # Determine root and leaf vertices
   root <- if ("R" %in% igraph::V(g)$name) "R" else stop("No root 'R' vertex found")
   leaf <- if ("L" %in% igraph::V(g)$name) "L" else stop("No leaf 'L' vertex found")
@@ -65,7 +75,7 @@ set_txpath_to_vertex_attr <- function(g)
 
 #' Build transcript-path logical matrix from index lists
 #' @export
-make_matrix_from_txpath_igraph <- function(txpath_vertex_list) {
+make_matrix_from_txpath_igraph <- function(g, txpath_vertex_list) {
    
   attrs <- igraph::vertex_attr_names(g)
   excluded <- c("name", "position", "sg_id", "id")
@@ -271,7 +281,7 @@ bubble_paths_igraph <- function(g, v_start, v_end) {
       "purge the ex_part edges before running bubble detection")
   }
   
-  paths = igraph::all_simple_paths(g_tmp, from=v_start, to=v_end)
+  paths = igraph::all_simple_paths(g, from=v_start, to=v_end)
   paths
 }
 
