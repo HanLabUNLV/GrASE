@@ -53,11 +53,11 @@ SG2igraph <- function(geneID,  gene_sg, gene_graph) {
       paste(x, collapse=";")    # you can choose comma or other separator
     }
   }, USE.NAMES = FALSE)
-  write.table(g1.df, paste0(geneID, ".edgetable.txt"),  row.names=FALSE, sep="\t", quote=FALSE, col.names = TRUE)
+  #write.table(g1.df, paste0(geneID, ".edgetable.txt"),  row.names=FALSE, sep="\t", quote=FALSE, col.names = TRUE)
 
   node_coord = node_coord[!duplicated(node_coord$coord),] 
   nodes.df = data.frame( ID=node_coord$sgid)
-  write.table(nodes.df, paste0(geneID, ".vertices.txt"),  row.names=FALSE, sep="\t", quote=FALSE, col.names = TRUE)
+  #write.table(nodes.df, paste0(geneID, ".vertices.txt"),  row.names=FALSE, sep="\t", quote=FALSE, col.names = TRUE)
 
   drops <- c("seqnames","strand", "tx_id")
   g1.df = g1.df[ , !(names(g1.df) %in% drops)]

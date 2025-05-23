@@ -310,7 +310,7 @@ get_bubble_variants_igraph <- function (g, v_start, v_end)
   row_strs   <- apply(bubble_submat, 1, paste, collapse = "")
   patterns <- unique(row_strs)
 
-  partitions = sapply(seq_len(length(patterns)), function(i) names(row_strs[row_strs == patterns[i]]))
+  partitions = lapply(seq_len(length(patterns)), function(i) names(row_strs[row_strs == patterns[i]]))
   names(partitions) = patterns
   paths = lapply(seq_len(nrow(bubble_submat)), 
         function(i) bubble_submat_colnames[bubble_submat[i, ]==1])
