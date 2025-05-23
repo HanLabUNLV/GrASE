@@ -3,6 +3,7 @@
 
 
 
+#' get transcript names from igraph edge attributes
 #' @export
 transcripts_from_igraph <- function(g) {
   attrs <- igraph::edge_attr_names(g)
