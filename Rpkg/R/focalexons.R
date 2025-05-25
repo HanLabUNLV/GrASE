@@ -798,9 +798,12 @@ focal_exons_gene_powerset <- function(gene, g, sg, outdir, max_powerset = 10000,
         next;
       }
       tx_to_update = txs_with_epath[idx_to_remove] 
-      for (edges in epaths[idx_to_remove]) {
-        g <- igraph::delete_edges(g, edges)
-      }
+      edges_to_remove = unique(unlist(epaths[idx_to_remove]))
+      g <- igraph::delete_edges(g, edges_to_remove) # have to delete all edges in one command
+      # never delete edges by index in a loop. the index is not what you think after iteration. 
+      #for (edges in epaths[idx_to_remove]) {
+      #  g <- igraph::delete_edges(g, edges)
+      #}
       epaths = lapply(vpaths, grase::from_vpath_to_exon_path, g=g) 
       epaths_to_keep = epaths[idx_to_keep]
       g <- grase::update_txpaths_after_bubble_collapse2(g, tx_to_update, epaths_to_keep) 
