@@ -726,6 +726,10 @@ focal_exons_gene_powerset <- function(gene, g, sg, outdir, max_powerset = 10000,
     print("single transcript, no bubbles")
     return (NULL) 
   }
+  if (length(igraph::E(g)) > 1000) {
+    print("More than 1000 edges in grase graph, give up on finding focal exons")
+    return (NULL) 
+  }
 
   for (bubble_idx in 1:nrow(bubbles_ordered)) {
 
@@ -757,7 +761,7 @@ focal_exons_gene_powerset <- function(gene, g, sg, outdir, max_powerset = 10000,
 
     print (paste("ex_part_paths len:", length(ex_part_paths)))
     contain_dag <- grase::path_subset_relation(ex_part_paths) 
-    print (paste("contain_dag len:", length(igraph::E(g))))
+    print (paste("contain_dag len:", length(igraph::E(contain_dag))))
     valid_splits <- grase::valid_partitions(contain_dag)
     valid_splits <- grase::remove_symmetric_splits(valid_splits)
     rm(contain_dag)
