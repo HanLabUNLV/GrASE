@@ -62,14 +62,16 @@ SG2igraph <- function(geneID,  gene_sg, gene_graph) {
   # Subset the original data.frame to keep only those rows
   duplicated_coords <- node_coord[node_coord$coord %in% dup_coords, ]
 
-  if (nrow(duplicated_coords) > 0) {
-    dup_keep = as.data.frame(duplicated_coords)[1,'sgid']
-    dup_replace = as.data.frame(duplicated_coords)[2,'sgid']
-    
-    g1.df$from[g1.df$from == dup_replace] = dup_keep
-    g1.df$to[g1.df$to == dup_replace] = dup_keep
+  if (nrow(dup_coords) > 0) {
+    for (dup_coord in dup_coords) {
+      dup_keep = duplicated_coords[duplicated_coords$coord == dup_coord,][1,'sgid']
+      dup_replace = duplicated_coords[duplicated_coords$coord == dup_coord,][2,'sgid']
+      
+      g1.df$from[g1.df$from == dup_replace] = dup_keep
+      g1.df$to[g1.df$to == dup_replace] = dup_keep
 
-    node_coord = node_coord[node_coord$sgid != dup_replace,]
+      node_coord = node_coord[node_coord$sgid != dup_replace,]
+    }
   }
   nodes.df = data.frame( ID=node_coord$sgid)
   #write.table(nodes.df, paste0(geneID, ".vertices.txt"),  row.names=FALSE, sep="\t", quote=FALSE, col.names = TRUE)
@@ -136,6 +138,10 @@ map_DEXSeq_from_gff <- function(g, gff) {
       rightCoords[x] <- as.character(as.numeric(rightCoords[x]) + 1)
       v_right = igraph::V(g)[igraph::V(g)$position == rightCoords[x]]
       v_left = igraph::V(g)[igraph::V(g)$position == leftCoords[x]]
+      print("v_right:", v_right, "\n")
+      print("v_left:", v_left, "\n")
+      print("length(c(v_right, v_left)):", length(c(v_right, v_left)), "\n")
+      flush.console()
       g <- igraph::add_edges(g, c(v_right, v_left), attr = list(ex_or_in = c("ex_part"), dexseq_fragment = c(dex_frag[x])))
       eid = which(igraph::edge_attr(g, 'dexseq_fragment') == dex_frag[x])
       for (tid in trans) {
@@ -154,6 +160,10 @@ map_DEXSeq_from_gff <- function(g, gff) {
       rightCoords[x] <- as.character(as.numeric(rightCoords[x]) + 1)
       v_right = igraph::V(g)[igraph::V(g)$position == rightCoords[x]]
       v_left = igraph::V(g)[igraph::V(g)$position == leftCoords[x]]
+      cat("v_right:", v_right, "\n")
+      cat("v_left:", v_left, "\n")
+      cat("length(c(v_right, v_left)):", length(c(v_right, v_left)), "\n")
+      flush.console()
       g <- igraph::add_edges(g, c(v_left, v_right), attr = list(ex_or_in = c("ex_part"), dexseq_fragment = c(dex_frag[x])))
       eid = which(igraph::edge_attr(g, 'dexseq_fragment') == dex_frag[x])
       for (tid in trans) {
