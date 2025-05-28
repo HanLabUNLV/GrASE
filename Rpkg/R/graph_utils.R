@@ -35,6 +35,7 @@ SG2igraph <- function(geneID,  gene_sg, gene_graph) {
     node_coord = node_coord[order(-node_coord$coord),]
   }
 
+  node_coord <- format(node_coord, scientific = FALSE, trim = TRUE)
   node_coord = rbind.data.frame(c("R","R"), node_coord)
   node_coord = rbind.data.frame(node_coord, c("L","L"))
   rownames(node_coord) = node_coord$sgid
@@ -135,7 +136,7 @@ map_DEXSeq_from_gff <- function(g, gff) {
   if (g$strand == '-') {
     # For negative strand, reverse the orientation
     for (x in 1:length(rightCoords)) {
-      rightCoords[x] <- as.character(as.numeric(rightCoords[x]) + 1)
+      rightCoords[x] <- format(as.numeric(rightCoords[x]) + 1, scientific = FALSE, trim = TRUE)
       v_right = igraph::V(g)[igraph::V(g)$position == rightCoords[x]]
       v_left = igraph::V(g)[igraph::V(g)$position == leftCoords[x]]
       g <- igraph::add_edges(g, c(v_right, v_left), attr = list(ex_or_in = c("ex_part"), dexseq_fragment = c(dex_frag[x])))
@@ -153,7 +154,7 @@ map_DEXSeq_from_gff <- function(g, gff) {
   if (g$strand == '+') {
     # For positive strand, retain the orientation
     for (x in 1:length(rightCoords)) {
-      rightCoords[x] <- as.character(as.numeric(rightCoords[x]) + 1)
+      rightCoords[x] <- format(as.numeric(rightCoords[x]) + 1, scientific = FALSE, trim = TRUE)
       v_right = igraph::V(g)[igraph::V(g)$position == rightCoords[x]]
       v_left = igraph::V(g)[igraph::V(g)$position == leftCoords[x]]
       g <- igraph::add_edges(g, c(v_left, v_right), attr = list(ex_or_in = c("ex_part"), dexseq_fragment = c(dex_frag[x])))
