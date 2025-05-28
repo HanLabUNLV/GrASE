@@ -55,10 +55,13 @@ SG2igraph <- function(geneID,  gene_sg, gene_graph) {
   }, USE.NAMES = FALSE)
   #write.table(g1.df, paste0(geneID, ".edgetable.txt"),  row.names=FALSE, sep="\t", quote=FALSE, col.names = TRUE)
 
-  duplicated_coords <- node_coord %>%
-    group_by(coord) %>%
-    filter(n() > 1) %>%
-    ungroup()
+  # Create a frequency table of coordinates
+  coord_counts <- table(node_coord$coord)
+  # Identify coordinates that occur more than once
+  dup_coords <- names(coord_counts[coord_counts > 1])
+  # Subset the original data.frame to keep only those rows
+  duplicated_coords <- node_coord[node_coord$coord %in% dup_coords, ]
+
   if (nrow(duplicated_coords) > 0) {
     dup_keep = as.data.frame(duplicated_coords)[1,'sgid']
     dup_replace = as.data.frame(duplicated_coords)[2,'sgid']
