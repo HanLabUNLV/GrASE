@@ -386,7 +386,7 @@ detect_bubbles_i_j_igraph <- function(v_start, v_end, g)
 detect_bubbles_igraph <- function (g) 
 {
   # set transcript vertex_attr 
-  if (length(igraph::vertex_attr_names(g)) == 4)  {
+  if (length(igraph::vertex_attr_names(g)) <= 4)  {
     g <- grase::set_txpath_to_vertex_attr(g)
   }
  

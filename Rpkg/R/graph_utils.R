@@ -59,13 +59,15 @@ SG2igraph <- function(geneID,  gene_sg, gene_graph) {
     group_by(coord) %>%
     filter(n() > 1) %>%
     ungroup()
-  dup_keep = as.data.frame(duplicated_coords)[1,'sgid']
-  dup_replace = as.data.frame(duplicated_coords)[2,'sgid']
-  
-  g1.df$from[g1.df$from == dup_replace] = dup_keep
-  g1.df$to[g1.df$to == dup_replace] = dup_keep
+  if (nrow(duplicated_coords) > 0) {
+    dup_keep = as.data.frame(duplicated_coords)[1,'sgid']
+    dup_replace = as.data.frame(duplicated_coords)[2,'sgid']
+    
+    g1.df$from[g1.df$from == dup_replace] = dup_keep
+    g1.df$to[g1.df$to == dup_replace] = dup_keep
 
-  node_coord = node_coord[node_coord$sgid != dup_replace,]
+    node_coord = node_coord[node_coord$sgid != dup_replace,]
+  }
   nodes.df = data.frame( ID=node_coord$sgid)
   #write.table(nodes.df, paste0(geneID, ".vertices.txt"),  row.names=FALSE, sep="\t", quote=FALSE, col.names = TRUE)
 
