@@ -717,15 +717,16 @@ focal_exons_gene_powerset <- function(gene, g, sg, outdir, max_powerset = 10000,
   #trans <- rownames(txmat)
   trans <- grase::transcripts_from_igraph(g)
   bubbles_df <- grase::detect_bubbles_igraph(g)
+  if ( nrow(bubbles_df) == 0) {
+    print("single transcript, no bubbles")
+    return (NULL) 
+  }
+
   #bubbles_ordered = grase::bubble_ordering(g, bubbles_df)
   bubbles_ordered = grase::bubble_ordering3(g, bubbles_df)
   bubbles_orig = bubbles_ordered
   bubbles_ordered = bubbles_ordered[,1:ncol(bubbles_df)]
 
-  if ( nrow(bubbles_df) == 0) {
-    print("single transcript, no bubbles")
-    return (NULL) 
-  }
   if (length(igraph::E(g)) > 1000) {
     print("More than 1000 edges in grase graph, give up on finding focal exons")
     return (NULL) 
