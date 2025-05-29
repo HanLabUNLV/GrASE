@@ -289,7 +289,94 @@ bubble_paths_igraph <- function(g, v_start, v_end) {
 
 
 #' @export
-get_bubble_variants_igraph <- function (g, v_start, v_end) 
+get_bubble_variants_igraph <- function(g, v_start, v_end) {
+  # ensure numeric vertex IDs
+  v_start <- as.integer(v_start)
+  v_end   <- as.integer(v_end)
+  if (v_end - v_start < 2) {
+    return(list(partition = list(), path = list()))
+  }
+
+  # which vertex‐attrs are "transcripts"?
+  all_attrs <- igraph::vertex_attr_names(g)
+  excluded  <- c("name", "position", "sg_id", "id")
+  trans     <- setdiff(all_attrs, excluded)
+
+  # get the vertex names up front
+  v_names <- igraph::V(g)$name
+
+  # build a compact matrix: rows = vertices in [v_start:v_end], cols = each 'trans'
+  idx_range <- seq(v_start, v_end)
+  trans_mat <- vapply(
+    trans,
+    function(attr_name) as.numeric(igraph::vertex_attr(g, attr_name, index = idx_range)),
+    numeric(length(idx_range))
+  )
+  # now trans_mat[i,j] = count/presence of transcript j in vertex idx_range[i]
+
+  # find transcripts shared by start & end
+  start_row <- trans_mat[1L,   , drop = TRUE]
+  end_row   <- trans_mat[nrow(trans_mat), , drop = TRUE]
+  base_mask <- (start_row != 0) & (end_row   != 0)
+  if (!any(base_mask)) {
+    return(list(partition = list(), path = list()))
+  }
+  base_idx   <- which(base_mask)
+  base_names <- trans[base_idx]
+
+  # if there are internal nodes, check for trivial case
+  internal_mat <- trans_mat[-c(1,nrow(trans_mat)), base_idx, drop = FALSE]
+  # if ANY internal node has *all* base transcripts, no bubble variants
+  if (any(rowSums(internal_mat != 0) == length(base_idx))) {
+    return(list(partition = list(), path = list()))
+  }
+
+  # build the logical submatrix: rows = base transcripts, cols = internal vertices
+  bubble_logical <- t(internal_mat != 0)
+  colnames(bubble_logical) <- v_names[idx_range[-c(1,length(idx_range))]]
+  rownames(bubble_logical) <- base_names
+
+  # drop any all‐zero columns
+  keep_cols <- colSums(bubble_logical) != 0L
+  if (!any(keep_cols)) {
+    return(list(partition = list(), path = list()))
+  }
+  bubble_logical <- bubble_logical[, keep_cols, drop = FALSE]
+
+  # convert to integer 0/1 in place
+  bubble_mat <- matrix(
+    as.integer(bubble_logical),
+    nrow = nrow(bubble_logical),
+    dimnames = dimnames(bubble_logical)
+  )
+
+  # build partitions (group transcripts by identical patterns)
+  row_strs   <- apply(bubble_mat, 1, paste0, collapse = "")
+  patterns   <- unique(row_strs)
+  partitions <- setNames(
+    lapply(patterns, function(p) names(row_strs)[row_strs == p]),
+    patterns
+  )
+
+  # build unique paths (which internal nodes each transcript‐pattern visits)
+  paths <- lapply(
+    seq_len(nrow(bubble_mat)),
+    function(i) colnames(bubble_mat)[bubble_mat[i, ] == 1]
+  )
+  names(paths) <- row_strs
+  paths_unique <- paths[!duplicated(paths)]
+
+  list(partition = partitions, path = paths_unique)
+}
+
+
+
+
+
+
+
+
+get_bubble_variants_igraph_himem <- function (g, v_start, v_end) 
 {
   attrs <- igraph::vertex_attr_names(g)
   excluded <- c("name", "position", "sg_id", "id")
@@ -298,10 +385,10 @@ get_bubble_variants_igraph <- function (g, v_start, v_end)
   v_names = igraph::V(g)$name
   txbase <- unlist(igraph::vertex_attr(g, index=v_start)[trans]) & unlist(igraph::vertex_attr(g, index=v_end)[trans])
   txbase_names <- trans[txbase] 
-  internal_nodes = igraph::V(g)[v_names[(as.integer(v_start)+1):(as.integer(v_end)-1)]]$name
+  internal_nodes = igraph::V(g)[v_names[(as.integer(v_start)+1):(as.integer(v_end)-1)]]$name    # high_mem
  
   for (n in internal_nodes) { 
-    tx_internal = unlist(igraph::vertex_attr(g, index=n)[trans])
+    tx_internal = unlist(igraph::vertex_attr(g, index=n)[trans])      # high_mem
     if (all(tx_internal >= txbase))
       return (list())
   } 
