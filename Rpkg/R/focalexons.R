@@ -516,6 +516,20 @@ remove_symmetric_splits <- function(splits){
   unique_splits
 }
 
+
+intersect_stream <- function(lst) {
+  if (length(lst) == 0L) return(vector(mode = "integer", length = 0))
+  # sort by length so we intersect the smallest sets first
+  ord <- order(vapply(lst, length, integer(1)))
+  curr <- unique(lst[[ord[1]]])
+  for (i in ord[-1]) {
+    # filter in place
+    curr <- curr[curr %in% lst[[i]]]
+    if (length(curr) == 0L) break
+  }
+  curr
+}
+
 #' @export
 find_focal_and_ref_exparts_for_split <- function(g, source, sink, a_split, a_parsed_partitions, a_parsed_paths, a_tx_ex_parts, a_focalexons_df, gene=gene) {
 
@@ -526,18 +540,29 @@ find_focal_and_ref_exparts_for_split <- function(g, source, sink, a_split, a_par
       print (tx1)
       print (tx2)
 
+      ex_or_in_vec <- igraph::get.edge.attribute(g, "ex_or_in")
+
       vpath1 = lapply(a_parsed_paths[group1], function(vec) c(source, vec, sink)) 
       vpath2 = lapply(a_parsed_paths[group2], function(vec) c(source, vec, sink)) 
    
-      epath1 = lapply(vpath1, from_vpath_to_exon_path, g=g) 
-      epath2 = lapply(vpath2, from_vpath_to_exon_path, g=g) 
+      epath1 = lapply(vpath1, from_vpath_to_exon_path, g=g)     # high_mem 
+      epath2 = lapply(vpath2, from_vpath_to_exon_path, g=g)     # high_mem 
      
-      ex_part1 <- lapply(epath1, from_exon_path_to_exonic_part_path, g=g) 
-      ex_part1 <- lapply(ex_part1, function(x) {return (x[igraph::edge_attr(g)$ex_or_in[x] == 'ex_part'])})
-      ex_part1_set <- Reduce(intersect, ex_part1)
-      ex_part2 <- lapply(epath2, from_exon_path_to_exonic_part_path, g=g) 
-      ex_part2 <- lapply(ex_part2, function(x) {return (x[igraph::edge_attr(g)$ex_or_in[x] == 'ex_part'])})
-      ex_part2_set <- Reduce(intersect, ex_part2)
+      ex_part1 <- lapply(epath1, from_exon_path_to_exonic_part_path, g=g)   # high_mem
+      rm(epath1)
+      #ex_part1 <- lapply(ex_part1, function(x) {return (x[igraph::edge_attr(g)$ex_or_in[x] == 'ex_part'])})
+      ex_part1 <- lapply(ex_part1, function(x) {return (x[ex_or_in_vec[x] == 'ex_part'])})
+      #ex_part1_set <- Reduce(intersect, ex_part1)
+      ex_part1_set <- intersect_stream(ex_part1)
+      rm(ex_part1)
+      ex_part2 <- lapply(epath2, from_exon_path_to_exonic_part_path, g=g)   # high_mem 
+      rm(epath2)
+      #ex_part2 <- lapply(ex_part2, function(x) {return (x[igraph::edge_attr(g)$ex_or_in[x] == 'ex_part'])})
+      ex_part2 <- lapply(ex_part2, function(x) {return (x[ex_or_in_vec[x] == 'ex_part'])})
+      #ex_part2_set <- Reduce(intersect, ex_part2)
+      ex_part2_set <- intersect_stream(ex_part2)
+      rm(ex_part2)
+      gc()
      
   
       setdiff1 <- setdiff(ex_part1_set, ex_part2_set)
@@ -707,6 +732,9 @@ update_txpaths_after_bubble_collapse2 <- function(g, tx_list, epath) {
 focal_exons_gene_powerset <- function(gene, g, sg, outdir, max_powerset = 10000, collapse_bubbles=TRUE) {
 
 
+options(keep.source = TRUE)
+Rprof("mem.line.out", line.profiling = TRUE, memory.profiling = TRUE)
+
   focalexons_df <- data.frame()
 
   g_orig <- g
@@ -716,7 +744,7 @@ focal_exons_gene_powerset <- function(gene, g, sg, outdir, max_powerset = 10000,
   #txmat_orig = txmat 
   #trans <- rownames(txmat)
   trans <- grase::transcripts_from_igraph(g)
-  bubbles_df <- grase::detect_bubbles_igraph(g)
+  bubbles_df <- grase::detect_bubbles_igraph(g)     # high_mem
   if ( nrow(bubbles_df) == 0) {
     print("single transcript, no bubbles")
     return (NULL) 
@@ -745,8 +773,8 @@ focal_exons_gene_powerset <- function(gene, g, sg, outdir, max_powerset = 10000,
 
     #txpaths <- lapply(SplicingGraphs::txpath(sg), as.character)
     txpaths <- grase::txpath_from_edgeattr(g)
-    tx_exonpaths = lapply(txpaths, grase::from_vpath_to_exon_path, g=g)
-    tx_ex_parts = lapply(tx_exonpaths, grase::from_exon_path_to_exonic_part_path, g=g)
+    tx_exonpaths = lapply(txpaths, grase::from_vpath_to_exon_path, g=g)         # high_mem
+    tx_ex_parts = lapply(tx_exonpaths, grase::from_exon_path_to_exonic_part_path, g=g) #high_mem
 
     parsed_paths <- lapply(bubbles_ordered$paths[[bubble_idx]], function(x) strsplit(gsub("[{}]", "", x), ",")[[1]])
     parsed_partitions <- lapply(bubbles_ordered$partitions[[bubble_idx]], function(x) strsplit(gsub("[{}]", "", x), ",")[[1]])
@@ -815,7 +843,7 @@ focal_exons_gene_powerset <- function(gene, g, sg, outdir, max_powerset = 10000,
 
       # update bubbles_df
       g <- grase::set_txpath_to_vertex_attr(g)
-      bubbles_updated <- grase::detect_bubbles_igraph(g)
+      bubbles_updated <- grase::detect_bubbles_igraph(g)            # high_mem
       if (nrow(bubbles_updated) == 0) {
         print ("collapsed all bubbles. exiting the loop 2")
         break
@@ -842,6 +870,8 @@ focal_exons_gene_powerset <- function(gene, g, sg, outdir, max_powerset = 10000,
 
   write.table(focalexons_df, file.path(outdir, "focalexons", paste0(gene, ".focalexons.all.txt")), sep = "\t", quote = FALSE, row.names = FALSE)
   write.table(focalexons_filtered, file.path(outdir, "focalexons", paste0(gene, ".focalexons.txt")), sep = "\t", quote = FALSE, row.names = FALSE)
+
+Rprof(NULL)
 
 }
 
