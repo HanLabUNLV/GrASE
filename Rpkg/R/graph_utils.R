@@ -212,13 +212,16 @@ from_vpath_to_exon_path <- function(g, bubblepath) {
 
   # Prepare a list of length n-1
   edge_blocks <- vector("list", n - 1L)
+  ex_or_in_vec <- igraph::get.edge.attribute(g, "ex_or_in")
 
   for (i in 1:(n - 1)) {
     v1   <- bubblepath[i]
     v2   <- bubblepath[i + 1L]
-    edges <- igraph::E(g)[v1 %--% v2]                     # high_mem
+    #edges <- igraph::E(g)[v1 %--% v2]                     # high_mem
+    edges <- igraph::E(g)[.from(v1) & .to(v2)]
     # drop ex_part
-    keep  <- edges[igraph::edge_attr(g, "ex_or_in")[as.integer(edges)] != "ex_part"]
+    #keep  <- edges[igraph::edge_attr(g, "ex_or_in")[as.integer(edges)] != "ex_part"]
+    keep <- edges[ ex_or_in_vec[edges] != "ex_part" ]
     edge_blocks[[i]] <- as.integer(keep)
   }
   # Flatten once
@@ -260,7 +263,7 @@ from_exon_path_to_exonic_part_path <- function(g, exonpath) {
         ve <- which(sg_ids == sub_sg[j+1])
         paths <- igraph::all_simple_paths(g, vs, ve, cutoff = 2)
         for (p in paths) {
-          e2  <- igraph::E(g)[p[1] %--% p[2]]
+          e2 <- igraph::E(g)[.from(p[1]) & .to(p[2])]
           ex_part_edges <- c(ex_part_edges,
                              as.integer(e2[ex_or_in_vec[e2] == "ex_part"]))
         }
