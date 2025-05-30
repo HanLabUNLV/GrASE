@@ -207,55 +207,80 @@ dict_node2pos <- function(sg, gene) {
 #' Convert vertex path to exon path
 #' @export
 from_vpath_to_exon_path <- function(g, bubblepath) {
-  path <- c()
-  for (i in 1:(length(bubblepath) - 1)) {
-    pos_start = igraph::vertex_attr(g, 'position', index=bubblepath[i])
-    pos_end = igraph::vertex_attr(g, 'position', index=bubblepath[i + 1])
-    edges <- igraph::E(g)[bubblepath[i] %--% bubblepath[i + 1]]
-    edges <- edges[igraph::edge_attr(g)$ex_or_in[as.numeric(edges)] != "ex_part"]
-    path <- c(path, as.numeric(edges))
+  n <- length(bubblepath)
+  if (n < 2) return(integer(0))
+
+  # Prepare a list of length n-1
+  edge_blocks <- vector("list", n - 1L)
+
+  for (i in 1:(n - 1)) {
+    v1   <- bubblepath[i]
+    v2   <- bubblepath[i + 1L]
+    edges <- igraph::E(g)[v1 %--% v2]                     # high_mem
+    # drop ex_part
+    keep  <- edges[igraph::edge_attr(g, "ex_or_in")[as.integer(edges)] != "ex_part"]
+    edge_blocks[[i]] <- as.integer(keep)
   }
-  return(path)
+  # Flatten once
+  unlist(edge_blocks, use.names = FALSE)
+  
 }
 
 #' Convert exon path to exonic part path
 #' @export
 from_exon_path_to_exonic_part_path <- function(g, exonpath) {
-  exonic_part_path <- c()
+  # Early return
+  if (length(exonpath) == 0) return(integer(0))
 
-  if (length(exonpath) > 0) {
-    for (i in 1:length(exonpath)) {
-      edge <- exonpath[i]
-      if (igraph::edge_attr(g)$ex_or_in[edge] == "ex") {
-        start <- igraph::ends(g, exonpath)[i, 1]
-        end <- igraph::ends(g, exonpath)[i, 2]
-        # extract all sg_ids in between start and end
-        sg_id_list = igraph::vertex_attr(g)$sg_id
-        idx_start <- which(sg_id_list == igraph::V(g)[start]$sg_id )
-        idx_end <- which(sg_id_list == igraph::V(g)[end]$sg_id )
-        sublist = sg_id_list[idx_start:idx_end]
-        # now go node by node and find the exonic paths.
-        # this only works because the nodes are ordered by their genomic positions
-        current_vpaths_list <- c()
-        for (x in 1:(length(sublist)-1)) {
-          current_start <- igraph::V(g)[sg_id == sublist[x]]
-          current_end <- igraph::V(g)[sg_id == sublist[x+1]]
-          current_vpaths_list <- c(current_vpaths_list, igraph::all_simple_paths(g, current_start, current_end, cutoff = 2))
+  # Pre-allocate a list, one slot per input edge
+  out_blocks <- vector("list", length(exonpath))
+
+  # We’ll also pull ex_or_in once
+  ex_or_in_vec <- igraph::get.edge.attribute(g, "ex_or_in")
+  # And get all SG IDs once
+  sg_ids       <- igraph::get.vertex.attribute(g, "sg_id")
+  ends_mat_all <- igraph::ends(g, exonpath, names = FALSE)
+
+  for (i in seq_along(exonpath)) {
+    eid <- exonpath[i]
+    typ <- ex_or_in_vec[eid]
+
+    if (typ == "ex") {
+      # find start/end vertices for this exon edge
+      v1       <- ends_mat_all[i, 1]
+      v2       <- ends_mat_all[i, 2]
+      id1      <- which(sg_ids == sg_ids[v1])
+      id2      <- which(sg_ids == sg_ids[v2])
+      sub_sg   <- sg_ids[seq(min(id1, id2), max(id1, id2))]
+
+      # collect all ex_part edges across each adjacent sg pair
+      ex_part_edges <- integer(0)
+      for (j in seq_len(length(sub_sg) - 1L)) {
+        vs <- which(sg_ids == sub_sg[j])
+        ve <- which(sg_ids == sub_sg[j+1])
+        paths <- igraph::all_simple_paths(g, vs, ve, cutoff = 2)
+        for (p in paths) {
+          e2  <- igraph::E(g)[p[1] %--% p[2]]
+          ex_part_edges <- c(ex_part_edges,
+                             as.integer(e2[ex_or_in_vec[e2] == "ex_part"]))
         }
-        for (x in 1:length(current_vpaths_list)) {
-          exonic_edge <- igraph::E(g)[current_vpaths_list[[x]][1] %--% current_vpaths_list[[x]][2]]
-          exonic_part_path <- c(exonic_part_path, exonic_edge[igraph::edge_attr(g)$ex_or_in[exonic_edge] == "ex_part"])
-        }
-      } else if (igraph::edge_attr(g)$ex_or_in[edge] %in% c("in", "R", "L")) {
-        exonic_part_path <- c(exonic_part_path, edge)
-      } else {
-        print("Invalid edge type in path.")
-        print(edge)
-        print(igraph::edge_attr(g)$ex_or_in[edge])
       }
+      out_blocks[[i]] <- ex_part_edges
+
+    } else if (typ %in% c("in", "R", "L")) {
+      # keep the edge itself
+      out_blocks[[i]] <- eid
+
+    } else {
+      # skip or warn
+      out_blocks[[i]] <- integer(0)
+      warning("Skipping unknown edge type '", typ, "' on edge ", eid)
     }
   }
-  return(exonic_part_path)
+
+  # flatten exactly once
+  unlist(out_blocks, use.names = FALSE)
 }
+
 
 
