@@ -298,9 +298,11 @@ get_bubble_variants_igraph <- function(g, v_start, v_end) {
   }
 
   # which vertex‐attrs are "transcripts"?
-  all_attrs <- igraph::vertex_attr_names(g)
+  all_attr_names <- igraph::vertex_attr_names(g)
   excluded  <- c("name", "position", "sg_id", "id")
-  trans     <- setdiff(all_attrs, excluded)
+  trans     <- setdiff(all_attr_names, excluded)
+  all_attrs <- igraph::vertex_attr(g)
+  attr_trans <- all_attrs[trans]
 
   # get the vertex names up front
   v_names <- igraph::V(g)$name
@@ -308,10 +310,8 @@ get_bubble_variants_igraph <- function(g, v_start, v_end) {
 
   # 1) Pull out just the start‐row and end‐row (2 × |trans|) in one vapply
   two_rows <- vapply(
-    trans,
-    function(attr_name) {
-      as.numeric( igraph::vertex_attr(g, attr_name, index = c(v_start, v_end)) )
-    },
+    attr_trans,
+    function(vec) vec[c(v_start, v_end)],
     numeric(2L)
   )
   start_row <- two_rows[1L, ]
@@ -324,20 +324,20 @@ get_bubble_variants_igraph <- function(g, v_start, v_end) {
   }
   base_idx   <- which(base_mask)
   base_names <- trans[ base_idx ]
+  attr_base  <- all_attrs[ base_names ]
 
   # 3) Check each internal vertex one at a time
   internal_vertices <- setdiff(seq(v_start, v_end), c(v_start, v_end))
   for (i_vert in internal_vertices) {
-    vals <- vapply(
-      base_names,
-      function(attr_name) {
-        as.numeric( igraph::vertex_attr(g, attr_name, index = i_vert) )
-      },
-      numeric(1L)
-    )
-    # If this vertex contains ALL base_names, we bail out
-    if (all(vals != 0)) {
-      return(list(partition = list(), path = list()))
+    blocked <- TRUE
+    for (vec in attr_base) {
+     if (vec[i_vert] == 0) {
+       blocked <- FALSE
+       break
+     }
+    }
+    if (blocked) {
+     return(list(partition = list(), path = list()))
     }
   }
 
