@@ -444,6 +444,61 @@ valid_partitions <- function(dag) {
 
 
 
+#' @export
+valid_partitions_idx <- function(dag) {
+  # 1) Map node names → 1:n integer indices
+  nodes   <- igraph::V(dag)$name
+  n       <- length(nodes)
+  idx_map <- setNames(seq_len(n), nodes)
+
+  # 2) Reverse & topo-sort once
+  dag_rev  <- igraph::reverse_edges(dag)
+  topo_vec <- igraph::topo_sort(dag_rev, mode = "out")$name
+
+  # 3) Precompute predecessors as integer vectors
+  preds <- lapply(topo_vec, function(v) {
+    idx_map[ igraph::neighbors(dag_rev, v, mode = "in")$name ]
+  })
+  names(preds) <- topo_vec
+
+  # 4) Prepare a growing list buffer
+  capacity <- 256L
+  out      <- vector("list", capacity)
+  out_i    <- 0L
+
+  # 5) Recursive builder (on integer sets)
+  recurse <- function(i, cur) {
+    if (i > n) {
+      k <- length(cur)
+      if (k > 0L && k < n) {
+        out_i <<- out_i + 1L
+        # grow buffer if needed
+        if (out_i > capacity) {
+          capacity <<- capacity * 2L
+          length(out) <<- capacity
+        }
+        out[[out_i]] <<- cur
+      }
+      return()
+    }
+    v_name <- topo_vec[i]
+    v_idx  <- idx_map[v_name]
+
+    # include v if all its preds are already in cur
+    if (all(preds[[v_name]] %in% cur)) {
+      recurse(i + 1L, c(cur, v_idx))
+    }
+    # also the branch that skips v
+    recurse(i + 1L, cur)
+  }
+
+  recurse(1L, integer(0))
+  # only return the filled portion
+  out[seq_len(out_i)]
+}
+
+
+
 
 #' find valid partitions that represents the hierarchical relationship between paths 
 #' @export
@@ -496,6 +551,35 @@ valid_partitions_slow <- function(g, max_powerset) {
   }
   return (valid_splits)
 
+}
+
+
+#' @export
+remove_symmetric_idx <- function(int_splits, n) {
+  # int_splits: list of integer vectors (each ∈ 1:n)
+  # n: total number of nodes
+  
+  seen      <- new.env(parent = emptyenv(), hash = TRUE)
+  result    <- vector("list", length(int_splits))
+  out_i     <- 0L
+
+  for (cur in int_splits) {
+    comp <- setdiff(seq_len(n), cur)
+    
+    # build exactly the same key logic as before, but on integers
+    k1  <- paste(cur, collapse = ",")
+    k2  <- paste(comp, collapse = ",")
+    key <- paste(sort(c(k1, k2)), collapse = "|")
+    
+    if (!exists(key, envir = seen, inherits = FALSE)) {
+      assign(key, TRUE, envir = seen)
+      out_i       <- out_i + 1L
+      result[[out_i]] <- cur
+    }
+  }
+  
+  # only return the filled portion
+  result[seq_len(out_i)]
 }
 
 
@@ -603,7 +687,6 @@ find_focal_and_ref_exparts_for_split <- function(g, source, sink, a_split, a_par
       a_focalexons_df <- rbind(a_focalexons_df, new_row)
   return(list(focalexons_df = a_focalexons_df))
 }
-
 
 
 
@@ -791,7 +874,16 @@ Rprof("mem.line.out", line.profiling = TRUE, memory.profiling = TRUE)
     print (paste("ex_part_paths len:", length(ex_part_paths)))
     contain_dag <- grase::path_subset_relation(ex_part_paths) 
     print (paste("contain_dag len:", length(igraph::E(contain_dag))))
-    valid_splits <- grase::valid_partitions(contain_dag)
+    #valid_splits <- grase::valid_partitions(contain_dag)
+    #valid_splits <- grase::remove_symmetric_splits(valid_splits)
+
+    int_splits <- grase::valid_partitions_idx(contain_dag)
+    nodes <- igraph::V(contain_dag)$name
+    valid_splits <- lapply(int_splits, function(idx) {
+      g1 <- sort(nodes[idx])
+      g2 <- sort(nodes[-idx])
+      list(group1 = g1, group2 = g2)
+    })
     valid_splits <- grase::remove_symmetric_splits(valid_splits)
     rm(contain_dag)
     
