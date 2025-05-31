@@ -302,8 +302,10 @@ get_bubble_variants_igraph <- function(g, v_start, v_end) {
   excluded  <- c("name", "position", "sg_id", "id")
   trans     <- setdiff(all_attrs, excluded)
 
-  idx_range <- seq(v_start, v_end)
+  # get the vertex names up front
   v_names <- igraph::V(g)$name
+  idx_range <- seq(v_start, v_end)
+
   # 1) Pull out just the start‐row and end‐row (2 × |trans|) in one vapply
   two_rows <- vapply(
     trans,

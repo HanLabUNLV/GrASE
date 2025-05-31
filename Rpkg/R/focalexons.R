@@ -554,34 +554,6 @@ valid_partitions_slow <- function(g, max_powerset) {
 }
 
 
-#' @export
-remove_symmetric_idx <- function(int_splits, n) {
-  # int_splits: list of integer vectors (each ∈ 1:n)
-  # n: total number of nodes
-  
-  seen      <- new.env(parent = emptyenv(), hash = TRUE)
-  result    <- vector("list", length(int_splits))
-  out_i     <- 0L
-
-  for (cur in int_splits) {
-    comp <- setdiff(seq_len(n), cur)
-    
-    # build exactly the same key logic as before, but on integers
-    k1  <- paste(cur, collapse = ",")
-    k2  <- paste(comp, collapse = ",")
-    key <- paste(sort(c(k1, k2)), collapse = "|")
-    
-    if (!exists(key, envir = seen, inherits = FALSE)) {
-      assign(key, TRUE, envir = seen)
-      out_i       <- out_i + 1L
-      result[[out_i]] <- cur
-    }
-  }
-  
-  # only return the filled portion
-  result[seq_len(out_i)]
-}
-
 
 #' @export
 remove_symmetric_splits <- function(splits){
