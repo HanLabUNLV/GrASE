@@ -302,71 +302,137 @@ get_bubble_variants_igraph <- function(g, v_start, v_end) {
   excluded  <- c("name", "position", "sg_id", "id")
   trans     <- setdiff(all_attrs, excluded)
 
-  # get the vertex names up front
-  v_names <- igraph::V(g)$name
-
-  # build a compact matrix: rows = vertices in [v_start:v_end], cols = each 'trans'
   idx_range <- seq(v_start, v_end)
-  trans_mat <- vapply(
+  v_names <- igraph::V(g)$name
+  # 1) Pull out just the start‐row and end‐row (2 × |trans|) in one vapply
+  two_rows <- vapply(
     trans,
-    function(attr_name) as.numeric(igraph::vertex_attr(g, attr_name, index = idx_range)),
-    numeric(length(idx_range))
+    function(attr_name) {
+      as.numeric( igraph::vertex_attr(g, attr_name, index = c(v_start, v_end)) )
+    },
+    numeric(2L)
   )
-  # now trans_mat[i,j] = count/presence of transcript j in vertex idx_range[i]
+  start_row <- two_rows[1L, ]
+  end_row   <- two_rows[2L, ]
 
-  # find transcripts shared by start & end
-  start_row <- trans_mat[1L,   , drop = TRUE]
-  end_row   <- trans_mat[nrow(trans_mat), , drop = TRUE]
-  base_mask <- (start_row != 0) & (end_row   != 0)
+  # 2) Which transcripts appear in BOTH start & end?
+  base_mask <- (start_row != 0) & (end_row != 0)
   if (!any(base_mask)) {
     return(list(partition = list(), path = list()))
   }
   base_idx   <- which(base_mask)
-  base_names <- trans[base_idx]
+  base_names <- trans[ base_idx ]
 
-  # if there are internal nodes, check for trivial case
-  internal_mat <- trans_mat[-c(1,nrow(trans_mat)), base_idx, drop = FALSE]
-  # if ANY internal node has *all* base transcripts, no bubble variants
-  if (any(rowSums(internal_mat != 0) == length(base_idx))) {
-    return(list(partition = list(), path = list()))
+  # 3) Check each internal vertex one at a time
+  internal_vertices <- setdiff(seq(v_start, v_end), c(v_start, v_end))
+  for (i_vert in internal_vertices) {
+    vals <- vapply(
+      base_names,
+      function(attr_name) {
+        as.numeric( igraph::vertex_attr(g, attr_name, index = i_vert) )
+      },
+      numeric(1L)
+    )
+    # If this vertex contains ALL base_names, we bail out
+    if (all(vals != 0)) {
+      return(list(partition = list(), path = list()))
+    }
   }
 
-  # build the logical submatrix: rows = base transcripts, cols = internal vertices
-  bubble_logical <- t(internal_mat != 0)
-  colnames(bubble_logical) <- v_names[idx_range[-c(1,length(idx_range))]]
-  rownames(bubble_logical) <- base_names
 
-  # drop any all‐zero columns
-  keep_cols <- colSums(bubble_logical) != 0L
-  if (!any(keep_cols)) {
-    return(list(partition = list(), path = list()))
+  # 1) Identify internal vertices (exclude the two endpoints)
+  internal_vertices <- idx_range[-c(1, length(idx_range))]
+  n_int            <- length(internal_vertices)
+  n_base           <- length(base_names)
+
+  # If there are no internal vertices, everything “downstream” is trivial:
+  if (n_int == 0L) {
+    # In this case, no internal node can block anything, but also
+    # there are no columns to group by.  So partition = empty, path = empty.
+    partitions   <- list()
+    paths_unique <- list()
+    return(list(partition = partitions, path = paths_unique))
   }
-  bubble_logical <- bubble_logical[, keep_cols, drop = FALSE]
 
-  # convert to integer 0/1 in place
-  bubble_mat <- matrix(
-    as.integer(bubble_logical),
-    nrow = nrow(bubble_logical),
-    dimnames = dimnames(bubble_logical)
+  # 2) Build each transcript’s “bit‐pattern” over all internal vertices, one row at a time
+  #    row_strs_raw[ i ] will be a string like "01011" of length = n_int,
+  #    indicating which internal_vertices[j] contain base_names[i].
+  row_strs_raw <- vapply(
+    base_names,
+    function(attr_name) {
+      # Fetch “count/presence” of this transcript at ALL internal vertices:
+      vals <- as.numeric(
+        igraph::vertex_attr(g, attr_name, index = internal_vertices)
+      )
+      # Convert to bits (0/1) and collapse into a single string for this row:
+      paste0(as.integer(vals != 0), collapse = "")
+    },
+    character(1L)
   )
+  names(row_strs_raw) <- base_names
 
-  # build partitions (group transcripts by identical patterns)
-  row_strs   <- apply(bubble_mat, 1, paste0, collapse = "")
-  patterns   <- unique(row_strs)
+  # 3) Determine which columns (positions 1..n_int) are “all zero” across every row.
+  #    We only want to keep columns j for which at least one row_strs_raw[i][j] == "1".
+  keep_col_flags <- vapply(
+    seq_len(n_int),
+    function(j) {
+      any(substr(row_strs_raw, j, j) == "1")
+    },
+    logical(1L)
+  )
+  if (!any(keep_col_flags)) {
+    # If no column has a 1, then all internal vertices are irrelevant: return empty.
+    return(list(partition = list(), path = list()))
+  }
+  keep_positions <- which(keep_col_flags)
+
+  # 4) Build the final, “column‐pruned” row_strs: keep only bits in positions `keep_positions`
+  #    row_strs_final[i] is now a shorter string (length = length(keep_positions)).
+  row_strs_final <- vapply(
+    row_strs_raw,
+    function(bitstr) {
+      bits <- strsplit(bitstr, "")[[1]]
+      paste0(bits[keep_positions], collapse = "")
+    },
+    character(1L)
+  )
+  names(row_strs_final) <- names(row_strs_raw)  # same base_names
+
+  # 5) Group transcripts by identical bit‐patterns to form `partitions`
+  patterns   <- unique(row_strs_final)
   partitions <- setNames(
-    lapply(patterns, function(p) names(row_strs)[row_strs == p]),
+    lapply(patterns, function(pat) {
+      names(row_strs_final)[ row_strs_final == pat ]
+    }),
     patterns
   )
 
-  # build unique paths (which internal nodes each transcript‐pattern visits)
-  paths <- lapply(
-    seq_len(nrow(bubble_mat)),
-    function(i) colnames(bubble_mat)[bubble_mat[i, ] == 1]
-  )
-  names(paths) <- row_strs
-  paths_unique <- paths[!duplicated(paths)]
+  # 6) Build `paths_unique`: for each distinct pattern, list the internal‐vertex names
+  #    that correspond to a “1” in that pattern string.
+  #    First, figure out the _names_ of the kept internal vertices:
+  kept_vertex_names <- v_names[ internal_vertices ][ keep_positions ]
 
-  list(partition = partitions, path = paths_unique)
+  # Next, for each transcript’s final pattern, record which kept vertices it visits.
+  paths <- lapply(
+    seq_along(row_strs_final),
+    function(i) {
+      bitstr <- row_strs_final[i]
+      bits   <- strsplit(bitstr, "")[[1]]
+      kept_vertex_names[ which(bits == "1") ]
+    }
+  )
+  names(paths) <- row_strs_final
+
+  # 7) Now collapse to _unique_ paths (avoiding duplicates)
+  paths_unique <- paths[ !duplicated(paths) ]
+
+  #   partitions   : named list where each name = a bit‐pattern string
+  #                  and each element = vector of transcripts with that pattern
+  #
+  #   paths_unique : list of unique internal‐vertex sets (character vectors),
+  #                  one entry per distinct bit‐pattern
+
+  return(list(partition = partitions, path = paths_unique))
 }
 
 
