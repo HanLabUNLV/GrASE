@@ -289,10 +289,12 @@ bubble_paths_igraph <- function(g, v_start, v_end) {
 
 
 #' @export
-get_bubble_variants_igraph <- function(g, v_start, v_end) {
+get_bubble_variants_igraph <- function(g, v_start_name, v_end_name) {
   # ensure numeric vertex IDs
-  v_start <- as.integer(v_start)
-  v_end   <- as.integer(v_end)
+  v_start <- as.integer(igraph::V(g)[v_start_name])
+  v_end <- as.integer(igraph::V(g)[v_end_name])
+  print(v_start)
+  print(v_end)
   if (v_end - v_start < 2) {
     return(list(partition = list(), path = list()))
   }
@@ -306,7 +308,7 @@ get_bubble_variants_igraph <- function(g, v_start, v_end) {
 
   # get the vertex names up front
   v_names <- igraph::vertex_attr(g, "name")
-  idx_range <- seq(v_start, v_end)
+  v_idx_range <- seq(v_start, v_end)
 
   # 1) Pull out just the start‐row and end‐row (2 × |trans|) in one vapply
   two_rows <- vapply(
@@ -343,7 +345,7 @@ get_bubble_variants_igraph <- function(g, v_start, v_end) {
 
 
   # 1) Identify internal vertices (exclude the two endpoints)
-  internal_vertices <- idx_range[-c(1, length(idx_range))]
+  #internal_vertices <- v_idx_range[-c(1, length(v_idx_range))]
   n_int            <- length(internal_vertices)
   n_base           <- length(base_names)
 
@@ -505,18 +507,18 @@ get_bubble_variants_igraph_slow <- function (g, bubble_paths, v_start, v_end)
 
 #' bubble detection between v_start and v_end
 #' @export
-detect_bubbles_i_j_igraph <- function(v_start, v_end, g)
+detect_bubbles_i_j_igraph <- function(v_start_name, v_end_name, g)
 {
   
     #bubble_paths = bubble_paths_igraph(g, v_start, v_end)
     #print(paste("check", v_start, v_end))
-    bubble_variants <- grase::get_bubble_variants_igraph(g, v_start, v_end)
+    bubble_variants <- grase::get_bubble_variants_igraph(g, v_start_name, v_end_name)
     bubble_d <- length(bubble_variants$partition)
     if (bubble_d <= 1L) 
         return (NULL)
     #print(paste("bubble", v_start, v_end))
-    ans_source <- v_start$name
-    ans_sink <- v_end$name
+    ans_source <- v_start_name
+    ans_sink <- v_end_name
     ans_d <- bubble_d
     bubble_partitions <- bubble_variants$partition
     bubble_partitions <- sapply(bubble_partitions, base::paste, 
@@ -549,7 +551,7 @@ detect_bubbles_igraph <- function (g)
   # lose all expart edges
   ex_parts = igraph::E(g_tmp)[igraph::edge_attr(g_tmp)$ex_or_in == 'ex_part']
   g_tmp = igraph::delete_edges(g_tmp, ex_parts)
-  vs      <- igraph::V(g_tmp)   # grab the full vertex sequence once
+  v_names <- igraph::V(g_tmp)$name
 
   #sgnodetypes <- grase::get_sgnodetypes_igraph(g_tmp)
   ans_source <- ans_sink <- ans_AScode <- character(0)
@@ -560,9 +562,9 @@ detect_bubbles_igraph <- function (g)
   n_nodes = length(nodes)
   for (i in 1:(n_nodes - 2L)) {
     for (j in (i + 2L):n_nodes) {
-      v_start <- vs[i]
-      v_end   <- vs[j]
-      retval = grase::detect_bubbles_i_j_igraph(v_start, v_end, g_tmp)
+      v_start_name <- v_names[i]
+      v_end_name   <- v_names[j]
+      retval = grase::detect_bubbles_i_j_igraph(v_start_name, v_end_name, g_tmp)
       if (is.null(retval)) 
         next
       
