@@ -554,9 +554,31 @@ valid_partitions_slow <- function(g, max_powerset) {
 }
 
 
-
 #' @export
 remove_symmetric_splits <- function(splits){
+  # faster: assume group1 and group2 are already character vectors (not strings)
+  canonical_key <- function(g1, g2) {
+    g1_str <- paste(sort(g1), collapse = ",")
+    g2_str <- paste(sort(g2), collapse = ",")
+    paste(sort(c(g1_str, g2_str)), collapse = "|")
+  }
+
+  # vectorize using mapply — still fast, avoids closure memory cost
+  keys <- mapply(
+    function(s) canonical_key(s$group1, s$group2),
+    splits,
+    USE.NAMES = FALSE
+  )
+
+  # deduplicate by key
+  unique_splits <- splits[!duplicated(keys)]
+  unique_splits
+}
+
+
+
+#' @export
+remove_symmetric_splits_himem <- function(splits){
   # function to produce a symmetric-invariant key
   canonical_key <- function(split) {
     g1 <- paste(sort(strsplit(split$group1, ",")[[1]]), collapse = ",")
@@ -618,7 +640,7 @@ find_focal_and_ref_exparts_for_split <- function(g, source, sink, a_split, a_par
       #ex_part2_set <- Reduce(intersect, ex_part2)
       ex_part2_set <- intersect_stream(ex_part2)
       rm(ex_part2)
-      gc()
+      #gc()
      
   
       setdiff1 <- setdiff(ex_part1_set, ex_part2_set)

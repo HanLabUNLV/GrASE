@@ -296,7 +296,7 @@ get_bubble_variants_igraph <- function(g, v_start_idx, v_end_idx) {
     return(list(partition = list(), path = list()))
   }
 
-  # which vertex‐attrs are "transcripts"?
+  # which vertex attrs are "transcripts"?
   all_attr_names <- igraph::vertex_attr_names(g)
   excluded  <- c("name", "position", "sg_id", "id")
   trans     <- setdiff(all_attr_names, excluded)
@@ -306,7 +306,7 @@ get_bubble_variants_igraph <- function(g, v_start_idx, v_end_idx) {
   # get the vertex names up front
   v_idx_range <- seq(v_start_idx, v_end_idx)
 
-  # 1) Pull out just the start‐row and end‐row (2 × |trans|) in one vapply
+  # 1) Pull out just the startrow and endrow in one vapply
   two_rows <- vapply(
     attr_trans,
     function(vec) vec[c(v_start_idx, v_end_idx)],
@@ -345,7 +345,7 @@ get_bubble_variants_igraph <- function(g, v_start_idx, v_end_idx) {
   n_int            <- length(internal_vertices)
   n_base           <- length(base_names)
 
-  # If there are no internal vertices, everything “downstream” is trivial:
+  # If there are no internal vertices, everything downstream is trivial:
   if (n_int == 0L) {
     # In this case, no internal node can block anything, but also
     # there are no columns to group by.  So partition = empty, path = empty.
@@ -354,13 +354,13 @@ get_bubble_variants_igraph <- function(g, v_start_idx, v_end_idx) {
     return(list(partition = partitions, path = paths_unique))
   }
 
-  # 2) Build each transcript’s “bit‐pattern” over all internal vertices, one row at a time
+  # 2) Build each transcripts bitpattern over all internal vertices, one row at a time
   #    row_strs_raw[ i ] will be a string like "01011" of length = n_int,
   #    indicating which internal_vertices[j] contain base_names[i].
   row_strs_raw <- vapply(
     base_names,
     function(attr_name) {
-      # Fetch “count/presence” of this transcript at ALL internal vertices:
+      # Fetch count/presence of this transcript at ALL internal vertices:
       vals <- as.numeric(
         igraph::vertex_attr(g, attr_name, index = internal_vertices)
       )
@@ -371,7 +371,7 @@ get_bubble_variants_igraph <- function(g, v_start_idx, v_end_idx) {
   )
   names(row_strs_raw) <- base_names
 
-  # 3) Determine which columns (positions 1..n_int) are “all zero” across every row.
+  # 3) Determine which columns (positions 1..n_int) are all zero across every row.
   #    We only want to keep columns j for which at least one row_strs_raw[i][j] == "1".
   keep_col_flags <- vapply(
     seq_len(n_int),
@@ -386,7 +386,7 @@ get_bubble_variants_igraph <- function(g, v_start_idx, v_end_idx) {
   }
   keep_positions <- which(keep_col_flags)
 
-  # 4) Build the final, “column‐pruned” row_strs: keep only bits in positions `keep_positions`
+  # 4) Build the final, column pruned row_strs: keep only bits in positions `keep_positions`
   #    row_strs_final[i] is now a shorter string (length = length(keep_positions)).
   row_strs_final <- vapply(
     row_strs_raw,
@@ -398,7 +398,7 @@ get_bubble_variants_igraph <- function(g, v_start_idx, v_end_idx) {
   )
   names(row_strs_final) <- names(row_strs_raw)  # same base_names
 
-  # 5) Group transcripts by identical bit‐patterns to form `partitions`
+  # 5) Group transcripts by identical bitpatterns to form `partitions`
   patterns   <- unique(row_strs_final)
   partitions <- setNames(
     lapply(patterns, function(pat) {
@@ -407,12 +407,13 @@ get_bubble_variants_igraph <- function(g, v_start_idx, v_end_idx) {
     patterns
   )
 
-  # 6) Build `paths_unique`: for each distinct pattern, list the internal‐vertex names
-  #    that correspond to a “1” in that pattern string.
+  # 6) Build `paths_unique`: for each distinct pattern, list the internal vertex names
+  #    that correspond to a 1 in that pattern string.
   #    First, figure out the _names_ of the kept internal vertices:
+  v_names = igraph::V(g)$name
   kept_vertex_names <- v_names[ internal_vertices ][ keep_positions ]
 
-  # Next, for each transcript’s final pattern, record which kept vertices it visits.
+  # Next, for each transcripts final pattern, record which kept vertices it visits.
   paths <- lapply(
     seq_along(row_strs_final),
     function(i) {
@@ -426,11 +427,11 @@ get_bubble_variants_igraph <- function(g, v_start_idx, v_end_idx) {
   # 7) Now collapse to _unique_ paths (avoiding duplicates)
   paths_unique <- paths[ !duplicated(paths) ]
 
-  #   partitions   : named list where each name = a bit‐pattern string
+  #   partitions   : named list where each name = a bitpattern string
   #                  and each element = vector of transcripts with that pattern
   #
-  #   paths_unique : list of unique internal‐vertex sets (character vectors),
-  #                  one entry per distinct bit‐pattern
+  #   paths_unique : list of unique internalvertex sets (character vectors),
+  #                  one entry per distinct bitpattern
 
   return(list(partition = partitions, path = paths_unique))
 }
