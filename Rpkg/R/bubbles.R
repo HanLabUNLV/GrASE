@@ -289,13 +289,10 @@ bubble_paths_igraph <- function(g, v_start, v_end) {
 
 
 #' @export
-get_bubble_variants_igraph <- function(g, v_start_name, v_end_name) {
+get_bubble_variants_igraph <- function(g, v_start_idx, v_end_idx) {
+
   # ensure numeric vertex IDs
-  v_start <- as.integer(igraph::V(g)[v_start_name])
-  v_end <- as.integer(igraph::V(g)[v_end_name])
-  print(v_start)
-  print(v_end)
-  if (v_end - v_start < 2) {
+  if (v_end_idx - v_start_idx < 2) {
     return(list(partition = list(), path = list()))
   }
 
@@ -307,13 +304,12 @@ get_bubble_variants_igraph <- function(g, v_start_name, v_end_name) {
   attr_trans <- all_attrs[trans]
 
   # get the vertex names up front
-  v_names <- igraph::vertex_attr(g, "name")
-  v_idx_range <- seq(v_start, v_end)
+  v_idx_range <- seq(v_start_idx, v_end_idx)
 
   # 1) Pull out just the start‐row and end‐row (2 × |trans|) in one vapply
   two_rows <- vapply(
     attr_trans,
-    function(vec) vec[c(v_start, v_end)],
+    function(vec) vec[c(v_start_idx, v_end_idx)],
     numeric(2L)
   )
   start_row <- two_rows[1L, ]
@@ -329,7 +325,7 @@ get_bubble_variants_igraph <- function(g, v_start_name, v_end_name) {
   attr_base  <- all_attrs[ base_names ]
 
   # 3) Check each internal vertex one at a time
-  internal_vertices <- setdiff(seq(v_start, v_end), c(v_start, v_end))
+  internal_vertices <- setdiff(seq(v_start_idx, v_end_idx), c(v_start_idx, v_end_idx))
   for (i_vert in internal_vertices) {
     blocked <- TRUE
     for (vec in attr_base) {
@@ -507,12 +503,12 @@ get_bubble_variants_igraph_slow <- function (g, bubble_paths, v_start, v_end)
 
 #' bubble detection between v_start and v_end
 #' @export
-detect_bubbles_i_j_igraph <- function(v_start_name, v_end_name, g)
+detect_bubbles_i_j_igraph <- function(v_start_idx, v_end_idx, g, v_start_name, v_end_name)
 {
   
     #bubble_paths = bubble_paths_igraph(g, v_start, v_end)
     #print(paste("check", v_start, v_end))
-    bubble_variants <- grase::get_bubble_variants_igraph(g, v_start_name, v_end_name)
+    bubble_variants <- grase::get_bubble_variants_igraph(g, v_start_idx, v_end_idx)
     bubble_d <- length(bubble_variants$partition)
     if (bubble_d <= 1L) 
         return (NULL)
@@ -558,13 +554,12 @@ detect_bubbles_igraph <- function (g)
   ans_d <- integer(0)
   ans_partitions <- ans_paths <- IRanges::CharacterList()
     
-  nodes = igraph::V(g_tmp)
-  n_nodes = length(nodes)
+  n_nodes = length(v_names)
   for (i in 1:(n_nodes - 2L)) {
     for (j in (i + 2L):n_nodes) {
-      v_start_name <- v_names[i]
-      v_end_name   <- v_names[j]
-      retval = grase::detect_bubbles_i_j_igraph(v_start_name, v_end_name, g_tmp)
+      v_start_idx <- i
+      v_end_idx   <- j
+      retval = grase::detect_bubbles_i_j_igraph(i, j, g_tmp, v_names[i], v_names[j])
       if (is.null(retval)) 
         next
       
