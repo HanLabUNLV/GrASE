@@ -305,7 +305,7 @@ get_bubble_variants_igraph <- function(g, v_start, v_end) {
   attr_trans <- all_attrs[trans]
 
   # get the vertex names up front
-  v_names <- igraph::V(g)$name
+  v_names <- igraph::vertex_attr(g, "name")
   idx_range <- seq(v_start, v_end)
 
   # 1) Pull out just the start‐row and end‐row (2 × |trans|) in one vapply
@@ -549,7 +549,7 @@ detect_bubbles_igraph <- function (g)
   # lose all expart edges
   ex_parts = igraph::E(g_tmp)[igraph::edge_attr(g_tmp)$ex_or_in == 'ex_part']
   g_tmp = igraph::delete_edges(g_tmp, ex_parts)
-
+  vs      <- igraph::V(g_tmp)   # grab the full vertex sequence once
 
   #sgnodetypes <- grase::get_sgnodetypes_igraph(g_tmp)
   ans_source <- ans_sink <- ans_AScode <- character(0)
@@ -560,8 +560,8 @@ detect_bubbles_igraph <- function (g)
   n_nodes = length(nodes)
   for (i in 1:(n_nodes - 2L)) {
     for (j in (i + 2L):n_nodes) {
-      v_start = igraph::V(g_tmp)[i]
-      v_end = igraph::V(g_tmp)[j]
+      v_start <- vs[i]
+      v_end   <- vs[j]
       retval = grase::detect_bubbles_i_j_igraph(v_start, v_end, g_tmp)
       if (is.null(retval)) 
         next
