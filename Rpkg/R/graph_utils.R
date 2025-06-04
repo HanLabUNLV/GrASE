@@ -91,6 +91,76 @@ SG2igraph <- function(geneID,  gene_sg, gene_graph) {
 }
 
 
+#' get transcript names from igraph edge attributes
+#' @export
+transcripts_from_igraph <- function(g) {
+  attrs <- igraph::edge_attr_names(g)
+  excluded <- c("sgedge_id", "ex_or_in", "from_pos", "to_pos", "dexseq_fragment", "name")
+  trans <- setdiff(attrs, excluded)
+}
+
+
+
+#' Generate transcript-paths from igraph edge attributes
+#' @export
+txpath_from_edgeattr <- function(g, type="exon") {
+
+  # Identify transcript attributes on edges (exclude known graph attrs)
+  trans <- grase::transcripts_from_igraph(g)
+  # Determine root and leaf vertices
+  root <- if ("R" %in% igraph::V(g)$name) "R" else stop("No root 'R' vertex found")
+  leaf <- if ("L" %in% igraph::V(g)$name) "L" else stop("No leaf 'L' vertex found")
+
+  if (type == "exon") {
+    g_tmp = g
+    # lose all expart edges
+    ex_parts = igraph::E(g_tmp)[igraph::edge_attr(g_tmp)$ex_or_in == 'ex_part']
+    g_tmp = igraph::delete_edges(g_tmp, ex_parts)
+  }
+  else if (type == "ex_part") {
+    g_tmp = g
+    # lose all expart edges
+    ex_parts = igraph::E(g_tmp)[igraph::edge_attr(g_tmp)$ex_or_in == 'ex']
+    g_tmp = igraph::delete_edges(g_tmp, ex_parts)
+  }
+  else {
+    print("error: type should be either exon or expart")
+    return (NULL)
+  }
+  txpaths <- setNames(vector("list", length(trans)), trans)
+  for (tx in trans) {
+    tx_bools <- igraph::edge_attr(g_tmp, tx)
+    exon_ids = igraph::E(g_tmp)[tx_bools]
+    subg  <- igraph::subgraph_from_edges(g_tmp, exon_ids, delete.vertices = FALSE)
+    #print ("subg") 
+    #print (igraph::E(subg))
+    spath <- igraph::shortest_paths(subg, from = root, to = leaf, mode = "out")$vpath[[1]]
+    txpaths[[tx]] <- igraph::V(g_tmp)$name[spath]
+    #print(paste("txpath for ", tx))
+    #print(txpaths[[tx]])
+  }
+  txpaths = lapply(txpaths, function(x) { x[2:(length(x)-1)] }) # get rid of first and last (R and L)
+  txpaths
+}
+
+
+#' @export
+set_txpath_to_vertex_attr <- function(g)
+{
+  txpaths <- grase::txpath_from_edgeattr(g)
+  trans <- names(txpaths)
+  for (tx in trans) {
+    vlist <- txpaths[[tx]]
+    g <- igraph::set_vertex_attr(g, tx, value = rep(FALSE,length(igraph::V(g)))) 
+    g <- igraph::set_vertex_attr(g, tx, index = vlist, value=TRUE)
+    g <- igraph::set_vertex_attr(g, tx, index = 'R', value=TRUE)
+    g <- igraph::set_vertex_attr(g, tx, index = 'L', value=TRUE)
+  }
+  g 
+}
+
+
+
 
 #' add dexseq exonic part edges to igraph
 #' @export
@@ -99,9 +169,7 @@ map_DEXSeq_from_gff <- function(g, gff) {
   # The function will create edges on the igraph object based on DEXSeq exon fragments.
   # Fragments are labeled with a "dexseq_fragment" attribute.
 
-  attrs <- igraph::edge_attr_names(g)
-  excluded <- c("sgedge_id", "ex_or_in", "from_pos", "to_pos", "dexseq_fragment")
-  trans <- setdiff(attrs, excluded)
+  trans <- grase::transcripts_from_igraph(g)
  
   leftCoords <- c()
   rightCoords <- c()
@@ -200,6 +268,29 @@ dict_node2pos <- function(sg, gene) {
   node2pos['L'] <- 'L' 
 
   return(node2pos)
+}
+
+
+
+#' Set edge names
+#' @export
+set_edge_names <- function(g) {
+
+  el <- igraph::as_edgelist(g, names = TRUE)   # an M×2 matrix of character
+  edge.strings <- apply(el, 1, function(x) paste0(x[1], "-", x[2]))
+  igraph::E(g)$name <- edge.strings
+  g 
+}
+
+
+
+
+#' Convert vertex path to exon path
+#' @export
+from_vpath_to_edge_path_simple <- function(g, bubblepath) {
+
+ edge_seq <- igraph::E(g, path = bubblepath)
+ igraph::edge_attr(g, 'name', edge_seq) 
 }
 
 

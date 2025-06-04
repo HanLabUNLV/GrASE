@@ -597,6 +597,8 @@ find_focal_and_ref_exparts_for_split <- function(g, source, sink, a_split, a_par
       print (tx2)
 
       ex_or_in_vec <- igraph::get.edge.attribute(g, "ex_or_in")
+      g_exon <- igraph::delete_edges(g, igraph::E(g)[ex_or_in_vec == 'ex_part']) # have to delete all edges in one command
+      g_expart <- igraph::delete_edges(g, igraph::E(g)[ex_or_in_vec == 'ex']) # have to delete all edges in one command
 
       vpath1 = lapply(a_parsed_paths[group1], function(vec) c(source, vec, sink)) 
       vpath2 = lapply(a_parsed_paths[group2], function(vec) c(source, vec, sink)) 
@@ -605,20 +607,12 @@ find_focal_and_ref_exparts_for_split <- function(g, source, sink, a_split, a_par
       epath2 = lapply(vpath2, from_vpath_to_exon_path, g=g)     # high_mem 
      
       ex_part1 <- lapply(epath1, from_exon_path_to_exonic_part_path, g=g)   # high_mem
-      rm(epath1)
-      #ex_part1 <- lapply(ex_part1, function(x) {return (x[igraph::edge_attr(g)$ex_or_in[x] == 'ex_part'])})
       ex_part1 <- lapply(ex_part1, function(x) {return (x[ex_or_in_vec[x] == 'ex_part'])})
-      #ex_part1_set <- Reduce(intersect, ex_part1)
       ex_part1_set <- intersect_stream(ex_part1)
-      rm(ex_part1)
+
       ex_part2 <- lapply(epath2, from_exon_path_to_exonic_part_path, g=g)   # high_mem 
-      rm(epath2)
-      #ex_part2 <- lapply(ex_part2, function(x) {return (x[igraph::edge_attr(g)$ex_or_in[x] == 'ex_part'])})
       ex_part2 <- lapply(ex_part2, function(x) {return (x[ex_or_in_vec[x] == 'ex_part'])})
-      #ex_part2_set <- Reduce(intersect, ex_part2)
       ex_part2_set <- intersect_stream(ex_part2)
-      rm(ex_part2)
-      gc()
      
   
       setdiff1 <- setdiff(ex_part1_set, ex_part2_set)
@@ -791,10 +785,8 @@ options(keep.source = TRUE)
 Rprof("mem.line.out", line.profiling = TRUE, memory.profiling = TRUE)
 
   focalexons_df <- data.frame()
-
-  g_orig <- g
+  g <- grase::set_edge_names(g)
   txpaths <- grase::txpath_from_edgeattr(g)
-  txpaths_orig <- txpaths
   #txmat <- grase::make_matrix_from_txpath_igraph(g, txpaths)
   #txmat_orig = txmat 
   #trans <- rownames(txmat)
