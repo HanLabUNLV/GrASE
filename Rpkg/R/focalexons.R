@@ -708,13 +708,15 @@ edge_in_txpath <- function(g, trans, e){
 
 #' @export
 find_tx_with_epath <- function(g, trans, edges_list) {
+  eid = as.integer(igraph::E(g))
+  names(eid) = igraph::edge_attr(g, "name")
   tx_to_update = list()
   for ( edges in edges_list) { 
-    epath_name = paste0(edges, collapse = "-")
+    epath_name = paste0(edges, collapse = ",")
     tx_to_update[[epath_name]] <- list()
     for (e in edges) {
       print(e)
-      tx_to_update[[epath_name]] <- append(tx_to_update[[epath_name]], list(trans[grase::edge_in_txpath(g, trans, e)]))
+      tx_to_update[[epath_name]] <- append(tx_to_update[[epath_name]], list(trans[grase::edge_in_txpath(g, trans, eid[e])]))
     }
     names(tx_to_update[[epath_name]]) = edges
   }
@@ -800,11 +802,13 @@ update_txpaths_after_bubble_collapse <- function(g, tx_to_update, epath) {
 
 #' @export
 update_txpaths_after_bubble_collapse2 <- function(g, tx_list, epath) {
+  eid = as.integer(igraph::E(g))
+  names(eid) = igraph::edge_attr(g, "name")
   for (idx in 1:length(tx_list)) {
     tx_to_update = tx_list[[idx]][[1]]
     for (e in epath) {
       for (tx in tx_to_update) {
-        igraph::edge_attr(g, tx, index = e) <- TRUE
+        igraph::edge_attr(g, tx, index = eid[e]) <- TRUE
       }
     }
   }
@@ -827,12 +831,6 @@ Rprof("mem.line.out", line.profiling = TRUE, memory.profiling = TRUE)
 
   focalexons_df <- data.frame()
   g <- grase::set_edge_names(g)
-  ex_or_in_vec <- igraph::edge_attr(g, "ex_or_in")
-  g_exon <- igraph::delete_edges(g, igraph::E(g)[ex_or_in_vec == 'ex_part']) # have to delete all edges in one command
-  g_expart <- igraph::delete_edges(g, igraph::E(g)[ex_or_in_vec == 'ex']) # have to delete all edges in one command
-
-  ex_or_in_gexpart <- igraph::edge_attr(g_expart, "ex_or_in")
-  names(ex_or_in_gexpart) <- igraph::edge_attr(g_expart, "name")
 
   txpaths <- grase::txpath_from_edgeattr(g)
   #txmat <- grase::make_matrix_from_txpath_igraph(g, txpaths)
@@ -856,6 +854,13 @@ Rprof("mem.line.out", line.profiling = TRUE, memory.profiling = TRUE)
   }
 
   for (bubble_idx in 1:nrow(bubbles_ordered)) {
+
+    ex_or_in_vec <- igraph::edge_attr(g, "ex_or_in")
+    g_exon <- igraph::delete_edges(g, igraph::E(g)[ex_or_in_vec == 'ex_part']) # have to delete all edges in one command
+    g_expart <- igraph::delete_edges(g, igraph::E(g)[ex_or_in_vec == 'ex']) # have to delete all edges in one command
+
+    ex_or_in_gexpart <- igraph::edge_attr(g_expart, "ex_or_in")
+    names(ex_or_in_gexpart) <- igraph::edge_attr(g_expart, "name")
 
     if (bubble_idx > nrow(bubbles_ordered)) {
         print ("collapsed all bubbles. exiting the loop 1")
