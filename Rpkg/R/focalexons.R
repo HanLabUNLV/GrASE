@@ -9,6 +9,37 @@ count_items <- function(x) {
   length(stringr::str_split(x, ",")[[1]])
 }
 
+
+#' Find reference exonic part near bubble region
+#' @export
+find_reference_exonic_part_simple <- function(source, sink, ex_part1_set, ex_part2_set, tx_ex_part1_set, tx_ex_part2_set, g_expart) {
+  source_adj_exonic_part <- c()
+  sink_adj_exonic_part <- c()
+  ex_or_in_gexpart <- igraph::edge_attr(g_expart, "ex_or_in")
+  names(ex_or_in_gexpart) <- igraph::edge_attr(g_expart, "name")
+
+  common_edges <- intersect(ex_part1_set, ex_part2_set)
+  common_exonic_part <- if(length(common_edges) > 0) common_edges[ex_or_in_gexpart[common_edges] == "ex_part"] else character(0)
+  #node_current_pos <- igraph::vertex_attr(g_expart, 'position', index=source) 
+  incident_edges <- igraph::incident(g_expart, source, mode = 'in')
+  incident_names = igraph::edge_attr(g_expart, 'name', incident_edges)
+  source_adj_expart_name <- incident_names[ex_or_in_gexpart[incident_names] == "ex_part"]
+  source_adj_expart_name <- intersect(source_adj_expart_name, intersect(tx_ex_part1_set, tx_ex_part2_set))
+
+  #node_current_pos <- igraph::vertex_attr(g_expart, 'position', index=sink) 
+  incident_edges <- igraph::incident(g_expart, sink, mode = 'out')
+  incident_names = igraph::edge_attr(g_expart, 'name', incident_edges)
+  sink_adj_expart_name <- incident_names[ex_or_in_gexpart[incident_names] == "ex_part"]
+  sink_adj_expart_name <- intersect(sink_adj_expart_name, intersect(tx_ex_part1_set, tx_ex_part2_set))
+  
+  return(list(common = common_exonic_part, source = source_adj_expart_name, sink = sink_adj_expart_name ))
+}
+
+
+
+
+
+
 #' Find reference exonic part near bubble region
 #' @export
 find_reference_exonic_part <- function(source, sink, ex_part1_set, ex_part2_set, tx_ex_part1_set, tx_ex_part2_set, g) {
@@ -587,57 +618,67 @@ intersect_stream <- function(lst) {
 }
 
 #' @export
-find_focal_and_ref_exparts_for_split <- function(g, source, sink, a_split, a_parsed_partitions, a_parsed_paths, a_tx_ex_parts, a_focalexons_df, gene=gene) {
+find_focal_and_ref_exparts_for_split <- function(g, source, sink, split, parsed_partitions, parsed_paths, tx_ex_parts, focalexons_df, gene=gene) {
 
-      group1 = as.numeric(a_split$group1)
-      group2 = as.numeric(a_split$group2)
-      tx1 = unique(unlist( a_parsed_partitions[group1]))
-      tx2 = unique(unlist( a_parsed_partitions[group2]))
+      group1 = as.numeric(split$group1)
+      group2 = as.numeric(split$group2)
+      tx1 = unique(unlist( parsed_partitions[group1]))
+      tx2 = unique(unlist( parsed_partitions[group2]))
       print (tx1)
       print (tx2)
 
-      ex_or_in_vec <- igraph::get.edge.attribute(g, "ex_or_in")
+      ex_or_in_vec <- igraph::edge_attr(g, "ex_or_in")
       g_exon <- igraph::delete_edges(g, igraph::E(g)[ex_or_in_vec == 'ex_part']) # have to delete all edges in one command
       g_expart <- igraph::delete_edges(g, igraph::E(g)[ex_or_in_vec == 'ex']) # have to delete all edges in one command
+      ex_or_in_gexon <- igraph::edge_attr(g_exon, "ex_or_in")
+      names(ex_or_in_gexon) <- igraph::edge_attr(g_exon, "name")
+      ex_or_in_gexpart <- igraph::edge_attr(g_expart, "ex_or_in")
+      names(ex_or_in_gexpart) <- igraph::edge_attr(g_expart, "name")
+      dexseq_frag <- igraph::edge_attr(g_expart, "dexseq_fragment")
+      names(dexseq_frag) <- igraph::edge_attr(g_expart, "name")
 
-      vpath1 = lapply(a_parsed_paths[group1], function(vec) c(source, vec, sink)) 
-      vpath2 = lapply(a_parsed_paths[group2], function(vec) c(source, vec, sink)) 
+      vpath1 = lapply(parsed_paths[group1], function(vec) c(source, vec, sink)) 
+      vpath2 = lapply(parsed_paths[group2], function(vec) c(source, vec, sink)) 
    
-      epath1 = lapply(vpath1, from_vpath_to_exon_path, g=g)     # high_mem 
-      epath2 = lapply(vpath2, from_vpath_to_exon_path, g=g)     # high_mem 
+      epath1.0 = lapply(vpath1, from_vpath_to_exon_path, g=g)     # high_mem 
+      epath2.0 = lapply(vpath2, from_vpath_to_exon_path, g=g)     # high_mem 
+      epath1 = lapply(vpath1, from_vpath_to_edge_path_simple, g=g_exon)     # high_mem 
+      epath2 = lapply(vpath2, from_vpath_to_edge_path_simple, g=g_exon)     # high_mem 
      
-      ex_part1 <- lapply(epath1, from_exon_path_to_exonic_part_path, g=g)   # high_mem
-      ex_part1 <- lapply(ex_part1, function(x) {return (x[ex_or_in_vec[x] == 'ex_part'])})
+      ex_part1.0 <- lapply(epath1.0, from_exon_path_to_exonic_part_path, g=g)   # high_mem
+      ex_part1 <- lapply(vpath1, from_vpath_to_edge_path_simple, g=g_expart)   # high_mem
+      ex_part1 <- lapply(ex_part1, function(x) {return (x[ex_or_in_gexpart[x] == 'ex_part'])})
       ex_part1_set <- intersect_stream(ex_part1)
 
-      ex_part2 <- lapply(epath2, from_exon_path_to_exonic_part_path, g=g)   # high_mem 
-      ex_part2 <- lapply(ex_part2, function(x) {return (x[ex_or_in_vec[x] == 'ex_part'])})
+      ex_part2.0 <- lapply(epath2.0, from_exon_path_to_exonic_part_path, g=g)   # high_mem 
+      ex_part2 <- lapply(vpath2, from_vpath_to_edge_path_simple, g=g_expart)   # high_mem
+      ex_part2 <- lapply(ex_part2, function(x) {return (x[ex_or_in_gexpart[x] == 'ex_part'])})
       ex_part2_set <- intersect_stream(ex_part2)
      
   
       setdiff1 <- setdiff(ex_part1_set, ex_part2_set)
       setdiff2 <- setdiff(ex_part2_set, ex_part1_set)
 
-      setdiff1ID <- if (length(setdiff1) > 0) paste0("E", paste(igraph::edge_attr(g)$dexseq_fragment[setdiff1], collapse=",E")) else ""
-      setdiff2ID <- if (length(setdiff2) > 0) paste0("E", paste(igraph::edge_attr(g)$dexseq_fragment[setdiff2], collapse=",E")) else ""
+      setdiff1ID <- if (length(setdiff1) > 0) paste0("E", paste(dexseq_frag[setdiff1], collapse=",E")) else ""
+      setdiff2ID <- if (length(setdiff2) > 0) paste0("E", paste(dexseq_frag[setdiff2], collapse=",E")) else ""
 
-      tx_ex_part1 <- a_tx_ex_parts[tx1[1]]
+      tx_ex_part1 <- tx_ex_parts[tx1[1]]
       tx_ex_part1 <- unique(unlist(tx_ex_part1))
-      tx_ex_part2 <- a_tx_ex_parts[tx2[1]] 
+      tx_ex_part2 <- tx_ex_parts[tx2[1]] 
       tx_ex_part2 <- unique(unlist(tx_ex_part2))
 
-      ref_ex_part <- find_reference_exonic_part(
+      ref_ex_part <- find_reference_exonic_part_simple(
         source = source, 
         sink = sink, 
         ex_part1_set = ex_part1_set, 
         ex_part2_set = ex_part2_set, 
         tx_ex_part1_set = tx_ex_part1, 
         tx_ex_part2_set = tx_ex_part2, 
-        g = g 
+        g = g_expart 
       ) 
  
       ref_ex_part_set <- unique(unlist(c(ref_ex_part$common, ref_ex_part$source, ref_ex_part$sink)))
-      ref_ex_part_set_ID <- if (length(ref_ex_part_set) > 0) paste0("E", paste(igraph::edge_attr(g)$dexseq_fragment[ref_ex_part_set], collapse=",E")) else ""
+      ref_ex_part_set_ID <- if (length(ref_ex_part_set) > 0) paste0("E", paste(dexseq_frag[ref_ex_part_set], collapse=",E")) else ""
 
       new_row <- data.frame(
         gene = gene,
@@ -650,8 +691,8 @@ find_focal_and_ref_exparts_for_split <- function(g, source, sink, a_split, a_par
         path2 = paste(sapply(vpath2, function(vec) paste(vec, collapse = "-")), collapse=", ")
       )
       print(new_row)
-      a_focalexons_df <- rbind(a_focalexons_df, new_row)
-  return(list(focalexons_df = a_focalexons_df))
+      focalexons_df <- rbind(focalexons_df, new_row)
+  return(list(focalexons_df = focalexons_df))
 }
 
 
@@ -786,6 +827,13 @@ Rprof("mem.line.out", line.profiling = TRUE, memory.profiling = TRUE)
 
   focalexons_df <- data.frame()
   g <- grase::set_edge_names(g)
+  ex_or_in_vec <- igraph::edge_attr(g, "ex_or_in")
+  g_exon <- igraph::delete_edges(g, igraph::E(g)[ex_or_in_vec == 'ex_part']) # have to delete all edges in one command
+  g_expart <- igraph::delete_edges(g, igraph::E(g)[ex_or_in_vec == 'ex']) # have to delete all edges in one command
+
+  ex_or_in_gexpart <- igraph::edge_attr(g_expart, "ex_or_in")
+  names(ex_or_in_gexpart) <- igraph::edge_attr(g_expart, "name")
+
   txpaths <- grase::txpath_from_edgeattr(g)
   #txmat <- grase::make_matrix_from_txpath_igraph(g, txpaths)
   #txmat_orig = txmat 
@@ -820,19 +868,22 @@ Rprof("mem.line.out", line.profiling = TRUE, memory.profiling = TRUE)
 
     #txpaths <- lapply(SplicingGraphs::txpath(sg), as.character)
     txpaths <- grase::txpath_from_edgeattr(g)
-    tx_exonpaths = lapply(txpaths, grase::from_vpath_to_exon_path, g=g)         # high_mem
-    tx_ex_parts = lapply(tx_exonpaths, grase::from_exon_path_to_exonic_part_path, g=g) #high_mem
+    #tx_exonpaths = lapply(txpaths, grase::from_vpath_to_exon_path, g=g)         # high_mem
+    #tx_ex_parts = lapply(tx_exonpaths, grase::from_exon_path_to_exonic_part_path, g=g) #high_mem
+    tx_exonpaths = lapply(txpaths, grase::from_vpath_to_edge_path_simple, g=g_exon)         # high_mem
+    tx_ex_parts = lapply(txpaths, grase::from_vpath_to_edge_path_simple, g=g_expart) #high_mem
 
     parsed_paths <- lapply(bubbles_ordered$paths[[bubble_idx]], function(x) strsplit(gsub("[{}]", "", x), ",")[[1]])
     parsed_partitions <- lapply(bubbles_ordered$partitions[[bubble_idx]], function(x) strsplit(gsub("[{}]", "", x), ",")[[1]])
 
     vpaths = lapply(parsed_paths, function(vec) c(source, vec, sink))
-    epaths = lapply(vpaths, grase::from_vpath_to_exon_path, g=g) 
+    epaths = lapply(vpaths, grase::from_vpath_to_edge_path_simple, g=g_exon) 
 
-    ex_part_paths <- lapply(epaths, grase::from_exon_path_to_exonic_part_path, g=g)
-    ex_index = igraph::edge_attr(g)$ex_or_in == 'ex_part'
-    ex_part_paths <- lapply(ex_part_paths, function(x) {return (x[igraph::edge_attr(g)$ex_or_in[x] == 'ex_part'])})
-    names(ex_part_paths)  = sapply(parsed_partitions, function(vec) paste(vec, collapse=","))
+    ex_part_paths <- lapply(vpaths, grase::from_vpath_to_edge_path_simple, g=g_expart)
+    #ex_part_paths <- lapply(ex_part_paths, function(x) {return (x[igraph::edge_attr(g)$ex_or_in[x] == 'ex_part'])})
+    ex_part_paths <- lapply(ex_part_paths, function(x) {return (x[ex_or_in_gexpart[x] == 'ex_part'])})
+
+    #names(ex_part_paths)  = sapply(parsed_partitions, function(vec) paste(vec, collapse=","))
     names(ex_part_paths)  = 1:length(ex_part_paths) 
 
     print (paste("ex_part_paths len:", length(ex_part_paths)))
@@ -852,7 +903,7 @@ Rprof("mem.line.out", line.profiling = TRUE, memory.profiling = TRUE)
     rm(contain_dag)
     
     for (split in valid_splits) {
-      retval = grase::find_focal_and_ref_exparts_for_split(g=g, source=source, sink=sink,  a_split=split, a_parsed_partitions=parsed_partitions, a_parsed_paths=parsed_paths, a_tx_ex_parts=tx_ex_parts, a_focalexons_df=focalexons_df, gene=gene) 
+      retval = grase::find_focal_and_ref_exparts_for_split(g=g, source=source, sink=sink,  split=split, parsed_partitions=parsed_partitions, parsed_paths=parsed_paths, tx_ex_parts=tx_ex_parts, focalexons_df=focalexons_df, gene=gene) 
       focalexons_df = retval$focalexons_df
     }
 

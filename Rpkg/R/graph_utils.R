@@ -288,9 +288,34 @@ set_edge_names <- function(g) {
 #' Convert vertex path to exon path
 #' @export
 from_vpath_to_edge_path_simple <- function(g, bubblepath) {
+  
+  n <- length(bubblepath)
+  if (n < 2) return(integer(0))
 
- edge_seq <- igraph::E(g, path = bubblepath)
- igraph::edge_attr(g, 'name', edge_seq) 
+  # Prepare a list of length n-1
+  edge_blocks <- vector("list", n - 1L)
+  sg_ids       <- igraph::vertex_attr(g, "sg_id")
+  names(sg_ids) <- igraph::vertex_attr(g, "name")
+
+  for (i in 1:(n - 1)) {
+    v1   <- bubblepath[i]
+    v2   <- bubblepath[i + 1L]
+    if (igraph::are.connected(g, v1, v2)) {
+      eid <- igraph::get_edge_ids(g, vp =c(v1, v2))
+      edge_blocks[[i]]<- igraph::edge_attr(g, "name", index = eid)
+    }
+    else {
+      # find all internal vertices for this exon edge
+      id1      <- which(sg_ids == sg_ids[v1])
+      id2      <- which(sg_ids == sg_ids[v2])
+      sub_sg   <- sg_ids[seq(min(id1, id2), max(id1, id2))]
+
+      # collect all ex_part edges across each adjacent sg pair
+      eid <- igraph::E(g, path=names(sub_sg))
+      edge_blocks[[i]]<- igraph::edge_attr(g, "name", index = eid)
+    }
+  } 
+  unlist(edge_blocks, use.names = FALSE)
 }
 
 
@@ -303,7 +328,7 @@ from_vpath_to_exon_path <- function(g, bubblepath) {
 
   # Prepare a list of length n-1
   edge_blocks <- vector("list", n - 1L)
-  ex_or_in_vec <- igraph::get.edge.attribute(g, "ex_or_in")
+  ex_or_in_vec <- igraph::edge_attr(g, "ex_or_in")
 
   for (i in 1:(n - 1)) {
     v1   <- bubblepath[i]
@@ -330,9 +355,9 @@ from_exon_path_to_exonic_part_path <- function(g, exonpath) {
   out_blocks <- vector("list", length(exonpath))
 
   # We’ll also pull ex_or_in once
-  ex_or_in_vec <- igraph::get.edge.attribute(g, "ex_or_in")
+  ex_or_in_vec <- igraph::edge_attr(g, "ex_or_in")
   # And get all SG IDs once
-  sg_ids       <- igraph::get.vertex.attribute(g, "sg_id")
+  sg_ids       <- igraph::vertex_attr(g, "sg_id")
   ends_mat_all <- igraph::ends(g, exonpath, names = FALSE)
 
   for (i in seq_along(exonpath)) {
