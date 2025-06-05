@@ -278,6 +278,7 @@ set_edge_names <- function(g) {
 
   el <- igraph::as_edgelist(g, names = TRUE)   # an M×2 matrix of character
   edge.strings <- apply(el, 1, function(x) paste0(x[1], "-", x[2]))
+  edge.strings <- paste0(edge.strings, ":", igraph::E(g)$ex_or_in)
   igraph::E(g)$name <- edge.strings
   g 
 }
@@ -285,7 +286,70 @@ set_edge_names <- function(g) {
 
 
 
-#' Convert vertex path to exon path
+
+#' convert vertex path to exon path
+#' @export
+from_vpath_to_exon_path_simple <- function(g, vpath) {
+  edge_seq <- igraph::E(g, path = vpath)
+  igraph::edge_attr(g, 'name', edge_seq) 
+} 
+
+
+
+#' convert vertex path to exon path
+#' @export
+from_epath_to_expart_path_simple <- function(g, epath) {
+  # Early return
+  if (length(epath) == 0) return(integer(0))
+
+  # Pre-allocate a list, one slot per input edge
+  edge_blocks <- vector("list", length(epath))
+
+  eid_names <- igraph::edge_attr(g, "name")
+  # get all SG IDs once
+  sg_ids       <- igraph::vertex_attr(g, "sg_id")
+  names(sg_ids) <- igraph::vertex_attr(g, "name")
+
+  epath_edges = unlist(strsplit(epath, ":"))
+  epath_ends = matrix(unlist(strsplit(epath_edges[c(TRUE,FALSE)], "-")), ncol=2, byrow=TRUE)
+  epath_type = epath_edges[c(FALSE, TRUE)]
+
+  for (i in seq_along(epath)) {
+    typ <- epath_type[i]
+
+    if (typ == "ex") {
+      # find start/end vertices for this exon edge
+      v1       <- epath_ends[i, 1]
+      v2       <- epath_ends[i, 2]
+      # find all internal vertices for this exon edge
+      id1      <- which(sg_ids == sg_ids[v1])
+      id2      <- which(sg_ids == sg_ids[v2])
+      sub_sg   <- sg_ids[seq(min(id1, id2), max(id1, id2))]
+
+      # collect all ex_part edges across each adjacent sg pair
+      eid <- igraph::E(g, path=names(sub_sg))
+      edge_blocks[[i]]<- igraph::edge_attr(g, "name", index = eid)
+
+    } else if (typ %in% c("in", "R", "L")) {
+      # keep the edge itself
+      edge_blocks[[i]] <- epath[i]
+
+    } else {
+      # skip or warn
+      edge_blocks[[i]] <- integer(0)
+      warning("Skipping unknown edge type '", typ, "' on edge ", epath[i])
+    }
+  }
+
+  # flatten exactly once
+  unlist(edge_blocks, use.names = FALSE)
+}
+
+
+
+
+
+#' convert vertex path to exon path
 #' @export
 from_vpath_to_edge_path_simple <- function(g, bubblepath) {
   
@@ -300,7 +364,7 @@ from_vpath_to_edge_path_simple <- function(g, bubblepath) {
   for (i in 1:(n - 1)) {
     v1   <- bubblepath[i]
     v2   <- bubblepath[i + 1L]
-    if (igraph::are.connected(g, v1, v2)) {
+    if (igraph::are_adjacent(g, v1, v2)) {
       eid <- igraph::get_edge_ids(g, vp =c(v1, v2))
       edge_blocks[[i]]<- igraph::edge_attr(g, "name", index = eid)
     }

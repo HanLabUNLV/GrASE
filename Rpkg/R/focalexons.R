@@ -642,16 +642,16 @@ find_focal_and_ref_exparts_for_split <- function(g, source, sink, split, parsed_
    
       epath1.0 = lapply(vpath1, from_vpath_to_exon_path, g=g)     # high_mem 
       epath2.0 = lapply(vpath2, from_vpath_to_exon_path, g=g)     # high_mem 
-      epath1 = lapply(vpath1, from_vpath_to_edge_path_simple, g=g_exon)     # high_mem 
-      epath2 = lapply(vpath2, from_vpath_to_edge_path_simple, g=g_exon)     # high_mem 
+      epath1 = lapply(vpath1, from_vpath_to_exon_path_simple, g=g_exon)     # high_mem 
+      epath2 = lapply(vpath2, from_vpath_to_exon_path_simple, g=g_exon)     # high_mem 
      
       ex_part1.0 <- lapply(epath1.0, from_exon_path_to_exonic_part_path, g=g)   # high_mem
-      ex_part1 <- lapply(vpath1, from_vpath_to_edge_path_simple, g=g_expart)   # high_mem
+      ex_part1 <- lapply(epath1, from_epath_to_expart_path_simple, g=g_expart)   # high_mem
       ex_part1 <- lapply(ex_part1, function(x) {return (x[ex_or_in_gexpart[x] == 'ex_part'])})
       ex_part1_set <- intersect_stream(ex_part1)
 
       ex_part2.0 <- lapply(epath2.0, from_exon_path_to_exonic_part_path, g=g)   # high_mem 
-      ex_part2 <- lapply(vpath2, from_vpath_to_edge_path_simple, g=g_expart)   # high_mem
+      ex_part2 <- lapply(epath2, from_epath_to_expart_path_simple, g=g_expart)   # high_mem
       ex_part2 <- lapply(ex_part2, function(x) {return (x[ex_or_in_gexpart[x] == 'ex_part'])})
       ex_part2_set <- intersect_stream(ex_part2)
      
@@ -854,7 +854,7 @@ Rprof("mem.line.out", line.profiling = TRUE, memory.profiling = TRUE)
   }
 
   for (bubble_idx in 1:nrow(bubbles_ordered)) {
-
+  
     ex_or_in_vec <- igraph::edge_attr(g, "ex_or_in")
     g_exon <- igraph::delete_edges(g, igraph::E(g)[ex_or_in_vec == 'ex_part']) # have to delete all edges in one command
     g_expart <- igraph::delete_edges(g, igraph::E(g)[ex_or_in_vec == 'ex']) # have to delete all edges in one command
@@ -875,16 +875,16 @@ Rprof("mem.line.out", line.profiling = TRUE, memory.profiling = TRUE)
     txpaths <- grase::txpath_from_edgeattr(g)
     #tx_exonpaths = lapply(txpaths, grase::from_vpath_to_exon_path, g=g)         # high_mem
     #tx_ex_parts = lapply(tx_exonpaths, grase::from_exon_path_to_exonic_part_path, g=g) #high_mem
-    tx_exonpaths = lapply(txpaths, grase::from_vpath_to_edge_path_simple, g=g_exon)         # high_mem
-    tx_ex_parts = lapply(txpaths, grase::from_vpath_to_edge_path_simple, g=g_expart) #high_mem
+    tx_exonpaths = lapply(txpaths, grase::from_vpath_to_exon_path_simple, g=g_exon)         # high_mem
+    tx_ex_parts = lapply(tx_exonpaths, grase::from_epath_to_expart_path_simple, g=g_expart) #high_mem
 
     parsed_paths <- lapply(bubbles_ordered$paths[[bubble_idx]], function(x) strsplit(gsub("[{}]", "", x), ",")[[1]])
     parsed_partitions <- lapply(bubbles_ordered$partitions[[bubble_idx]], function(x) strsplit(gsub("[{}]", "", x), ",")[[1]])
 
     vpaths = lapply(parsed_paths, function(vec) c(source, vec, sink))
-    epaths = lapply(vpaths, grase::from_vpath_to_edge_path_simple, g=g_exon) 
+    epaths = lapply(vpaths, grase::from_vpath_to_exon_path_simple, g=g_exon) 
 
-    ex_part_paths <- lapply(vpaths, grase::from_vpath_to_edge_path_simple, g=g_expart)
+    ex_part_paths <- lapply(epaths, grase::from_epath_to_expart_path_simple, g=g_expart)
     #ex_part_paths <- lapply(ex_part_paths, function(x) {return (x[igraph::edge_attr(g)$ex_or_in[x] == 'ex_part'])})
     ex_part_paths <- lapply(ex_part_paths, function(x) {return (x[ex_or_in_gexpart[x] == 'ex_part'])})
 
