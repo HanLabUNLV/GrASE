@@ -9,6 +9,7 @@ library(GenomicFeatures)
 library(devtools)
 
 grase_package_path <- "/Users/mirahan/Work/GrASE/Rpkg/"
+#detach("package:grase", unload = TRUE, force = TRUE)
 devtools::load_all(grase_package_path)
 
 #source("R/focalexons.R", keep.source=TRUE)
@@ -34,8 +35,8 @@ genes = c('ENSG00000196628.19', 'ENSG00000197912.16', 'ENSG00000249859.11', 'ENS
 'ENSG00000224078.15', 
 'ENSG00000179818.14', 
 'ENSG00000109339.24')
-#genes = c('ENSG00000188227.13')
-genes = c('ENSG00000007372.23')
+genes = c('ENSG00000188227.13')
+#genes = c('ENSG00000007372.23')
 
 #gene = 'ENSG00000006744.19'
 #gene = 'ENSG00000000003.15'
@@ -48,6 +49,7 @@ genes = c('ENSG00000007372.23')
 #gene = 'ENSG00000103254.10'
 #gene = 'ENSG00000169488.6'
 #gene = 'ENSG00000023191.17'
+gene = 'ENSG00000183878.15'
 
 
 for (gene in genes) {
@@ -62,6 +64,7 @@ for (gene in genes) {
     next
   }
 
+
   gtf_path <- file.path(indir, "gtf", paste0(gene, ".gtf"))
   gff_path <- file.path(indir, "dexseq.gff", paste0(gene, ".dexseq.gff"))
   graph_path <- file.path(indir, "graphml", paste0(gene, ".dexseq.graphml"))
@@ -75,7 +78,7 @@ for (gene in genes) {
   }
   print (paste("running", filename))
   gr <- gr[!(rtracklayer::mcols(gr)$type %in% c("start_codon", "stop_codon"))]
-  genome(gr) <- "hg38" 
+  rtracklayer::genome(gr) <- 'hg38'
   txdb <- txdbmaker::makeTxDbFromGRanges(gr)
 
   sg <- SplicingGraphs::SplicingGraphs(txdb, min.ntx = 1)
@@ -96,16 +99,21 @@ for (gene in genes) {
 
 
   g <- igraph::read_graph(graph_path, format = "graphml")
+  grase::style_and_plot(g, gene, outdir) 
 
   # call your downstream function, fully namespaced
   cat("  calling grase::focal_exons_gene_powerset()\n"); flush.console()
   
   
-  grase::focal_exons_gene_powerset(
+  focalexons_read <- read.table("focalexons/ENSG00000183878.15.focalexons.txt", sep="\t", header=TRUE)
+
+  focalexons <- grase::focal_exons_gene_powerset(
       gene     = gene,
       g        = g,
       sg       = sg,
-      outdir   = outdir
+      outdir   = outdir,
+      max_path = 30,
+      collapse_bubbles = TRUE
   )
 
   print(paste0("FINISH ", gene))

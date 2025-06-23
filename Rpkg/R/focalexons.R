@@ -682,6 +682,8 @@ find_focal_and_ref_exparts_for_split <- function(g, source, sink, split, parsed_
 
       new_row <- data.frame(
         gene = gene,
+        source = source,
+        sink = sink,
         ref_ex_part = ref_ex_part_set_ID,
         setdiff1 = setdiff1ID,
         setdiff2 = setdiff2ID,
@@ -823,7 +825,7 @@ update_txpaths_after_bubble_collapse2 <- function(g, tx_list, epath) {
 
 #' Compute focal exons from graph and splicing structure
 #' @export
-focal_exons_gene_powerset <- function(gene, g, sg, outdir, max_powerset = 10000, collapse_bubbles=TRUE) {
+focal_exons_gene_powerset <- function(gene, g, sg, outdir, max_path = 30, collapse_bubbles=TRUE) {
 
 
 #options(keep.source = TRUE)
@@ -890,7 +892,7 @@ focal_exons_gene_powerset <- function(gene, g, sg, outdir, max_powerset = 10000,
     print (paste("ex_part_paths len:", length(ex_part_paths)))
     contain_dag <- grase::path_subset_relation(ex_part_paths) 
     print (paste("contain_dag len:", length(igraph::E(contain_dag))))
-    if (length(ex_part_paths) > 30) {
+    if (length(ex_part_paths) > max_path) {
         print("bubble with more than 30 alternative paths: skipping")
         next;
     }
@@ -984,7 +986,7 @@ focal_exons_gene_powerset <- function(gene, g, sg, outdir, max_powerset = 10000,
   write.table(focalexons_filtered, file.path(outdir, "focalexons", paste0(gene, ".focalexons.txt")), sep = "\t", quote = FALSE, row.names = FALSE)
 
 #Rprof(NULL)
-
+  focalexons_filtered
 }
 
 
