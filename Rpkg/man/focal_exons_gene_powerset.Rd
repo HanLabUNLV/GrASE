@@ -9,7 +9,7 @@ focal_exons_gene_powerset(
   g,
   sg,
   outdir,
-  max_powerset = 10000,
+  max_path = 30,
   collapse_bubbles = TRUE
 )
 }

@@ -8,24 +8,16 @@ library(txdbmaker)
 library(GenomicFeatures)
 library(devtools)
 
+#grase_package_path <- "/home/mirahan/adjexon_bubbles/GrASE/Rpkg/"
 grase_package_path <- "/Users/mirahan/Work/GrASE/Rpkg/"
 #detach("package:grase", unload = TRUE, force = TRUE)
 devtools::load_all(grase_package_path)
 
-#source("R/focalexons.R", keep.source=TRUE)
-#source("R/bubbles.R", keep.source=TRUE)
-#source("R/gencode.TxDb.R", keep.source=TRUE)
-#source("R/graph_utils.R", keep.source=TRUE)
-#
+
 #indir = '/mnt/storage/jaquino/scRNAseq_sim_pt2/grase/graphml.dexseq.v34/'
 #outdir = '/mnt/storage/jaquino/scRNAseq_sim_pt2/grase/graphml.dexseq.v34/'
 indir = '/Users/mirahan/Work/GrASE/Rpkg/'
 outdir = '/Users/mirahan/Work/GrASE/Rpkg/'
-
-#sim_deds <- read.table("simulation_deds.cell150.txt", header=TRUE, sep="\t")
-#sim_deds <- read.table(paste0(indir,"genelist"), header=TRUE, sep="\t")
-#gene_summary = sim_deds %>% group_by(geneID)
-#genes =  unique(gene_summary$geneID)
 
 genes = c('ENSG00000196628.19', 'ENSG00000197912.16', 'ENSG00000249859.11', 'ENSG00000156113.23', 
 'ENSG00000253314.7', 'ENSG00000241469.9', 'ENSG00000242086.8', 
@@ -105,7 +97,7 @@ for (gene in genes) {
   cat("  calling grase::focal_exons_gene_powerset()\n"); flush.console()
   
   
-  focalexons_read <- read.table("focalexons/ENSG00000183878.15.focalexons.txt", sep="\t", header=TRUE)
+  #focalexons_read <- read.table(filename, sep="\t", header=TRUE)
 
   focalexons <- grase::focal_exons_gene_powerset(
       gene     = gene,
