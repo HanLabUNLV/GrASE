@@ -101,9 +101,12 @@ map_rMATS_event_overhang <- function(g, fromGTF_path, eventType, gene, gff_path,
       print(eventType)
       print(path1)
       print(path2)
-      split_truth1 = grepl(path1, focalinfo$path1) & grepl(path2, focalinfo$path2)
-      split_truth2 = grepl(path2, focalinfo$path1) & grepl(path1, focalinfo$path2)
-      split_truth = split_truth1 | split_truth2
+
+      split_truth1 = sapply(path1, function(pat) grepl(pat, focalinfo$path1))
+      split_truth2 = sapply(path1, function(pat) grepl(pat, focalinfo$path2))
+      ttt_fff = apply(split_truth1, 1, all) & apply(split_truth2, 1, function(x) all(!(x)))
+      fff_ttt = apply(split_truth1, 1, function(x) all(!(x))) & apply(split_truth2, 1, all)
+      split_truth =  ttt_fff | fff_ttt 
       print(split_truth1)
       print(split_truth2)
       print(split_truth)
@@ -117,6 +120,7 @@ map_rMATS_event_overhang <- function(g, fromGTF_path, eventType, gene, gff_path,
     diff_list1 <- parse_dexseq_frag_str(focalinfo$setdiff1)
     diff_list2 <- parse_dexseq_frag_str(focalinfo$setdiff2)
     ref_list <- parse_dexseq_frag_str(focalinfo$ref_ex_part)
+    if (length(diff_list1) == 0 && length(diff_list2) == 0) {next}
 
     diff_frag1 <- E(g)[dexseq_fragment %in% diff_list1]
     diff_frag2 <- E(g)[dexseq_fragment %in% diff_list2]
@@ -202,9 +206,9 @@ map_rMATS_event_full_fragment <- function(g, fromGTF_path, eventType, gene, gff_
   }
   strand <- rmats_df$strand[1]
   rmats_df$ID = as.character(rmats_df$ID)
-  names(rmats_df)[names(rmats_df) == "riExonStart_0base"] <- 'exonStart_0base'
-  names(rmats_df)[names(rmats_df) == "riExonEnd"] <- 'exonEnd'
   rmats_1base = rmats_df
+  names(rmats_1base)[names(rmats_1base) == "riExonStart_0base"] <- 'exonStart_0base'
+  names(rmats_1base)[names(rmats_1base) == "riExonEnd"] <- 'exonEnd'
   rmats_1base$exonStart_0base = rmats_1base$exonStart_0base+1
   rmats_1base$exonEnd = rmats_1base$exonEnd + 1
   rmats_1base$upstreamES = rmats_1base$upstreamES + 1
@@ -237,6 +241,12 @@ map_rMATS_event_full_fragment <- function(g, fromGTF_path, eventType, gene, gff_
     v_uee = V(g)[position == uee]$name
     v_des = V(g)[position == des]$name
     v_dee = V(g)[position == dee]$name
+
+    print(length(dx_ID))
+    print(length(dx_ID_ref))
+    print(length(dx_gff))
+    print(length(dx_gff_ref))
+    print(id)
     print(v_es)
     print(v_ee)
     print(v_ues)
@@ -263,10 +273,14 @@ map_rMATS_event_full_fragment <- function(g, fromGTF_path, eventType, gene, gff_
       if (strand == '-') {   # strand "-"
         bubble_source = v_dee
         bubble_sink = v_ues
+        path1 = c(v_des, v_uee)
+        path2 = ''
       }
       else if (strand == '+') {  # strand "-"
         bubble_source = v_ues
         bubble_sink = v_dee
+        path1 = c(v_des, v_uee)
+        path2 = ''
       }
     }
 
@@ -279,12 +293,15 @@ map_rMATS_event_full_fragment <- function(g, fromGTF_path, eventType, gene, gff_
       print(id)
       print(path1)
       print(path2)
-      split_truth1 = apply(sapply(path1, function(pat) grepl(pat, focalinfo$path1)), 1, all)
-      split_truth2 = apply(sapply(path1, function(pat) grepl(pat, focalinfo$path2)), 1, all)
-      split_truth = split_truth1 | split_truth2
+      split_truth1 = sapply(path1, function(pat) grepl(pat, focalinfo$path1))
+      split_truth2 = sapply(path1, function(pat) grepl(pat, focalinfo$path2))
+      ttt_fff = apply(split_truth1, 1, all) & apply(split_truth2, 1, function(x) all(!(x)))
+      fff_ttt = apply(split_truth1, 1, function(x) all(!(x))) & apply(split_truth2, 1, all)
+      split_truth =  ttt_fff | fff_ttt 
       print(split_truth1)
       print(split_truth2)
-      print(split_truth)
+      print(ttt_fff)
+      print(fff_ttt)
       focalinfo = focalinfo[split_truth,]
       print(focalinfo) 
     }
@@ -296,7 +313,8 @@ map_rMATS_event_full_fragment <- function(g, fromGTF_path, eventType, gene, gff_
     diff_list1 <- parse_dexseq_frag_str(focalinfo$setdiff1)
     diff_list2 <- parse_dexseq_frag_str(focalinfo$setdiff2)
     ref_list <- parse_dexseq_frag_str(focalinfo$ref_ex_part)
-
+    if (length(diff_list1) == 0 && length(diff_list2) == 0) {next}
+  
     diff_frag1 <- E(g)[dexseq_fragment %in% diff_list1]
     diff_frag2 <- E(g)[dexseq_fragment %in% diff_list2]
     ref_frag <- E(g)[dexseq_fragment %in% ref_list]
@@ -317,6 +335,11 @@ map_rMATS_event_full_fragment <- function(g, fromGTF_path, eventType, gene, gff_
       dx_gff_ref[[ref_list[i]]] <- unique(c(dx_gff_ref[[ref_list[i]]], paste0(eventType, "_", id)))
     }
 
+    print("after:")
+    print(length(dx_ID))
+    print(length(dx_ID_ref))
+    print(length(dx_gff))
+    print(length(dx_gff_ref))
   }
 
   if (length(dx_ID) == 0) {

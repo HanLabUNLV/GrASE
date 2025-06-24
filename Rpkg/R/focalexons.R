@@ -96,6 +96,7 @@ focal_exons_between_tx <- function(gene, g, sg, tx_ids, outdir) {
       setdiff1 <- setdiff1[igraph::edge_attr(g)$ex_or_in[setdiff1] == "ex_part"]
       setdiff2 <- setdiff2[igraph::edge_attr(g)$ex_or_in[setdiff2] == "ex_part"]
 
+      if (length(setdiff1) == 0 && length(setdiff2) == 0) { next }    # when both paths have no exonfrags ENSG00000067445.21
       setdiff1ID <- if (length(setdiff1) > 0) paste0("E", paste(igraph::edge_attr(g)$dexseq_fragment[setdiff1], collapse=",E")) else ""
       setdiff2ID <- if (length(setdiff2) > 0) paste0("E", paste(igraph::edge_attr(g)$dexseq_fragment[setdiff2], collapse=",E")) else ""
 
