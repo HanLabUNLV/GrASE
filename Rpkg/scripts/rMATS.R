@@ -401,7 +401,7 @@ map_rMATS <- function(g, gene, gff, fromGTF_A3SS, fromGTF_A5SS, fromGTF_SE, from
   E(g)$A5SS <- FALSE
   E(g)$SE <- FALSE
   E(g)$RI <- FALSE
- 
+
   focalexons <- read.table(focalexons_path, sep="\t", header=TRUE)
 
   if (!is.null(fromGTF_A3SS)) {
@@ -427,6 +427,7 @@ genes <- read.table(genelist_file, header=TRUE, sep="\t")
 
 for (gene in genes[,1]) {
 
+  print(gene)
   indir = '/mnt/data1/home/mirahan/graphml.dexseq.v34/'
   outdir = '/mnt/data1/home/mirahan/graphml.dexseq.v34/'
   gtf_path <- file.path(indir, "gtf", paste0(gene, ".gtf"))
@@ -434,6 +435,7 @@ for (gene in genes[,1]) {
   graph_path <- file.path(indir, "graphml", paste0(gene, ".dexseq.graphml"))
   focalexons_path = file.path(outdir, "focalexons.test", paste0(gene, ".focalexons.txt"))
   if (!file.exists(focalexons_path)) { next }
+  if (file.info(focalexons_path)$size <= 1) { next }
 
   g <- igraph::read_graph(graph_path, format = "graphml")
 
