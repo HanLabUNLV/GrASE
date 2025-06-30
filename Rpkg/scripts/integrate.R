@@ -80,13 +80,13 @@ get_results_files <- function(grase_directory, rmats_directory, dexseq_results) 
 
 # A safer, more idiomatic R function to filter data frames
 filter_df_rMATS <- function(input_df, type, level, ...) {
-  df <- input_df %>% filter(...)
+  df <- input_df %>% filter(...)      # additional filters passed to dplyr::filter
 
   if (type == "Event") {
     if (level == "Secondary") {
       df <- df %>% 
-        distinct(GeneID, ID, .keep_all = TRUE) %>%
-        select(GeneID, ID, FDR, DexseqFragment, padj)
+        distinct(GeneID, ID, .keep_all = TRUE) %>%          # Removes duplicate rows based on GeneID and ID keeping first row
+        select(GeneID, ID, FDR, DexseqFragment, padj)       # keep only these columns
     }
     num_events <- nrow(df)
   }
@@ -94,14 +94,45 @@ filter_df_rMATS <- function(input_df, type, level, ...) {
   if (type == "Exon") {
     if (level == "Secondary") {
       df <- df %>% 
-        distinct(groupID, featureID, .keep_all = TRUE) %>%
-        select(groupID, featureID, padj, rMATS_ID, FDR)
+        distinct(groupID, featureID, .keep_all = TRUE) %>%  # Removes duplicates based on exon IDs keeping first row
+        select(groupID, featureID, padj, rMATS_ID, FDR)     # keep only these columns
     }
     num_events <- nrow(df)
   }
 
   return(list(df = df, num_events = num_events))
 }
+
+
+filter_df_rMATS_minpval <- function(input_df, type, level, ...) {
+  df <- input_df %>% filter(...)      # additional filters passed to dplyr::filter
+
+  if (type == "Event") {
+    if (level == "Secondary") {
+      df <- df %>% 
+        group_by(GeneID, ID) %>%                                      # remove duplicates 
+        slice_min(order_by = padj, n = 1, with_ties = FALSE) %>%      # keep the row with the smallest padj
+        ungroup() %>%
+        select(GeneID, ID, FDR, DexseqFragment, padj)       # keep only these columns
+    }
+    num_events <- nrow(df)
+  }
+
+  if (type == "Exon") {
+    if (level == "Secondary") {
+      df <- df %>% 
+        group_by(groupID, featureID) %>%                             # remove duplicates 
+        slice_min(order_by = FDR, n = 1, with_ties = FALSE) %>%      # keep the row with the smallest FDR
+        ungroup() %>%
+        select(groupID, featureID, padj, rMATS_ID, FDR)     # keep only these columns
+    }
+    num_events <- nrow(df)
+  }
+
+  return(list(df = df, num_events = num_events))
+}
+
+
 
 
 get_grase_results_rMATS <- function(grase_directory, rmats_directory, dexseq_results) {
@@ -123,7 +154,7 @@ get_grase_results_rMATS <- function(grase_directory, rmats_directory, dexseq_res
 
   colnames(dex_to_rmats)[1] <- 'groupID'
   colnames(dex_to_rmats)[2] <- 'featureID'
-  dex_to_rmats_dexRes <- full_join(dexseqResults, dex_to_rmats, by = c("groupID", "featureID"))  %>%
+  dex_to_rmats_dexRes <- full_join(dexseqResults, dex_to_rmats, by = c("groupID", "featureID"))  %>%    # DEX_to_rMATS_Events.txt
     relocate(rMATS_ID, .after = featureID) %>%
     arrange(groupID, featureID)
 
@@ -138,7 +169,7 @@ get_grase_results_rMATS <- function(grase_directory, rmats_directory, dexseq_res
     ) %>%
     filter(!is.na(geneSymbol)) # Corresponds to dropna(subset="ID.1")
 
-  dex_to_rmats_ex_dexRes_MATS <- dex_to_rmats_dexRes %>%
+  dex_to_rmats_ex_dexRes_MATS <- dex_to_rmats_dexRes %>%                                      # Mapped.ExonsToEvents.txt
     separate_rows(rMATS_ID, sep = ",") %>%
     left_join(dex_to_rmats_ex_MATS, by = c("groupID", "rMATS_ID", "featureID")) %>%
     mutate(across(c(FDR), as.numeric))
@@ -146,28 +177,28 @@ get_grase_results_rMATS <- function(grase_directory, rmats_directory, dexseq_res
   num_exons_detected <- nrow(dex_to_rmats_dexRes)
 
   # rMATS Detected Exons
-  res <- filter_df_rMATS(dex_to_rmats_ex_dexRes_MATS, "Exon", "Secondary", !is.na(rMATS_ID))
-  exon_rmats_detected <- res$df; num_exons_rmats_detected <- res$num_events
+  res <- filter_df_rMATS(dex_to_rmats_ex_dexRes_MATS, "Exon", "Secondary", !is.na(rMATS_ID) & rMATS_ID != "")
+  exon_rmats_detected <- res$df; num_exons_rmats_detected <- res$num_events                   # rMATS_DetectedExons.txt
 
   # rMATS Tested Exons
   res <- filter_df_rMATS(dex_to_rmats_ex_dexRes_MATS, "Exon", "Secondary", !is.na(ID))
-  exon_rmats_tested <- res$df; num_exons_rmats_tested <- res$num_events
+  exon_rmats_tested <- res$df; num_exons_rmats_tested <- res$num_events                       # rMATS_TestedExons.txt
   
   # rMATS Significant Exons
   res <- filter_df_rMATS(dex_to_rmats_ex_dexRes_MATS, "Exon", "Secondary", FDR <= 0.05)
-  exon_rmats_sig <- res$df; num_exons_rmats_sig <- res$num_events
+  exon_rmats_sig <- res$df; num_exons_rmats_sig <- res$num_events                             # rMATS_SigExons.txt
 
   # DEXSeq Tested Exons
   res <- filter_df_rMATS(dex_to_rmats_ex_dexRes_MATS, "Exon", "Primary", !is.na(padj))
   exon_dex_tested_full <- res$df
-  res_sec <- filter_df_rMATS(exon_dex_tested_full, "Exon", "Secondary", !is.na(rMATS_ID))
-  exon_dex_tested_rmats_detected <- res_sec$df; num_exons_dex_tested_rmats_detected <- res_sec$num_events
+  res_sec <- filter_df_rMATS(exon_dex_tested_full, "Exon", "Secondary", !is.na(rMATS_ID) & rMATS_ID != "")
+  exon_dex_tested_rmats_detected <- res_sec$df; num_exons_dex_tested_rmats_detected <- res_sec$num_events     # DexTested__rMATS_DetectedExons.txt
   res_sec <- filter_df_rMATS(exon_dex_tested_full, "Exon", "Secondary", !is.na(ID))
-  exon_dex_tested_rmats_tested <- res_sec$df; num_exons_dex_tested_rmats_tested <- res_sec$num_events
+  exon_dex_tested_rmats_tested <- res_sec$df; num_exons_dex_tested_rmats_tested <- res_sec$num_events         # DexTested__rMATS_TestedExons.txt
   res_sec <- filter_df_rMATS(exon_dex_tested_full, "Exon", "Secondary", FDR <= 0.05)
-  exon_dex_tested_rmats_sig <- res_sec$df; num_exons_dex_tested_rmats_sig <- res_sec$num_events
+  exon_dex_tested_rmats_sig <- res_sec$df; num_exons_dex_tested_rmats_sig <- res_sec$num_events               # DexTested__rMATS_SigExons.txt
   
-  exon_dex_tested <- exon_dex_tested_full %>%
+  exon_dex_tested <- exon_dex_tested_full %>%                                                 # DexTestedExons.txt
     distinct(groupID, featureID, .keep_all = TRUE) %>%
     select(groupID, featureID, padj, rMATS_ID, FDR)
   num_exons_dex_tested <- nrow(exon_dex_tested)
@@ -175,14 +206,14 @@ get_grase_results_rMATS <- function(grase_directory, rmats_directory, dexseq_res
   # DEXSeq Significant Exons
   res <- filter_df_rMATS(dex_to_rmats_ex_dexRes_MATS, "Exon", "Primary", padj <= 0.05)
   exon_dex_sig_full <- res$df
-  res_sec <- filter_df_rMATS(exon_dex_sig_full, "Exon", "Secondary", !is.na(rMATS_ID))
-  exon_dex_sig_rmats_detected <- res_sec$df; num_exons_dex_sig_rmats_detected <- res_sec$num_events
+  res_sec <- filter_df_rMATS(exon_dex_sig_full, "Exon", "Secondary", !is.na(rMATS_ID) & rMATS_ID != "")
+  exon_dex_sig_rmats_detected <- res_sec$df; num_exons_dex_sig_rmats_detected <- res_sec$num_events         # DexSig__rMATS_DetectedExons.txt
   res_sec <- filter_df_rMATS(exon_dex_sig_full, "Exon", "Secondary", !is.na(ID))
-  exon_dex_sig_rmats_tested <- res_sec$df; num_exons_dex_sig_rmats_tested <- res_sec$num_events
+  exon_dex_sig_rmats_tested <- res_sec$df; num_exons_dex_sig_rmats_tested <- res_sec$num_events             # DexSig__rMATS_TestedExons.txt
   res_sec <- filter_df_rMATS(exon_dex_sig_full, "Exon", "Secondary", FDR <= 0.05)
-  exon_dex_sig_rmats_sig <- res_sec$df; num_exons_dex_sig_rmats_sig <- res_sec$num_events
+  exon_dex_sig_rmats_sig <- res_sec$df; num_exons_dex_sig_rmats_sig <- res_sec$num_events                   # DexSig__rMATS_SigExons.txt
   
-  exon_dex_sig <- exon_dex_sig_full %>%
+  exon_dex_sig <- exon_dex_sig_full %>%                                                       # DexSigExons.txt
     distinct(groupID, featureID, .keep_all = TRUE) %>%
     select(groupID, featureID, padj, rMATS_ID, FDR)
   num_exons_dex_sig <- nrow(exon_dex_sig)
@@ -192,7 +223,7 @@ get_grase_results_rMATS <- function(grase_directory, rmats_directory, dexseq_res
   rmats_to_dex <- bind_rows(A3SS_to_dex, A5SS_to_dex, SE_to_dex, RI_to_dex) %>%
     arrange(GeneID, ID)
 
-  rmats_to_dex_MATS <- bind_rows(
+  rmats_to_dex_MATS <- bind_rows(                                                             # rMATS_to_DEX_Exons.txt
       left_join(rmats_to_dex, A3SS_MATS, by = c("GeneID", "ID")),
       left_join(rmats_to_dex, A5SS_MATS, by = c("GeneID", "ID")),
       left_join(rmats_to_dex, SE_MATS, by = c("GeneID", "ID")),
@@ -206,7 +237,7 @@ get_grase_results_rMATS <- function(grase_directory, rmats_directory, dexseq_res
     left_join(rename(dexseqResults, GeneID = groupID, DexseqFragment = featureID), by = c("GeneID", "DexseqFragment")) %>%
     mutate(padj = as.numeric(padj))
 
-  rmats_to_dex_ex_MATS_dexRes <- rmats_to_dex_MATS %>%
+  rmats_to_dex_ex_MATS_dexRes <- rmats_to_dex_MATS %>%                                        # Mapped.EventsToExons.txt
     separate_rows(DexseqFragment, sep = ",") %>%
     full_join(rmats_to_dex_ex_dexRes, by = c("GeneID", "ID", "DexseqFragment")) %>%
     mutate(across(c(padj, FDR), as.numeric))
@@ -215,21 +246,21 @@ get_grase_results_rMATS <- function(grase_directory, rmats_directory, dexseq_res
   
   # DEXSeq Tested Events
   res <- filter_df_rMATS(rmats_to_dex_ex_MATS_dexRes, "Event", "Secondary", !is.na(padj))
-  event_dex_tested <- res$df; num_events_dex_tested <- res$num_events
+  event_dex_tested <- res$df; num_events_dex_tested <- res$num_events                                     # DexTestedEvents.txt
 
   # DEXSeq Significant Events
   res <- filter_df_rMATS(rmats_to_dex_ex_MATS_dexRes, "Event", "Secondary", padj <= 0.05)
-  event_dex_sig <- res$df; num_events_dex_sig <- res$num_events
+  event_dex_sig <- res$df; num_events_dex_sig <- res$num_events                                           # DexSigEvents.txt
 
   # rMATS Tested Events
   res <- filter_df_rMATS(rmats_to_dex_ex_MATS_dexRes, "Event", "Primary", !is.na(geneSymbol))
   event_rmats_tested_full <- res$df
   res_sec <- filter_df_rMATS(event_rmats_tested_full, "Event", "Secondary", !is.na(padj))
-  event_rmats_tested_dex_tested <- res_sec$df; num_events_rmats_tested_dex_tested <- res_sec$num_events
+  event_rmats_tested_dex_tested <- res_sec$df; num_events_rmats_tested_dex_tested <- res_sec$num_events   # rMATS_Tested__DexTestedEvents.txt
   res_sec <- filter_df_rMATS(event_rmats_tested_full, "Event", "Secondary", padj <= 0.05)
-  event_rmats_tested_dex_sig <- res_sec$df; num_events_rmats_tested_dex_sig <- res_sec$num_events
+  event_rmats_tested_dex_sig <- res_sec$df; num_events_rmats_tested_dex_sig <- res_sec$num_events         # rMATS_Tested__DexSigEvents.txt
 
-  event_rmats_tested <- event_rmats_tested_full %>%
+  event_rmats_tested <- event_rmats_tested_full %>%                                                       # rMATS_TestedEvents.txt
     distinct(GeneID, ID, .keep_all = TRUE) %>%
     select(GeneID, ID, FDR, DexseqFragment, padj)
   num_events_rmats_tested <- nrow(event_rmats_tested)
@@ -238,11 +269,11 @@ get_grase_results_rMATS <- function(grase_directory, rmats_directory, dexseq_res
   res <- filter_df_rMATS(rmats_to_dex_ex_MATS_dexRes, "Event", "Primary", FDR <= 0.05)
   event_rmats_sig_full <- res$df
   res_sec <- filter_df_rMATS(event_rmats_sig_full, "Event", "Secondary", !is.na(padj))
-  event_rmats_sig_dex_tested <- res_sec$df; num_events_rmats_sig_dex_tested <- res_sec$num_events
+  event_rmats_sig_dex_tested <- res_sec$df; num_events_rmats_sig_dex_tested <- res_sec$num_events         # rMATS_Sig__DexTestedEvents.txt
   res_sec <- filter_df_rMATS(event_rmats_sig_full, "Event", "Secondary", padj <= 0.05)
-  event_rmats_sig_dex_sig <- res_sec$df; num_events_rmats_sig_dex_sig <- res_sec$num_events
+  event_rmats_sig_dex_sig <- res_sec$df; num_events_rmats_sig_dex_sig <- res_sec$num_events               # rMATS_Sig__DexSigEvents.txt
 
-  event_rmats_sig <- event_rmats_sig_full %>%
+  event_rmats_sig <- event_rmats_sig_full %>%                                                             # rMATS_SigEvents.txt
     distinct(GeneID, ID, .keep_all = TRUE) %>%
     select(GeneID, ID, FDR, DexseqFragment, padj)
   num_events_rmats_sig <- nrow(event_rmats_sig)
