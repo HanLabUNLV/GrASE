@@ -649,16 +649,19 @@ find_focal_and_ref_exparts_for_split <- function(g, source, sink, split, parsed_
       #ex_part1.0 <- lapply(epath1.0, from_exon_path_to_exonic_part_path, g=g)   # high_mem
       ex_part1 <- lapply(epath1, from_epath_to_expart_path_simple, g=g_expart)   # high_mem
       ex_part1 <- lapply(ex_part1, function(x) {return (x[ex_or_in_gexpart[x] == 'ex_part'])})
-      ex_part1_set <- intersect_stream(ex_part1)
+      ex_part1_intersect <- intersect_stream(ex_part1)
+      ex_part1_union <- unique(unlist(ex_part1))
 
       #ex_part2.0 <- lapply(epath2.0, from_exon_path_to_exonic_part_path, g=g)   # high_mem 
       ex_part2 <- lapply(epath2, from_epath_to_expart_path_simple, g=g_expart)   # high_mem
       ex_part2 <- lapply(ex_part2, function(x) {return (x[ex_or_in_gexpart[x] == 'ex_part'])})
-      ex_part2_set <- intersect_stream(ex_part2)
+      ex_part2_intersect <- intersect_stream(ex_part2)
+      ex_part2_union <- unique(unlist(ex_part2))
      
-  
-      setdiff1 <- setdiff(ex_part1_set, ex_part2_set)
-      setdiff2 <- setdiff(ex_part2_set, ex_part1_set)
+      setdiff1 <- lapply(ex_part1, setdiff, ex_part2_union)
+      setdiff2 <- lapply(ex_part2, setdiff, ex_part1_union)
+      setdiff1 <- intersect_stream(setdiff1)
+      setdiff2 <- intersect_stream(setdiff2)
 
       setdiff1ID <- if (length(setdiff1) > 0) paste0("E", paste(dexseq_frag[setdiff1], collapse=",E")) else ""
       setdiff2ID <- if (length(setdiff2) > 0) paste0("E", paste(dexseq_frag[setdiff2], collapse=",E")) else ""
@@ -671,8 +674,8 @@ find_focal_and_ref_exparts_for_split <- function(g, source, sink, split, parsed_
       ref_ex_part <- find_reference_exonic_part_simple(
         source = source, 
         sink = sink, 
-        ex_part1_set = ex_part1_set, 
-        ex_part2_set = ex_part2_set, 
+        ex_part1_set = ex_part1_intersect, 
+        ex_part2_set = ex_part2_intersect, 
         tx_ex_part1_set = tx_ex_part1, 
         tx_ex_part2_set = tx_ex_part2, 
         g = g_expart 
