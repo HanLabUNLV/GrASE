@@ -124,7 +124,7 @@ txpath_from_edgeattr <- function(g, type="exon") {
     g_tmp = igraph::delete_edges(g_tmp, ex_parts)
   }
   else {
-    print("error: type should be either exon or expart")
+    log_debug("error: type should be either exon or expart")
     return (NULL)
   }
   txpaths <- setNames(vector("list", length(trans)), trans)
@@ -132,12 +132,12 @@ txpath_from_edgeattr <- function(g, type="exon") {
     tx_bools <- igraph::edge_attr(g_tmp, tx)
     exon_ids = igraph::E(g_tmp)[tx_bools]
     subg  <- igraph::subgraph_from_edges(g_tmp, exon_ids, delete.vertices = FALSE)
-    #print ("subg") 
-    #print (igraph::E(subg))
+    #log_debug("subg") 
+    #log_debug(igraph::E(subg))
     spath <- igraph::shortest_paths(subg, from = root, to = leaf, mode = "out")$vpath[[1]]
     txpaths[[tx]] <- igraph::V(g_tmp)$name[spath]
-    #print(paste("txpath for ", tx))
-    #print(txpaths[[tx]])
+    #log_debug(paste("txpath for ", tx))
+    #log_debug(txpaths[[tx]])
   }
   txpaths = lapply(txpaths, function(x) { x[2:(length(x)-1)] }) # get rid of first and last (R and L)
   txpaths

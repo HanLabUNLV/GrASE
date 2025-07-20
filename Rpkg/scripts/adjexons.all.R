@@ -8,6 +8,7 @@ library(foreach)
 library(grase)
 library(SplicingGraphs)
 
+DEBUG_MODE = TRUE
 
 indir = '/mnt/storage/jaquino/scRNAseq_sim_pt2/grase/graphml.dexseq.v34/'
 outdir = '/mnt/storage/jaquino/scRNAseq_sim_pt2/grase/graphml.dexseq.v34/'
@@ -21,7 +22,7 @@ gene_summary = sim_deds %>% group_by(geneID)
 genes =  unique(gene_summary$geneID)
 
 num_cores <- 20
-cl <- makeCluster(num_cores, outfile = "test.nocollapse.log")
+cl <- makeCluster(num_cores, outfile = "collapse.log")
 registerDoParallel(cl)
 
 results <- foreach(
@@ -34,7 +35,7 @@ results <- foreach(
 
 #for (gene in genes) {
   tryCatch({
-  print(paste0("START ", gene))
+  if(DEBUG_MODE) print(paste0("START ", gene))
   flush.console()
   indir = '/mnt/storage/jaquino/scRNAseq_sim_pt2/grase/graphml.dexseq.v34/'
   outdir = '/mnt/storage/jaquino/scRNAseq_sim_pt2/grase/graphml.dexseq.v34/'
@@ -42,10 +43,9 @@ results <- foreach(
 #  outdir = '/data2/han_lab/stevepark/SplicingGraphs/indir/'
 
 
-  filename = file.path(outdir, "focalexons", paste0(gene, ".focalexons.txt"))
+  filename = file.path(outdir, "focalexons.collapse", paste0(gene, ".focalexons.txt"))
   if (file.exists(filename)) {
-    print (paste("skipping", filename))
-    print(paste0("FINISH ", gene))
+    message(paste("skipping existing ", filename))
     flush.console()
     return(gene)
     #next
@@ -57,13 +57,12 @@ results <- foreach(
 
   gr <- rtracklayer::import(gtf_path)
   if (length(unique(gr$transcript_id[!is.na(gr$transcript_id)])) < 2) {
-    print (paste("skipping", filename))
-    print(paste0("FINISH ", gene))
+    message(paste("skipping single isoform ", filename))
     flush.console()
     return(gene)
     #next
   }
-  print (paste("running", filename))
+  if(DEBUG_MODE) print(paste("running", filename))
   gr <- gr[!(rtracklayer::mcols(gr)$type %in% c("start_codon", "stop_codon"))]
   txdb <- txdbmaker::makeTxDbFromGRanges(gr)
 
@@ -88,16 +87,19 @@ results <- foreach(
 
   # call your downstream function, fully namespaced
   cat("  calling grase::focal_exons_gene_powerset()\n"); flush.console()
-    
+   
+  focalexondir = file.path(outdir, "focalexons.collapse") 
+  if(DEBUG_MODE) print("focalexondir")
+  if(DEBUG_MODE) print(focalexondir)
   grase::focal_exons_gene_powerset(
       gene     = gene,
       g        = g,
       sg       = sg,
-      outdir   = outdir,
+      outdir   = focalexondir, 
       max_path = 30,
-      collapse_bubbles =FALSE 
+      collapse_bubbles = TRUE 
   )
-  print(paste0("FINISH ", gene))
+  if(DEBUG_MODE) print(paste0("FINISH ", gene))
   flush.console()
 
   }, error = function(e) {

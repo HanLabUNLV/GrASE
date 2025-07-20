@@ -4,7 +4,7 @@ library(dplyr)
 
 parse_dexseq_frag_str <- function(frag_str) {
   if (length(frag_str) > 1) {
-    print (frag_str)
+    log_debug(frag_str)
   }
   if (is.na(frag_str)) {
     return(character(0))
@@ -57,12 +57,12 @@ map_rMATS_event_overhang <- function(g, fromGTF_path, eventType, gene, gff_path,
     v_fles = V(g)[position == fles]$name
     v_flee = V(g)[position == flee]$name
 
-    print(v_les)
-    print(v_lee)
-    print(v_ses)
-    print(v_see)
-    print(v_fles)
-    print(v_flee)
+    log_debug(v_les)
+    log_debug(v_lee)
+    log_debug(v_ses)
+    log_debug(v_see)
+    log_debug(v_fles)
+    log_debug(v_flee)
 
     if (eventType == "A3SS") {
       
@@ -95,28 +95,28 @@ map_rMATS_event_overhang <- function(g, fromGTF_path, eventType, gene, gff_path,
     }
 
     focalinfo = focalexons[focalexons$source == bubble_source & focalexons$sink == bubble_sink,]
-    print(focalinfo)
+    log_debug(focalinfo)
     if (nrow(focalinfo) == 0) { next }
     if (nrow(focalinfo) > 1) {
-      print(eventType)
-      print(path1)
-      print(path2)
+      log_debug(eventType)
+      log_debug(path1)
+      log_debug(path2)
 
       split_truth1 = sapply(path1, function(pat) grepl(pat, focalinfo$path1))
       split_truth2 = sapply(path1, function(pat) grepl(pat, focalinfo$path2))
       ttt_fff = apply(split_truth1, 1, all) & apply(split_truth2, 1, function(x) all(!(x)))
       fff_ttt = apply(split_truth1, 1, function(x) all(!(x))) & apply(split_truth2, 1, all)
       split_truth =  ttt_fff | fff_ttt 
-      print(split_truth1)
-      print(split_truth2)
-      print(split_truth)
+      log_debug(split_truth1)
+      log_debug(split_truth2)
+      log_debug(split_truth)
       focalinfo = focalinfo[split_truth,]
     }
     if (nrow(focalinfo) == 0) { next }
     if (nrow(focalinfo) > 1) {
       focalinfo = focalinfo[1,]
     }
-    print(focalinfo)
+    log_debug(focalinfo)
     diff_list1 <- parse_dexseq_frag_str(focalinfo$setdiff1)
     diff_list2 <- parse_dexseq_frag_str(focalinfo$setdiff2)
     ref_list <- parse_dexseq_frag_str(focalinfo$ref_ex_part)
@@ -242,17 +242,17 @@ map_rMATS_event_full_fragment <- function(g, fromGTF_path, eventType, gene, gff_
     v_des = V(g)[position == des]$name
     v_dee = V(g)[position == dee]$name
 
-    print(length(dx_ID))
-    print(length(dx_ID_ref))
-    print(length(dx_gff))
-    print(length(dx_gff_ref))
-    print(id)
-    print(v_es)
-    print(v_ee)
-    print(v_ues)
-    print(v_uee)
-    print(v_des)
-    print(v_dee)
+    log_debug(length(dx_ID))
+    log_debug(length(dx_ID_ref))
+    log_debug(length(dx_gff))
+    log_debug(length(dx_gff_ref))
+    log_debug(id)
+    log_debug(v_es)
+    log_debug(v_ee)
+    log_debug(v_ues)
+    log_debug(v_uee)
+    log_debug(v_des)
+    log_debug(v_dee)
 
     if (eventType == "SE") {
 
@@ -285,31 +285,31 @@ map_rMATS_event_full_fragment <- function(g, fromGTF_path, eventType, gene, gff_
     }
 
     focalinfo = focalexons[focalexons$source == bubble_source & focalexons$sink == bubble_sink,]
-    print(focalinfo)
+    log_debug(focalinfo)
     if (nrow(focalinfo) == 0) { next }
     if (nrow(focalinfo) > 1) {
-      print(gene)
-      print(eventType)
-      print(id)
-      print(path1)
-      print(path2)
+      log_debug(gene)
+      log_debug(eventType)
+      log_debug(id)
+      log_debug(path1)
+      log_debug(path2)
       split_truth1 = sapply(path1, function(pat) grepl(pat, focalinfo$path1))
       split_truth2 = sapply(path1, function(pat) grepl(pat, focalinfo$path2))
       ttt_fff = apply(split_truth1, 1, all) & apply(split_truth2, 1, function(x) all(!(x)))
       fff_ttt = apply(split_truth1, 1, function(x) all(!(x))) & apply(split_truth2, 1, all)
       split_truth =  ttt_fff | fff_ttt 
-      print(split_truth1)
-      print(split_truth2)
-      print(ttt_fff)
-      print(fff_ttt)
+      log_debug(split_truth1)
+      log_debug(split_truth2)
+      log_debug(ttt_fff)
+      log_debug(fff_ttt)
       focalinfo = focalinfo[split_truth,]
-      print(focalinfo) 
+      log_debug(focalinfo) 
     }
     if (nrow(focalinfo) == 0) { next }
     if (nrow(focalinfo) > 1) {
       focalinfo = focalinfo[1,]
     }
-    print(focalinfo) 
+    log_debug(focalinfo) 
     diff_list1 <- parse_dexseq_frag_str(focalinfo$setdiff1)
     diff_list2 <- parse_dexseq_frag_str(focalinfo$setdiff2)
     ref_list <- parse_dexseq_frag_str(focalinfo$ref_ex_part)
@@ -335,11 +335,11 @@ map_rMATS_event_full_fragment <- function(g, fromGTF_path, eventType, gene, gff_
       dx_gff_ref[[ref_list[i]]] <- unique(c(dx_gff_ref[[ref_list[i]]], paste0(eventType, "_", id)))
     }
 
-    print("after:")
-    print(length(dx_ID))
-    print(length(dx_ID_ref))
-    print(length(dx_gff))
-    print(length(dx_gff_ref))
+    log_debug("after:")
+    log_debug(length(dx_ID))
+    log_debug(length(dx_ID_ref))
+    log_debug(length(dx_gff))
+    log_debug(length(dx_gff_ref))
   }
 
   if (length(dx_ID) == 0) {
@@ -427,7 +427,7 @@ genes <- read.table(genelist_file, header=TRUE, sep="\t")
 
 for (gene in genes[,1]) {
 
-  print(gene)
+  log_debug(gene)
   indir = '/mnt/data1/home/mirahan/graphml.dexseq.v34/'
   outdir = '/mnt/data1/home/mirahan/graphml.dexseq.v34/'
   gtf_path <- file.path(indir, "gtf", paste0(gene, ".gtf"))

@@ -8,16 +8,18 @@ library(txdbmaker)
 library(GenomicFeatures)
 library(devtools)
 
-#grase_package_path <- "/home/mirahan/adjexon_bubbles/GrASE/Rpkg/"
-grase_package_path <- "/Users/mirahan/Work/GrASE/Rpkg/"
+DEBUG_MODE = TRUE
+
+grase_package_path <- "/home/mirahan/adjexon_bubbles/GrASE/Rpkg/"
+#grase_package_path <- "/Users/mirahan/Work/GrASE/Rpkg/"
 #detach("package:grase", unload = TRUE, force = TRUE)
 devtools::load_all(grase_package_path)
 
 
-#indir = '/mnt/storage/jaquino/scRNAseq_sim_pt2/grase/graphml.dexseq.v34/'
-#outdir = '/mnt/storage/jaquino/scRNAseq_sim_pt2/grase/graphml.dexseq.v34/'
-indir = '/Users/mirahan/Work/GrASE/Rpkg/'
-outdir = '/Users/mirahan/Work/GrASE/Rpkg/'
+indir = '/mnt/storage/jaquino/scRNAseq_sim_pt2/grase/graphml.dexseq.v34/'
+outdir = '/mnt/storage/jaquino/scRNAseq_sim_pt2/grase/graphml.dexseq.v34/'
+#indir = '/Users/mirahan/Work/GrASE/Rpkg/'
+#outdir = '/Users/mirahan/Work/GrASE/Rpkg/'
 
 genes = c('ENSG00000196628.19', 'ENSG00000197912.16', 'ENSG00000249859.11', 'ENSG00000156113.23', 
 'ENSG00000253314.7', 'ENSG00000241469.9', 'ENSG00000242086.8', 
@@ -28,6 +30,7 @@ genes = c('ENSG00000196628.19', 'ENSG00000197912.16', 'ENSG00000249859.11', 'ENS
 'ENSG00000179818.14', 
 'ENSG00000109339.24')
 genes = c('ENSG00000188227.13')
+genes = c('ENSG00000004468.13')
 #genes = c('ENSG00000007372.23')
 
 #gene = 'ENSG00000006744.19'
@@ -41,17 +44,17 @@ genes = c('ENSG00000188227.13')
 #gene = 'ENSG00000103254.10'
 #gene = 'ENSG00000169488.6'
 #gene = 'ENSG00000023191.17'
-gene = 'ENSG00000183878.15'
+#gene = 'ENSG00000183878.15'
 
 
 for (gene in genes) {
-  print(paste0("START ", gene))
+  if(DEBUG_MODE) print(paste0("START ", gene))
   flush.console()
 
   filename = file.path(outdir, "focalexons", paste0(gene, ".focalexons.txt"))
   if (file.exists(filename)) {
-    print (paste("skipping", filename))
-    print(paste0("FINISH ", gene))
+    if(DEBUG_MODE) print(paste("skipping", filename))
+    if(DEBUG_MODE) print(paste0("FINISH ", gene))
     flush.console()
     next
   }
@@ -63,12 +66,12 @@ for (gene in genes) {
 
   gr <- rtracklayer::import(gtf_path)
   if (length(unique(gr$transcript_id[!is.na(gr$transcript_id)])) < 2) {
-    print (paste("skipping", filename))
-    print(paste0("FINISH ", gene))
+    if(DEBUG_MODE) print(paste("skipping", filename))
+    if(DEBUG_MODE) print(paste0("FINISH ", gene))
     flush.console()
     next
   }
-  print (paste("running", filename))
+  if(DEBUG_MODE) print(paste("running", filename))
   gr <- gr[!(rtracklayer::mcols(gr)$type %in% c("start_codon", "stop_codon"))]
   rtracklayer::genome(gr) <- 'hg38'
   txdb <- txdbmaker::makeTxDbFromGRanges(gr)
@@ -105,10 +108,10 @@ for (gene in genes) {
       sg       = sg,
       outdir   = outdir,
       max_path = 30,
-      collapse_bubbles = TRUE
+      collapse_bubbles = FALSE
   )
 
-  print(paste0("FINISH ", gene))
+  if(DEBUG_MODE) print(paste0("FINISH ", gene))
   flush.console()
 
 

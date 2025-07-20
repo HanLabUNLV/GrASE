@@ -13,8 +13,8 @@ make_matrix_from_txpath_igraph <- function(g, txpath_vertex_list) {
   trans <- setdiff(attrs, excluded)
 
   if (length(trans) == 0) {
-    print( "transcript vertex attributes not set yet")
-    print( "running set_txpath_to_vertex_attr first to set the attributes")
+    message( "transcript vertex attributes not set yet")
+    message( "running set_txpath_to_vertex_attr first to set the attributes")
     g <- grase::set_txpath_to_vertex_attr(g) 
  
     attrs <- igraph::vertex_attr_names(g)
@@ -438,12 +438,12 @@ detect_bubbles_i_j_igraph <- function(v_start_idx, v_end_idx, g, v_start_name, v
 {
   
     #bubble_paths = bubble_paths_igraph(g, v_start, v_end)
-    #print(paste("check", v_start, v_end))
+    log_debug(paste("check", v_start, v_end))
     bubble_variants <- grase::get_bubble_variants_igraph(g, v_start_idx, v_end_idx)
     bubble_d <- length(bubble_variants$partition)
     if (bubble_d <= 1L) 
         return (NULL)
-    #print(paste("bubble", v_start, v_end))
+    log_debug(paste("bubble", v_start, v_end))
     ans_source <- v_start_name
     ans_sink <- v_end_name
     ans_d <- bubble_d

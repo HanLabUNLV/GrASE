@@ -1,6 +1,19 @@
 
-#' @importFrom magrittr %>%
-NULL
+
+.onLoad <- function(libname, pkgname) {
+  op <- options()
+  op.my_package <- list(
+    my_package.debug = FALSE
+  )
+  toset <- !(names(op.my_package) %in% names(op))
+  if (any(toset)) options(op.my_package[toset])
+}
+
+log_debug <- function(msg) {
+  if (getOption("my_package.debug", default = FALSE)) {
+    message("[DEBUG] ", msg)
+  }
+}
 
 #' Count items in comma-separated string
 #' @export
@@ -137,8 +150,8 @@ focal_exons_between_tx <- function(gene, g, sg, tx_ids, outdir) {
     focalexons_filtered <- focalexons_df
   }
 
-  write.table(focalexons_df, file.path(outdir, "focalexons", paste0(gene, ".focalexons.all.txt")), sep = "\t", quote = FALSE, row.names = FALSE)
-  write.table(focalexons_filtered, file.path(outdir, "focalexons", paste0(gene, ".focalexons.txt")), sep = "\t", quote = FALSE, row.names = FALSE)
+  write.table(focalexons_df, file.path(outdir, paste0(gene, ".focalexons.all.txt")), sep = "\t", quote = FALSE, row.names = FALSE)
+  write.table(focalexons_filtered, file.path(outdir, paste0(gene, ".focalexons.txt")), sep = "\t", quote = FALSE, row.names = FALSE)
 
   return(focalexons_filtered)
 }
@@ -171,7 +184,7 @@ focal_exons_gene_ovr <- function(gene, g, sg, outdir) {
 
       tx1 = parsed_partitions[i][[1]]
       tx_rest = unique(unlist( parsed_partitions[seq_along(parsed_partitions)[-i]]))
-      print (tx1)
+      log_debug(tx1)
 
       vpath1 = c(source, parsed_paths[[i]], sink)
       vpath_rest = lapply(parsed_paths[seq_along(parsed_partitions)[-i]], function(vec) c(source, vec, sink)) 
@@ -218,7 +231,7 @@ focal_exons_gene_ovr <- function(gene, g, sg, outdir) {
         path1 = paste(vpath1, collapse=", "),
         path2 = paste(sapply(vpath_rest, function(vec) paste(vec, collapse = "-")), collapse=", ")
       )
-      print(new_row)
+      log_debug(new_row)
       focalexons_df <- rbind(focalexons_df, new_row)
     }
   }
@@ -234,8 +247,8 @@ focal_exons_gene_ovr <- function(gene, g, sg, outdir) {
     focalexons_filtered <- focalexons_df
   }
 
-  write.table(focalexons_df, file.path(outdir, "focalexons", paste0(gene, ".focalexons.all.txt")), sep = "\t", quote = FALSE, row.names = FALSE)
-  write.table(focalexons_filtered, file.path(outdir, "focalexons", paste0(gene, ".focalexons.txt")), sep = "\t", quote = FALSE, row.names = FALSE)
+  write.table(focalexons_df, file.path(outdir, paste0(gene, ".focalexons.all.txt")), sep = "\t", quote = FALSE, row.names = FALSE)
+  write.table(focalexons_filtered, file.path(outdir, paste0(gene, ".focalexons.txt")), sep = "\t", quote = FALSE, row.names = FALSE)
 
 }
 
@@ -562,9 +575,9 @@ valid_partitions_slow <- function(g, max_powerset) {
   valid_splits <- list()
   # check size of powerset
   powernodes = powerset(nodes)
-  print(paste("powerset: ", length(powernodes)))
+  log_debug(paste("powerset: ", length(powernodes)))
   if (length(powernodes) > max_powerset) {
-    print (paste("power set size greater than ", max_powerset, "skipping."))
+    log_debug(paste("power set size greater than ", max_powerset, "skipping."))
     return (valid_splits)
   }
   # Compute all valid binary splits
@@ -576,10 +589,12 @@ valid_partitions_slow <- function(g, max_powerset) {
   }
 
   # Print splits
-  for (i in seq_along(valid_splits)) {
-    cat(sprintf("Split %d:\n", i))
-    cat("  Group 1:", paste(valid_splits[[i]]$group1, collapse = ", "), "\n")
-    cat("  Group 2:", paste(valid_splits[[i]]$group2, collapse = ", "), "\n\n")
+  if (debug_mode) {
+    for (i in seq_along(valid_splits)) {
+      cat(sprintf("Split %d:\n", i))
+      cat("  Group 1:", paste(valid_splits[[i]]$group1, collapse = ", "), "\n")
+      cat("  Group 2:", paste(valid_splits[[i]]$group2, collapse = ", "), "\n\n")
+    }
   }
   return (valid_splits)
 
@@ -625,8 +640,8 @@ find_focal_and_ref_exparts_for_split <- function(g, source, sink, split, parsed_
       group2 = as.numeric(split$group2)
       tx1 = unique(unlist( parsed_partitions[group1]))
       tx2 = unique(unlist( parsed_partitions[group2]))
-      print (tx1)
-      print (tx2)
+      log_debug(tx1)
+      log_debug(tx2)
 
       ex_or_in_vec <- igraph::edge_attr(g, "ex_or_in")
       g_exon <- igraph::delete_edges(g, igraph::E(g)[ex_or_in_vec == 'ex_part']) # have to delete all edges in one command
@@ -696,7 +711,7 @@ find_focal_and_ref_exparts_for_split <- function(g, source, sink, split, parsed_
         path1 = paste(sapply(vpath1, function(vec) paste(vec, collapse = "-")), collapse=", "),
         path2 = paste(sapply(vpath2, function(vec) paste(vec, collapse = "-")), collapse=", ")
       )
-      print(new_row)
+      log_debug(new_row)
       focalexons_df <- rbind(focalexons_df, new_row)
   return(list(focalexons_df = focalexons_df))
 }
@@ -721,7 +736,7 @@ find_tx_with_epath <- function(g, trans, edges_list) {
     epath_name = paste0(edges, collapse = ",")
     tx_to_update[[epath_name]] <- list()
     for (e in edges) {
-      print(e)
+      log_debug(e)
       tx_to_update[[epath_name]] <- append(tx_to_update[[epath_name]], list(trans[grase::edge_in_txpath(g, trans, eid[e])]))
     }
     names(tx_to_update[[epath_name]]) = edges
@@ -737,8 +752,8 @@ find_tx_with_epath <- function(g, trans, edges_list) {
 update_txmat_after_bubble_collapse <- function(g, tx_to_update, subnamelist, txmat) {
 
   txnames = names(tx_to_update)
-  print("before:")
-  print(txmat[txnames,subnamelist])
+  log_debug("before:")
+  log_debug(txmat[txnames,subnamelist])
   for (tx_name in txnames) {
     edge_list = tx_to_update[[tx_name]] 
     for (e in edge_list) {
@@ -747,8 +762,8 @@ update_txmat_after_bubble_collapse <- function(g, tx_to_update, subnamelist, txm
       txmat[tx_name,as.character(as.numeric(subnamelist[i]):as.numeric(subnamelist[j]))] = TRUE
     }
   }
-  print("after:")
-  print(txmat[txnames,subnamelist])
+  log_debug("after:")
+  log_debug(txmat[txnames,subnamelist])
   txmat 
 }
 
@@ -761,11 +776,11 @@ update_txmat_after_bubble_collapse2 <- function(g, tx_to_update, representative_
   replacing_pattern = txmat[representative_tx[1], nodes[start:end]] 
   for (tx_list in tx_to_update) {
     for (tx in tx_list) {
-      print("before")
-      print(txmat[tx, nodes[start:end]])
+      log_debug("before")
+      log_debug(txmat[tx, nodes[start:end]])
       txmat[tx, nodes[start:end]] = replacing_pattern
-      print("after")
-      print(txmat[tx, nodes[start:end]])
+      log_debug("after")
+      log_debug(txmat[tx, nodes[start:end]])
     }
   }
   txmat 
@@ -785,8 +800,8 @@ update_txpaths_after_bubble_collapse <- function(g, tx_to_update, epath) {
     }
   }
   txnames = names(tx_to_update)
-  print ("before")
-  print (igraph::edge_attr(g, index=updated_edges)[txnames])
+  log_debug("before")
+  log_debug(igraph::edge_attr(g, index=updated_edges)[txnames])
   for (tx_name in txnames) {
     edge_list = tx_to_update[[tx_name]] 
     for (e in edge_list) {
@@ -798,8 +813,8 @@ update_txpaths_after_bubble_collapse <- function(g, tx_to_update, epath) {
       }
     }
   }
-  print ("after")
-  print (igraph::edge_attr(g, index=updated_edges)[txnames])
+  log_debug("after")
+  log_debug(igraph::edge_attr(g, index=updated_edges)[txnames])
   return (g)
 }
 
@@ -845,7 +860,7 @@ focal_exons_gene_powerset <- function(gene, g, sg, outdir, max_path = 30, collap
   trans <- grase::transcripts_from_igraph(g)
   bubbles_df <- grase::detect_bubbles_igraph(g)     # high_mem
   if ( nrow(bubbles_df) == 0) {
-    print("single transcript, no bubbles")
+    message(paste("single transcript, no bubbles ", gene))
     return (NULL) 
   }
 
@@ -865,13 +880,13 @@ focal_exons_gene_powerset <- function(gene, g, sg, outdir, max_path = 30, collap
     names(ex_or_in_gexpart) <- igraph::edge_attr(g_expart, "name")
 
     if (bubble_idx > nrow(bubbles_ordered)) {
-        print ("collapsed all bubbles. exiting the loop 1")
+        log_debug("collapsed all bubbles. exiting the loop 1")
         break
     }
     source <- bubbles_ordered$source[[bubble_idx]]
     sink <- bubbles_ordered$sink[[bubble_idx]]
     if (source == "R" && sink == "L") next
-    print (paste("source: ", source, " sink: ", sink))
+    log_debug(paste("source: ", source, " sink: ", sink))
 
     #txpaths <- lapply(SplicingGraphs::txpath(sg), as.character)
     txpaths <- grase::txpath_from_edgeattr(g)
@@ -893,11 +908,11 @@ focal_exons_gene_powerset <- function(gene, g, sg, outdir, max_path = 30, collap
     #names(ex_part_paths)  = sapply(parsed_partitions, function(vec) paste(vec, collapse=","))
     names(ex_part_paths)  = 1:length(ex_part_paths) 
 
-    print (paste("ex_part_paths len:", length(ex_part_paths)))
+    log_debug(paste("ex_part_paths len:", length(ex_part_paths)))
     contain_dag <- grase::path_subset_relation(ex_part_paths) 
-    print (paste("contain_dag len:", length(igraph::E(contain_dag))))
+    log_debug(paste("contain_dag len:", length(igraph::E(contain_dag))))
     if (length(ex_part_paths) > max_path) {
-        print("bubble with more than 30 alternative paths: skipping")
+        message(paste("bubble with more than 30 alternative paths: skipping ", gene, source, sink))
         next;
     }
     #valid_splits <- grase::valid_partitions(contain_dag)
@@ -945,7 +960,7 @@ focal_exons_gene_powerset <- function(gene, g, sg, outdir, max_path = 30, collap
         idx_to_remove = idx_to_remove[-length(idx_to_remove)]
       }
       if ((length(idx_to_remove) == 0) || (length(idx_to_keep) == 0)) {
-        print("no edges to remove: next")
+        log_debug("no edges to remove: next")
         next;
       }
       tx_to_update = txs_with_epath[idx_to_remove] 
@@ -963,7 +978,7 @@ focal_exons_gene_powerset <- function(gene, g, sg, outdir, max_path = 30, collap
       g <- grase::set_txpath_to_vertex_attr(g)
       bubbles_updated <- grase::detect_bubbles_igraph(g)            # high_mem
       if (nrow(bubbles_updated) == 0) {
-        print ("collapsed all bubbles. exiting the loop 2")
+        log_debug("collapsed all bubbles. exiting the loop 2")
         break
       }
       bubbles_updated_ordered = grase::bubble_ordering3(g, bubbles_updated)     
@@ -986,8 +1001,12 @@ focal_exons_gene_powerset <- function(gene, g, sg, outdir, max_path = 30, collap
     focalexons_filtered <- focalexons_df
   }
 
-  write.table(focalexons_df, file.path(outdir, "focalexons", paste0(gene, ".focalexons.all.txt")), sep = "\t", quote = FALSE, row.names = FALSE)
-  write.table(focalexons_filtered, file.path(outdir, "focalexons", paste0(gene, ".focalexons.txt")), sep = "\t", quote = FALSE, row.names = FALSE)
+  filename_all = file.path(outdir, paste0(gene, ".focalexons.all.txt"))
+  filename = file.path(outdir, paste0(gene, ".focalexons.txt"))
+  log_debug(paste0("filename :", filename))
+
+  write.table(focalexons_df, filename_all , sep = "\t", quote = FALSE, row.names = FALSE)
+  write.table(focalexons_filtered, filename, sep = "\t", quote = FALSE, row.names = FALSE)
 
 #Rprof(NULL)
   focalexons_filtered
