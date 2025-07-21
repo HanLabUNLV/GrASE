@@ -400,12 +400,8 @@ is_proper_subset <- function(a, b) {
 
 #' find a containment DAG that represents the hierarchical relationship between paths 
 #' @export
-path_subset_relation <-function(sets) {
-
-#ex_index = igraph::edge_attr(g)$ex_or_in == 'ex'
-#g_exonic <- igraph::delete_edges(g_exonic, igraph::E(g_exonic)[ex_index])
-#g_exonic
-  n <- length(sets)
+path_subset_relation <- function(sets) {
+  n     <- length(sets)
   names <- names(sets)
   edges <- data.frame(from = character(), to = character(), stringsAsFactors = FALSE)
 
@@ -423,7 +419,8 @@ path_subset_relation <-function(sets) {
           }
         }
         if (!intermediate) {
-          edges <- rbind(edges, data.frame(from = names[j], to = names[i]))
+          # now: edge from subset to superset
+          edges <- rbind(edges, data.frame(from = names[i], to = names[j]))
         }
       }
     }
@@ -442,28 +439,23 @@ valid_partitions <- function(dag) {
   nodes <- igraph::V(dag)$name
   n     <- length(nodes)
 
-  # reverse the graph so that "downward-closed" in dag becomes "lower set" in dag_rev
-  dag_rev <- igraph::reverse_edges(dag)
+  # get a topological ordering of dag
+  topo <- igraph::topo_sort(dag, mode = "out")$name
 
-  # get a topological ordering of dag_rev
-  topo <- igraph::topo_sort(dag_rev, mode="out")$name
-
-  # for each node, precompute its direct predecessors in dag_rev
+  # for each node, precompute its direct predecessors in dag
   preds <- lapply(topo, function(v) {
-    igraph::neighbors(dag_rev, v, mode="in")$name
+    igraph::neighbors(dag, v, mode = "in")$name
   })
   names(preds) <- topo
 
   valid_splits <- vector("list", 0)
   split_idx    <- 1L
 
-  # recursively build all lower‐sets (order ideals) in dag_rev
+  # recursively build for downward-closed sets (lower sets) in dag
   recurse <- function(i, current_set) {
     if (i > n) {
-      # record only non‐empty, non‐full sets
       k <- length(current_set)
       if (k > 0 && k < n) {
-        # inside your leaf handler
         valid_splits[[split_idx]] <<- list(
           group1 = sort(current_set),
           group2 = sort(setdiff(nodes, current_set))
@@ -474,11 +466,11 @@ valid_partitions <- function(dag) {
     }
 
     v <- topo[i]
-    # if all predecessors of v are already in current_set, we *can* include v
+    # Include v only if all its subset-predecessors are already in the set
     if (all(preds[[v]] %in% current_set)) {
       recurse(i + 1L, c(current_set, v))
     }
-    # always also branch on *not* including v
+    # Also consider skipping v
     recurse(i + 1L, current_set)
   }
 
@@ -489,20 +481,21 @@ valid_partitions <- function(dag) {
 
 
 
+
+
 #' @export
 valid_partitions_idx <- function(dag) {
-  # 1) Map node names → 1:n integer indices
+  # 1) Map node names to integer indices
   nodes   <- igraph::V(dag)$name
   n       <- length(nodes)
   idx_map <- setNames(seq_len(n), nodes)
 
-  # 2) Reverse & topo-sort once
-  dag_rev  <- igraph::reverse_edges(dag)
-  topo_vec <- igraph::topo_sort(dag_rev, mode = "out")$name
+  # 2) topo-sort DAG in subset -> superset direction
+  topo_vec <- igraph::topo_sort(dag, mode = "out")$name
 
   # 3) Precompute predecessors as integer vectors
   preds <- lapply(topo_vec, function(v) {
-    idx_map[ igraph::neighbors(dag_rev, v, mode = "in")$name ]
+    idx_map[ igraph::neighbors(dag, v, mode = "in")$name ]
   })
   names(preds) <- topo_vec
 
