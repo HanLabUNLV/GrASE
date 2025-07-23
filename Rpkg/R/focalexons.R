@@ -336,7 +336,7 @@ bubble_ordering2 <- function(g, bubbles_df) {
     stack     <- c(stack, k)
   }
 
-  # 4. retrieve order from most inner → outer:
+  # 4. retrieve order from most inner -> outer:
   inner_to_outer <- order(-depth)    # highest depth first
   ordered_bubbles_df <- bubbles_df[inner_to_outer, ]
   ordered_bubbles_df
@@ -344,6 +344,8 @@ bubble_ordering2 <- function(g, bubbles_df) {
 }
 
 
+# Increasing length (shorter first)
+# For ties, deeper bubbles (more nested) come first.
 #' @export
 bubble_ordering3 <- function(g, bubbles_df) {
 
@@ -368,10 +370,10 @@ bubble_ordering3 <- function(g, bubbles_df) {
 # compute length
   bubbles_df$length <- igraph::vertex_attr(g, index=bubbles_df$sink)$sg_id - igraph::vertex_attr(g, index=bubbles_df$source)$sg_id
 
-# sort by start ↑, end ↓ (for nesting scan)
+# sort by start , end (for nesting scan)
   bubbles_df <- bubbles_df[order(bubbles_df$topo_start, -bubbles_df$topo_end), ]
 
-# stack‐scan to get parent & depth
+# stack scan to get parent & depth
   stack  <- integer(0)
   bubbles_df$parent <- NA_integer_
   bubbles_df$depth  <- 0L
@@ -385,7 +387,7 @@ bubble_ordering3 <- function(g, bubbles_df) {
       stack        <- c(stack, k)
   }
 
-# final ordering: length ↓, then depth ↓
+# final ordering: length then depth
   order_idx      <- order(bubbles_df$length, -bubbles_df$depth)
   ordered_bubbles <- bubbles_df[order_idx, ]
   ordered_bubbles
@@ -985,6 +987,7 @@ focal_exons_gene_powerset <- function(gene, g, sg, outdir, max_path = 30, collap
 
   if (nrow(focalexons_df) > 0) {
     focalexons_df <- focalexons_df %>% dplyr::rowwise() %>% dplyr::mutate(adj_cnt = count_items(ref_ex_part)) %>% dplyr::ungroup()
+    # for all rows with same setdiff1 and setdiff2, only retain the row with minimum number of ref_ex_part 
     focalexons_filtered <- focalexons_df %>%
       dplyr::group_by(setdiff1, setdiff2) %>%
       dplyr::filter(adj_cnt == min(adj_cnt)) %>%
