@@ -150,7 +150,8 @@ get_grase_results_rMATS <- function(grase_directory, rmats_directory, dexseq_res
   dex_to_rmats <- full_join(dex_to_SE, dex_to_A5SS, by = c("GeneID", "DexseqFragment")) %>%
     full_join(., dex_to_A3SS, by = c("GeneID", "DexseqFragment")) %>%
     full_join(., dex_to_RI, by = c("GeneID", "DexseqFragment")) %>% 
-    unite("rMATS_ID", c(rMATS_ID_A3SS, rMATS_ID_A5SS, rMATS_ID_SE, rMATS_ID_RI), sep = ",", na.rm = TRUE, remove = TRUE)
+    unite("rMATS_ID", c(rMATS_ID_A3SS, rMATS_ID_A5SS, rMATS_ID_SE, rMATS_ID_RI), sep = ",", na.rm = TRUE, remove = TRUE) %>%
+    unite("rMATS_ID_ref", c(rMATS_ID_A3SS_ref, rMATS_ID_A5SS_ref, rMATS_ID_SE_ref, rMATS_ID_RI_ref), sep = ",", na.rm = TRUE, remove = TRUE)
 
   colnames(dex_to_rmats)[1] <- 'groupID'
   colnames(dex_to_rmats)[2] <- 'featureID'
@@ -306,8 +307,7 @@ get_grase_results_rMATS <- function(grase_directory, rmats_directory, dexseq_res
   
   readr::write_tsv(summary_table, fs::path(output_dir, "summary.txt"))
 
-  # Note: The intersection calculations from the Python script are directly translated.
-  # These assume certain set relationships that might require validation depending on the data.
+
   intersection_table <- tibble::tribble(
       ~Intersection, ~Counts,
       "DEXSeq Detected Exons Only", num_exons_detected - num_exons_rmats_detected - num_exons_dex_tested + num_exons_dex_tested_rmats_detected,
@@ -366,9 +366,10 @@ get_grase_results_rMATS <- function(grase_directory, rmats_directory, dexseq_res
   return(0)
 }
 
-grase_directory = "/Users/mirahan/Work/GrASE/grase_output_monaco_b_vs_cd8"
-rmats_directory = "/Users/mirahan/Work/GrASE/rmats_output_monaco_b_vs_cd8"
-dexseq_results = "/Users/mirahan/Work/GrASE/dexseq_output_monaco_b_vs_cd8/DEXSeq_Monaco_B_vs_CD8_results.txt"
+#
+grase_directory = "/RAID10/mirahan/graphml.dexseq.v34/grase_results"
+rmats_directory = "/RAID10/mirahan/graphml.dexseq.v34/rmats_output_monaco_b_vs_cd8"
+dexseq_results = "/RAID10/mirahan/graphml.dexseq.v34/dexseq_output_monaco_b_vs_cd8/DEXSeq_Monaco_B_vs_CD8_results.txt"
 nthread = 1 
                     
 

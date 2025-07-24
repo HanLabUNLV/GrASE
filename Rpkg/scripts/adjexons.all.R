@@ -53,7 +53,7 @@ results <- foreach(
 
   gtf_path <- file.path(indir, "gtf", paste0(gene, ".gtf"))
   gff_path <- file.path(indir, "dexseq.gff", paste0(gene, ".dexseq.gff"))
-  graph_path <- file.path(indir, "graphml", paste0(gene, ".dexseq.graphml"))
+  graph_path <- file.path(indir, "graphml", paste0(gene, ".graphml"))
 
   gr <- rtracklayer::import(gtf_path)
   if (length(unique(gr$transcript_id[!is.na(gr$transcript_id)])) < 2) {

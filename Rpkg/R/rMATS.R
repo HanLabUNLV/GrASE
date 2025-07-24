@@ -14,6 +14,7 @@ parse_dexseq_frag_str <- function(frag_str) {
   cleaned_vals
 }
 
+
 map_rMATS_event_overhang <- function(g, fromGTF_path, eventType, gene, gff_path, focalexons, grase_output_dir) {
   
   #rmats_df <- read_tsv(fromGTF_path, col_types = cols(.default = "c"))
@@ -394,6 +395,8 @@ map_rMATS_event_full_fragment <- function(g, fromGTF_path, eventType, gene, gff_
 
 
 
+#' map rMATS events to grase graph
+#' @export
 map_rMATS <- function(g, gene, gff, fromGTF_A3SS, fromGTF_A5SS, fromGTF_SE, fromGTF_RI, focalexons_path, grase_output_dir) {
   # Initialize edge attributes
   E(g)$rmats <- ""
@@ -420,32 +423,3 @@ map_rMATS <- function(g, gene, gff, fromGTF_A3SS, fromGTF_A5SS, fromGTF_SE, from
   return(g)
 }
 
-
-
-genelist_file = '/mnt/data1/home/mirahan/graphml.dexseq.v34/grase_results/all_genes.txt'
-genes <- read.table(genelist_file, header=TRUE, sep="\t")
-
-for (gene in genes[,1]) {
-
-  log_debug(gene)
-  indir = '/mnt/data1/home/mirahan/graphml.dexseq.v34/'
-  outdir = '/mnt/data1/home/mirahan/graphml.dexseq.v34/'
-  gtf_path <- file.path(indir, "gtf", paste0(gene, ".gtf"))
-  gff_path <- file.path(indir, "dexseq.gff", paste0(gene, ".dexseq.gff"))
-  graph_path <- file.path(indir, "graphml", paste0(gene, ".dexseq.graphml"))
-  focalexons_path = file.path(outdir, "focalexons.test", paste0(gene, ".focalexons.txt"))
-  if (!file.exists(focalexons_path)) { next }
-  if (file.info(focalexons_path)$size <= 1) { next }
-
-  g <- igraph::read_graph(graph_path, format = "graphml")
-
-  rmats_outdir = paste0(indir, '/grase_results/gene_files/', gene)
-  fromGTF_A3SS = paste0(rmats_outdir, '/', 'fromGTF.A3SS.txt')
-  fromGTF_A5SS = paste0(rmats_outdir, '/', 'fromGTF.A5SS.txt')
-  fromGTF_SE = paste0(rmats_outdir, '/', 'fromGTF.SE.txt')
-  fromGTF_RI = paste0(rmats_outdir, '/', 'fromGTF.RI.txt')
-  grase_output_dir = file.path(outdir, 'grase_results/')
-  map_rMATS(g, gene, gff_path, fromGTF_A3SS, fromGTF_A5SS, fromGTF_SE, fromGTF_RI, focalexons_path, grase_output_dir)
-
-
-}
