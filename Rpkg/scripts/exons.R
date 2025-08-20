@@ -356,7 +356,10 @@ wide_df <- combined_df %>% dplyr::select(gene, event, sample, ref, diff1)  %>%
     values_from = c(diff1, ref)
   )
 combined_results1 <- left_join(wide_df, results1, by = c("gene", "event"))
-combined_results1$FDR <- p.adjust(combined_results1$p.value, method = "BH")
+combined_results1$baseMean <- rowMeans(combined_results1[, grep("diff", names(combined_results1))])
+combined_results1$pvalue <- combined_results1$p.value 
+combined_results1 <- pvalueAdjustment(combined_results1, independentFiltering=TRUE, alpha = 0.1, pAdjustMethod = 'BH')
+#combined_results1$FDR <- p.adjust(combined_results1$p.value, method = "BH")
 write.table(combined_results1, file=paste0(outdir,'/test1.txt'), quote=FALSE, sep="\t") 
 
 grouped_data2 <- grouped_data2 %>% keep (~ all(.x$n_samples == 8)) # 30624->25970
@@ -369,7 +372,10 @@ wide_df <- combined_df %>% dplyr::select(gene, event, sample, ref, diff2)  %>%
     values_from = c(diff2, ref)
   )
 combined_results2 <- left_join(wide_df, results2, by = c("gene", "event"))
-combined_results2$FDR <- p.adjust(combined_results2$p.value, method = "BH")
+combined_results2$baseMean <- rowMeans(combined_results2[, grep("diff", names(combined_results2))])
+combined_results2$pvalue <- combined_results2$p.value 
+combined_results2 <- pvalueAdjustment(combined_results2, independentFiltering=TRUE, alpha = 0.1, pAdjustMethod = 'BH')
+#combined_results2$FDR <- p.adjust(combined_results2$p.value, method = "BH")
 write.table(combined_results2, file=paste0(outdir,'/test2.txt'), quote=FALSE, sep="\t") 
 
 
