@@ -601,8 +601,8 @@ valid_partitions_slow <- function(g, max_powerset) {
 remove_symmetric_splits <- function(splits){
   # function to produce a symmetric-invariant key
   canonical_key <- function(split) {
-    g1 <- paste(sort(strsplit(split$group1, ",")[[1]]), collapse = ",")
-    g2 <- paste(sort(strsplit(split$group2, ",")[[1]]), collapse = ",")
+    g1 <- paste(sort(unlist(strsplit(split$group1, ","))), collapse = ",")
+    g2 <- paste(sort(unlist(strsplit(split$group2, ","))), collapse = ",")
     # sort the two side‑strings so that key(A|B)=key(B|A)
     paste(sort(c(g1, g2)), collapse = "|")
   }
@@ -910,8 +910,6 @@ focal_exons_gene_powerset <- function(gene, g, sg, outdir, max_path = 30, collap
         message(paste("bubble with more than 30 alternative paths: skipping ", gene, source, sink))
         next;
     }
-    #valid_splits <- grase::valid_partitions(contain_dag)
-    #valid_splits <- grase::remove_symmetric_splits(valid_splits)
 
     int_splits <- grase::valid_partitions_idx(contain_dag)
     nodes <- igraph::V(contain_dag)$name
