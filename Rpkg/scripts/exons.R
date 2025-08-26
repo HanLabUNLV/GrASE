@@ -1,7 +1,8 @@
-library(tidyverse)
-library(glmmTMB)
 library(parallel)
 library(MASS)
+library(matrixStats)
+library(glmmTMB)
+library(tidyverse)
 
 # Function to sum counts across columns for matching gene:exon keys
 # Function to compute column-wise sum for a gene's exons
@@ -23,9 +24,38 @@ sum_exon_counts <- function(gene, count_col, counts_df) {
 }
 
 
+write_exoncnt_long <- function(ref_counts_df, diff_counts_df, events, gene, sampleinfo, file_prefix) {
+
+  ref_long <- ref_counts_df[ref_counts_df$event %in% events,] %>% 
+      pivot_longer(
+      cols = starts_with("sample_"),
+      names_to = "sample",
+      values_to = "ref")
+  diff_long <- diff_counts_df[diff_counts_df$event %in% events,] %>% 
+      pivot_longer(
+      cols = starts_with("sample_"),
+      names_to = "sample",
+      values_to = "diff")
+  
+  exoncnts <- cbind.data.frame(ref_long, diff = diff_long$diff)  
+  exoncnts <- exoncnts %>%
+      mutate(groups = sampleinfo[sample])
+  exoncnts$ref <- as.numeric(exoncnts$ref)
+  exoncnts$diff <- as.numeric(exoncnts$diff)
+  exoncnts$n <- exoncnts$ref + exoncnts$diff
+  exoncnts$gene <- gene
+#  exoncnts <- exoncnts[!is.na(exoncnts$diff),]
+#  exoncnts <- exoncnts[exoncnts$n > 10,]
+  if (nrow(exoncnts) > 1) {
+    write.table(exoncnts, file=paste0(outdir,'/', gene, '.', file_prefix, '.exoncnt.txt'), quote=FALSE, sep="\t")
+  }
+
+}
+
 count_focalexons <- function(focalexon_file, countmat, sampleinfo, outdir) {
   focalexons <- as.data.frame(read_tsv(focalexon_file, col_types = cols(.default = "c")))  # Reads columns as characters
   gene <- focalexons$gene
+  focalexons$event = rownames(focalexons)
 
   # Create a new dataframe to store summed counts
   ref_counts_df <- t(sapply(focalexons$ref_ex_part, sum_exon_counts, gene=gene, counts_df=countmat))
@@ -40,41 +70,53 @@ count_focalexons <- function(focalexon_file, countmat, sampleinfo, outdir) {
   colnames(diff1_counts_df) = colnames(countmat) 
   colnames(diff2_counts_df) = colnames(countmat) 
 
-  ref_counts_df <- as.data.frame(cbind(ref_counts_df, event = rownames(ref_counts_df)))
-  ref_long <- ref_counts_df %>% 
-      pivot_longer(
-      cols = starts_with("sample_"),
-      names_to = "sample",
-      values_to = "ref")
-  diff1_counts_df <- as.data.frame(cbind(diff1_counts_df, event = rownames(diff1_counts_df)))
-  diff1_long <- diff1_counts_df %>% 
-      pivot_longer(
-      cols = starts_with("sample_"),
-      names_to = "sample",
-      values_to = "diff1")
+  focalexons$ref_mean = rowMeans(ref_counts_df)
+  focalexons$diff1_mean = rowMeans(diff1_counts_df)
+  focalexons$diff2_mean = rowMeans(diff2_counts_df)
+  focalexons$diff_mean = do.call(pmax, c(focalexons[, c("diff1_mean", "diff2_mean")], na.rm = TRUE))
+  focalexons <- focalexons %>%
+    mutate(
+      which   = case_when(
+        is.na(diff1_mean) & is.na(diff2_mean) ~ NA_character_,
+        is.na(diff1_mean)                     ~ "diff2",
+        is.na(diff2_mean)                     ~ "diff1",
+        diff1_mean > diff2_mean               ~ "diff1",
+        TRUE                                  ~ "diff2"
+      ),
+      setdiff = if_else(which == "diff1", setdiff1, setdiff2)
+    ) %>%
+    filter(!is.na(setdiff))
 
-  diff2_counts_df <- as.data.frame(cbind(diff2_counts_df, event = rownames(diff2_counts_df)))
-  diff2_long <- diff2_counts_df %>% 
-      pivot_longer(
-      cols = starts_with("sample_"),
-      names_to = "sample",
-      values_to = "diff2")
+  ref_counts_df <- as.data.frame(cbind(ref_counts_df, event = rownames(ref_counts_df)), na.rm=TRUE)
+  ref_counts_df <- inner_join(focalexons[,c('gene', 'event', 'source', 'sink', 'ref_ex_part', 'setdiff')], ref_counts_df, by = "event")
+
+  diff1_counts_df <- as.data.frame(cbind(diff1_counts_df, event = rownames(diff1_counts_df)), na.rm=TRUE)
+  diff1_counts_df <- inner_join(focalexons[focalexons$which=='diff1',c('gene', 'event', 'source', 'sink', 'ref_ex_part', 'setdiff')], diff1_counts_df, by = "event")
+
+  diff2_counts_df <- as.data.frame(cbind(diff2_counts_df, event = rownames(diff2_counts_df)), na.rm=TRUE)
+  diff2_counts_df <- inner_join(focalexons[focalexons$which=='diff2',c('gene', 'event', 'source', 'sink', 'ref_ex_part', 'setdiff')], diff2_counts_df, by = "event")
+
+  diff_counts_df <- bind_rows(diff1_counts_df, diff2_counts_df) %>%
+       arrange(as.numeric(event))
+
+  TSS_index = focalexons$source == 'R' | focalexons$sink == 'L'
+
+  grouped_focalexons_TSS <- focalexons[TSS_index,] %>%
+    group_by(transcripts1, transcripts2) %>%
+    slice_max(order_by = diff_mean, n = 1, with_ties = FALSE) %>%
+    ungroup()
   
-  exoncnts <- cbind.data.frame(ref_long, diff1 = diff1_long$diff1, diff2 = diff2_long$diff2)  
-  exoncnts <- exoncnts %>%
-      mutate(groups = sampleinfo[sample])
-  exoncnts$ref <- as.numeric(exoncnts$ref)
-  exoncnts$diff1 <- as.numeric(exoncnts$diff1)
-  exoncnts$diff2 <- as.numeric(exoncnts$diff2)
-  exoncnts$n1 <- exoncnts$ref + exoncnts$diff1
-  exoncnts$n2 <- exoncnts$ref + exoncnts$diff2
-  exoncnts$gene <- gene[1]
-  exoncnts$rownum <- rownames(exoncnts)
-  exoncnts <- exoncnts[!is.na(exoncnts$diff1) | !is.na(exoncnts$diff2),]
-  exoncnts <- exoncnts[pmax(exoncnts$n1, exoncnts$n2, na.rm=TRUE) > 10,]
-  if (nrow(exoncnts) > 1) {
-    write.table(exoncnts, file=paste0(outdir,'/', gene[1], '.exoncnt.txt'), quote=FALSE, sep="\t")
-  }
+  grouped_focalexons <- focalexons[!TSS_index,] %>%
+    group_by(transcripts1, transcripts2) %>%
+    slice_max(order_by = diff_mean, n = 1, with_ties = FALSE) %>%
+    ungroup()
+  TSS_events = grouped_focalexons_TSS$event
+  nonTSS_events = grouped_focalexons$event
+  write.table(grouped_focalexons_TSS, file=paste0(outdir,'/', gene[1], '.TSS.focalexons.txt'), quote=FALSE, sep="\t")
+  write.table(grouped_focalexons, file=paste0(outdir,'/', gene[1], '.nonTSS.focalexons.txt'), quote=FALSE, sep="\t")
+
+  write_exoncnt_long(ref_counts_df, diff_counts_df, events=TSS_events, gene[1], sampleinfo, file_prefix='TSS') 
+  write_exoncnt_long(ref_counts_df, diff_counts_df, events=nonTSS_events, gene[1], sampleinfo, file_prefix='nonTSS') 
   return (0)
 }
 
