@@ -24,7 +24,7 @@ sum_exon_counts <- function(gene, count_col, counts_df) {
 }
 
 
-write_exoncnt_long <- function(ref_counts_df, diff_counts_df, events, gene, sampleinfo, file_prefix) {
+write_exoncnt_long <- function(ref_counts_df, diff_counts_df, events, gene_name, sampleinfo, file_prefix) {
 
   ref_long <- ref_counts_df[ref_counts_df$event %in% events,] %>% 
       pivot_longer(
@@ -43,11 +43,10 @@ write_exoncnt_long <- function(ref_counts_df, diff_counts_df, events, gene, samp
   exoncnts$ref <- as.numeric(exoncnts$ref)
   exoncnts$diff <- as.numeric(exoncnts$diff)
   exoncnts$n <- exoncnts$ref + exoncnts$diff
-  exoncnts$gene <- gene
 #  exoncnts <- exoncnts[!is.na(exoncnts$diff),]
 #  exoncnts <- exoncnts[exoncnts$n > 10,]
   if (nrow(exoncnts) > 1) {
-    write.table(exoncnts, file=paste0(outdir,'/', gene, '.', file_prefix, '.exoncnt.txt'), quote=FALSE, sep="\t")
+    write.table(exoncnts, file=paste0(outdir,'/', gene_name, '.', file_prefix, '.exoncnt.txt'), quote=FALSE, sep="\t")
   }
 
 }
@@ -112,11 +111,16 @@ count_focalexons <- function(focalexon_file, countmat, sampleinfo, outdir) {
     ungroup()
   TSS_events = grouped_focalexons_TSS$event
   nonTSS_events = grouped_focalexons$event
-  write.table(grouped_focalexons_TSS, file=paste0(outdir,'/', gene[1], '.TSS.focalexons.txt'), quote=FALSE, sep="\t")
-  write.table(grouped_focalexons, file=paste0(outdir,'/', gene[1], '.nonTSS.focalexons.txt'), quote=FALSE, sep="\t")
 
-  write_exoncnt_long(ref_counts_df, diff_counts_df, events=TSS_events, gene[1], sampleinfo, file_prefix='TSS') 
-  write_exoncnt_long(ref_counts_df, diff_counts_df, events=nonTSS_events, gene[1], sampleinfo, file_prefix='nonTSS') 
+  if (nrow(grouped_focalexons_TSS) & nrow(grouped_focalexons_TSS[grouped_focalexons_TSS$diff_mean > 0,])) {
+    write.table(grouped_focalexons_TSS, file=paste0(outdir,'/', gene[1], '.TSS.focalexons.txt'), quote=FALSE, sep="\t")
+    write_exoncnt_long(ref_counts_df, diff_counts_df, events=TSS_events, gene_name = gene[1], sampleinfo, file_prefix='TSS') 
+  }
+  if (nrow(grouped_focalexons) & nrow(grouped_focalexons[grouped_focalexons$diff_mean > 0,])) {
+    write.table(grouped_focalexons, file=paste0(outdir,'/', gene[1], '.nonTSS.focalexons.txt'), quote=FALSE, sep="\t")
+    write_exoncnt_long(ref_counts_df, diff_counts_df, events=nonTSS_events, gene_name = gene[1], sampleinfo, file_prefix='nonTSS') 
+  }
+
   return (0)
 }
 
@@ -124,7 +128,7 @@ generate_exoncnts <- function(focalexon_files, cl_num) {
 
   cl <- makeCluster(cl_num, type = "PSOCK", outfile='cl.log')
   clusterEvalQ(cl, {library(tidyverse)})
-  clusterExport(cl, c("count_focalexons","sum_exon_counts","read_counts","sampleinfo", "outdir"))
+  clusterExport(cl, c("write_exoncnt_long", "count_focalexons","sum_exon_counts","read_counts","sampleinfo", "outdir"))
 
   # run the jobs
   res <- parallel::parLapply(cl, focalexon_files, function(f) {
@@ -334,7 +338,7 @@ outdir = '~/graphml.dexseq.v34/exoncnts.collapse'
 
 focalexon_files <- list.files(path = focalexon_path,
                                  pattern = "focalexons.txt$", full.names=TRUE)
-focalexon_master <- paste0(focalexon_path, '/cat')
+#focalexon_master <- paste0(focalexon_path, '/cat')
 exoncnt_master <- paste0(outdir,'/cat')
 
 cond1 = 'B'
@@ -365,15 +369,12 @@ if (file.exists(exoncnt_master)) {
 }
 
 
-grouped_data1 <- group_by_event(focalexoncnts, 'diff1', 'n1')
-grouped_data2 <- group_by_event(focalexoncnts, 'diff2', 'n2')
+grouped_data <- group_by_event(focalexoncnts, 'diff', 'n')
 
 if (file.exists(paste0(outdir,'/phi.txt'))) {
   phi_df <- read.table(paste0(outdir,'/phi.txt'), header=TRUE, row.names=NULL)
 } else {
-  phi_df1 <- estimate_phi(grouped_data1)
-  phi_df2 <- estimate_phi(grouped_data2)
-  phi_df <- rbind.data.frame(phi_df1, phi_df2)
+  phi_df <- estimate_phi(grouped_data)
   write.table(phi_df, file=paste0(outdir,'/phi.txt'), quote=FALSE, sep="\t") 
 }
 
@@ -381,6 +382,7 @@ phi_trimmed <- phi_df$phi[phi_df$phi < 1e+10]
 fit_phi <- fitdistr(phi_trimmed, "gamma")
 shape0  <- fit_phi$estimate["shape"]
 rate0   <- fit_phi$estimate["rate"]
+print(sprintf("gamma(%g,%g)", shape0, rate0))
 
 prior_disp <- data.frame(
   prior = sprintf("gamma(%g,%g)", shape0, rate0),
@@ -388,49 +390,22 @@ prior_disp <- data.frame(
   coef  = ""            # blank → all dispersion parameters
 )
 
-grouped_data1 <- grouped_data1 %>% keep (~ all(.x$n_samples == 8)) # 2469->2138
-results1 <- run_test_model(grouped_data1, prior_disp, 20)
-combined_df <- bind_rows(grouped_data1)
+grouped_data <- grouped_data %>% keep (~ all(.x$n_samples == 8)) # 2469->2138
+#grouped_data2 <- grouped_data2 %>% keep (~ all(.x$n_samples == 8)) # 30624->25970
+results <- run_test_model(grouped_data, prior_disp, 20)
+combined_df <- bind_rows(grouped_data)
 
-wide_df <- combined_df %>% dplyr::select(gene, event, sample, ref, diff1)  %>%
+wide_df <- combined_df %>% dplyr::select(gene, event, sample, ref, diff)  %>%
   pivot_wider(
     names_from = sample,
-    values_from = c(diff1, ref)
+    values_from = c(diff, ref)
   )
-combined_results1 <- left_join(wide_df, results1, by = c("gene", "event"))
-combined_results1$baseMean <- rowMeans(combined_results1[, grep("diff", names(combined_results1))])
-combined_results1$pvalue <- combined_results1$p.value 
-combined_results1 <- pvalueAdjustment(combined_results1, independentFiltering=TRUE, alpha = 0.1, pAdjustMethod = 'BH')
-#combined_results1$FDR <- p.adjust(combined_results1$p.value, method = "BH")
-write.table(combined_results1, file=paste0(outdir,'/test1.txt'), quote=FALSE, sep="\t") 
+combined_results <- left_join(wide_df, results, by = c("gene", "event"))
+combined_results$baseMean <- rowMeans(combined_results[, grep("diff", names(combined_results))])
+combined_results$pvalue <- combined_results$p.value 
+combined_results <- pvalueAdjustment(combined_results, independentFiltering=TRUE, alpha = 0.1, pAdjustMethod = 'BH')
+#combined_results$FDR <- p.adjust(combined_results$p.value, method = "BH")
+write.table(combined_results, file=paste0(outdir,'/test.txt'), quote=FALSE, sep="\t") 
 
-grouped_data2 <- grouped_data2 %>% keep (~ all(.x$n_samples == 8)) # 30624->25970
-results2 <- run_test_model(grouped_data2, prior_disp, 20)
-combined_df <- bind_rows(grouped_data2)
-
-wide_df <- combined_df %>% dplyr::select(gene, event, sample, ref, diff2)  %>%
-  pivot_wider(
-    names_from = sample,
-    values_from = c(diff2, ref)
-  )
-combined_results2 <- left_join(wide_df, results2, by = c("gene", "event"))
-combined_results2$baseMean <- rowMeans(combined_results2[, grep("diff", names(combined_results2))])
-combined_results2$pvalue <- combined_results2$p.value 
-combined_results2 <- pvalueAdjustment(combined_results2, independentFiltering=TRUE, alpha = 0.1, pAdjustMethod = 'BH')
-#combined_results2$FDR <- p.adjust(combined_results2$p.value, method = "BH")
-write.table(combined_results2, file=paste0(outdir,'/test2.txt'), quote=FALSE, sep="\t") 
-
-
-combined_results1_noref <- dplyr::select(combined_results1, -starts_with("ref_"))
-merged_results <- full_join(
-  combined_results1_noref, combined_results2,
-  by = c("gene", "event"),
-  suffix = c("_diff1", "_diff2")
-)
-merged_results <- merged_results %>%
-  relocate(starts_with("diff1_"), starts_with("diff2_"), starts_with("ref_"), .after = last_col()) %>%
-  arrange(gene, event)
-
-write.table(merged_results, file=paste0(outdir,'/testboth.txt'), quote=FALSE, sep="\t") 
 
 
