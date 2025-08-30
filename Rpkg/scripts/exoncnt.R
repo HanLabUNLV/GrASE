@@ -151,29 +151,6 @@ count_focalexons <- function(focalexon_file, countmat, sampleinfo, outdir) {
   return (0)
 }
 
-generate_exoncnts <- function(focalexon_files, cl_num) {
-
-  cl <- makeCluster(cl_num, type = "PSOCK", outfile='cl.log')
-  clusterEvalQ(cl, {library(tidyverse)})
-  clusterExport(cl, c("write_exoncnt_long", "count_focalexons","sum_exon_counts","read_counts","sampleinfo", "outdir"))
-
-  # run the jobs
-  res <- parallel::parLapply(cl, focalexon_files, function(f) {
-    tryCatch({
-      gene_id <- sub("\\.focalexons\\.txt$", "", basename(f))
-      count_focalexons(f, countmat = read_counts[read_counts$gene==gene_id,], sampleinfo, outdir)
-    }, error = function(e) {
-      msg <- sprintf("[%s] ERROR in %s (PID %d): %s\n",
-                     format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
-                     f, Sys.getpid(), conditionMessage(e))
-      cat(msg, file = "cl_errors.log", append = TRUE)
-      NULL
-    })
-  })
-  stopCluster(cl)
-
-}
-
 
   
 group_by_event <- function(dat, col_y, col_n) {
@@ -392,52 +369,26 @@ sampleinfo <- as.vector(sampleTable[,"condition"])
 names(sampleinfo) <- rownames(sampleTable)
 
 
-if (file.exists(exoncnt_master)) {
-  focalexoncnts <- read.table(exoncnt_master, header=TRUE, row.names=NULL)
-  focalexoncnts$groups <- factor(focalexoncnts$groups, levels = c(cond1, cond2))
-} else {
-  generate_exoncnts(focalexon_files, 20)
-}
+cl_num = 30
+cl <- makeCluster(cl_num, type = "PSOCK", outfile='cl.log')
+clusterEvalQ(cl, {library(tidyverse)})
+clusterExport(cl, c("write_exoncnt_long", "count_focalexons","sum_exon_counts","read_counts","sampleinfo", "outdir"))
 
+# run the jobs
+res <- parallel::parLapply(cl, focalexon_files, function(f) {
+  tryCatch({
+    gene_id <- sub("\\.focalexons\\.txt$", "", basename(f))
+    count_focalexons(focalexon_file = f, countmat = read_counts[read_counts$gene==gene_id,], sampleinfo, outdir)
+  }, error = function(e) {
+    msg <- sprintf("[%s] ERROR in %s (PID %d): %s\n",
+                   format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
+                   f, Sys.getpid(), conditionMessage(e))
+    cat(msg, file = "cl_errors.log", append = TRUE)
+    NULL
+  })
+})
+stopCluster(cl)
 
-
-grouped_data <- group_by_event(focalexoncnts, 'diff', 'n')
-
-if (file.exists(paste0(outdir,'/phi.txt'))) {
-  phi_df <- read.table(paste0(outdir,'/phi.txt'), header=TRUE, row.names=NULL)
-} else {
-  phi_df <- estimate_phi(grouped_data)
-  write.table(phi_df, file=paste0(outdir,'/phi.txt'), quote=FALSE, sep="\t") 
-}
-
-phi_trimmed <- phi_df$phi[phi_df$phi < 1e+10]
-fit_phi <- fitdistr(phi_trimmed, "gamma")
-shape0  <- fit_phi$estimate["shape"]
-rate0   <- fit_phi$estimate["rate"]
-
-prior_disp <- data.frame(
-  prior = sprintf("gamma(%g,%g)", shape0, rate0),
-  class = "fixef_disp",
-  coef  = ""            # blank all dispersion parameters
-)
-print(prior_disp)
-
-grouped_data <- grouped_data %>% keep (~ all(.x$n_samples == 8)) # 2469->2138
-#grouped_data2 <- grouped_data2 %>% keep (~ all(.x$n_samples == 8)) # 30624->25970
-results <- run_test_model(grouped_data, prior_disp, 20)
-combined_df <- bind_rows(grouped_data)
-
-wide_df <- combined_df %>% dplyr::select(gene, event, source, sink, ref_ex_part, setdiff, sample, ref, diff)  %>%
-  pivot_wider(
-    names_from = sample,
-    values_from = c(diff, ref)
-  )
-combined_results <- left_join(wide_df, results, by = c("gene", "event"))
-combined_results$baseMean <- rowMeans(combined_results[, grep("diff_sample", names(combined_results))])
-combined_results$pvalue <- combined_results$p.value 
-combined_results <- pvalueAdjustment(combined_results, independentFiltering=TRUE, alpha = 0.1, pAdjustMethod = 'BH')
-#combined_results$FDR <- p.adjust(combined_results$p.value, method = "BH")
-write.table(combined_results, file=paste0(outdir,'/test.txt'), quote=FALSE, sep="\t") 
 
 
 

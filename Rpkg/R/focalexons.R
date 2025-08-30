@@ -839,7 +839,7 @@ update_txpaths_after_bubble_collapse2 <- function(g, tx_list, epath) {
 
 #' Compute focal exons from graph and splicing structure
 #' @export
-focal_exons_gene_powerset <- function(gene, g, sg, outdir, max_path = 30, collapse_bubbles=TRUE) {
+focal_exons_gene_powerset <- function(gene, g, sg, outdir, max_path = 20, collapse_bubbles=TRUE) {
 
 
 #options(keep.source = TRUE)
