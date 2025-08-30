@@ -44,7 +44,8 @@ results <- foreach(
 
 
   filename = file.path(outdir, "focalexons.collapse", paste0(gene, ".focalexons.txt"))
-  if (file.exists(filename)) {
+  runninglog = file.path(outdir, "focalexons.collapse", paste0(gene, ".running"))
+  if (file.exists(filename) | file.exists(runninglog)) {
     message(paste("skipping existing ", filename))
     flush.console()
     return(gene)
@@ -63,13 +64,14 @@ results <- foreach(
     #next
   }
   if(DEBUG_MODE) print(paste("running", filename))
+  file.create(runninglog)
   gr <- gr[!(rtracklayer::mcols(gr)$type %in% c("start_codon", "stop_codon"))]
   txdb <- txdbmaker::makeTxDbFromGRanges(gr)
 
   sg <- SplicingGraphs::SplicingGraphs(txdb, min.ntx = 1)
-  pdf(file.path(indir, 'sgplot', paste0(gene, ".sg.pdf")))
-  plot(SplicingGraphs::sgraph(sg))
-  dev.off()
+  #pdf(file.path(indir, 'sgplot', paste0(gene, ".sg.pdf")))
+  #plot(SplicingGraphs::sgraph(sg))
+  #dev.off()
 
 
   edges_by_gene <- SplicingGraphs::sgedgesByGene(sg)
@@ -100,8 +102,8 @@ results <- foreach(
       collapse_bubbles = TRUE 
   )
   if(DEBUG_MODE) print(paste0("FINISH ", gene))
+  on.exit(unlink(runninglog))
   flush.console()
-
   }, error = function(e) {
     message("ERROR in gene ", gene, ": ", e$message)
     return(NULL)

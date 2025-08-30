@@ -985,8 +985,10 @@ focal_exons_gene_powerset <- function(gene, g, sg, outdir, max_path = 30, collap
 
   if (nrow(focalexons_df) > 0) {
     focalexons_df <- focalexons_df %>% dplyr::rowwise() %>% dplyr::mutate(adj_cnt = count_items(ref_ex_part)) %>% dplyr::ungroup()
+    # remove rows where no setdiff1 or setdiff2 are found
+    focalexons_filtered <- focalexons_df[!((focalexons_df$setdiff1=="") & (focalexons_df$setdiff2=="")),]
     # for all rows with same setdiff1 and setdiff2, only retain the row with minimum number of ref_ex_part 
-    focalexons_filtered <- focalexons_df %>%
+    focalexons_filtered <- focalexons_filtered %>%
       dplyr::group_by(setdiff1, setdiff2) %>%
       dplyr::filter(adj_cnt == min(adj_cnt)) %>%
       dplyr::ungroup() %>%

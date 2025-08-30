@@ -45,7 +45,7 @@ genes = c('ENSG00000004468.13')
 #gene = 'ENSG00000169488.6'
 #gene = 'ENSG00000023191.17'
 #gene = 'ENSG00000183878.15'
-
+#gene = 'ENSG00000130830.15'
 
 for (gene in genes) {
   if(DEBUG_MODE) print(paste0("START ", gene))
@@ -102,11 +102,12 @@ for (gene in genes) {
   
   #focalexons_read <- read.table(filename, sep="\t", header=TRUE)
 
+  focalexondir = file.path(outdir, "focalexons.collapse") 
   focalexons <- grase::focal_exons_gene_powerset(
       gene     = gene,
       g        = g,
       sg       = sg,
-      outdir   = outdir,
+      outdir   = focalexondir,
       max_path = 30,
       collapse_bubbles = FALSE
   )
