@@ -22,7 +22,7 @@ gene_summary = sim_deds %>% group_by(geneID)
 genes =  unique(gene_summary$geneID)
 
 num_cores <- 20
-cl <- makeCluster(num_cores, outfile = "collapse.log")
+cl <- makeCluster(num_cores, outfile = "nocollapse.log")
 registerDoParallel(cl)
 
 results <- foreach(
@@ -43,8 +43,8 @@ results <- foreach(
 #  outdir = '/data2/han_lab/stevepark/SplicingGraphs/indir/'
 
 
-  filename = file.path(outdir, "focalexons.collapse", paste0(gene, ".focalexons.txt"))
-  runninglog = file.path(outdir, "focalexons.collapse", paste0(gene, ".running"))
+  filename = file.path(outdir, "focalexons.nocollapse", paste0(gene, ".focalexons.txt"))
+  runninglog = file.path(outdir, "focalexons.nocollapse", paste0(gene, ".running"))
   if (file.exists(filename) | file.exists(runninglog)) {
     message(paste("skipping existing ", filename))
     flush.console()
@@ -90,7 +90,7 @@ results <- foreach(
   # call your downstream function, fully namespaced
   cat("  calling grase::focal_exons_gene_powerset()\n"); flush.console()
    
-  focalexondir = file.path(outdir, "focalexons.collapse") 
+  focalexondir = file.path(outdir, "focalexons.nocollapse") 
   if(DEBUG_MODE) print("focalexondir")
   if(DEBUG_MODE) print(focalexondir)
   grase::focal_exons_gene_powerset(
@@ -98,8 +98,8 @@ results <- foreach(
       g        = g,
       sg       = sg,
       outdir   = focalexondir, 
-      max_path = 30,
-      collapse_bubbles = TRUE 
+      max_path = 20,
+      collapse_bubbles = FALSE 
   )
   if(DEBUG_MODE) print(paste0("FINISH ", gene))
   on.exit(unlink(runninglog))

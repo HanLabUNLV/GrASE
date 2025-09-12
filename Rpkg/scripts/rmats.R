@@ -1,15 +1,17 @@
 library(igraph)
 library(dplyr)
 library(grase)
+library(doParallel)
+library(foreach)
 
 #/RAID10/mirahan/graphml.dexseq.v34/
-genelist_file = '/RAID10/mirahan/graphml.dexseq.v34/grase_results/all_genes.txt'
-genes <- read.table(genelist_file, header=TRUE, sep="\t")
+genelist_file = '../grase_results.integrate/all_genes.txt'
+genes <- read.table(genelist_file, header=FALSE, sep="\t")
 
 
-indir = '/RAID10/mirahan/graphml.dexseq.v34/'
-outdir = '/RAID10/mirahan/graphml.dexseq.v34/'
-grase_output_dir = file.path(outdir, 'grase_results/')
+indir = '~/graphml.dexseq.v34/'
+outdir = '~/graphml.dexseq.v34/'
+grase_output_dir = file.path(outdir, 'grase_results.integrate/')
 eventTypes =  c('A3SS', 'A5SS', 'SE', 'RI')
 
 rmats_df = data.frame(matrix(nrow = 0, ncol = 4)) 
@@ -26,23 +28,41 @@ for (eventType in eventTypes) {
   write.table(mapped_df, file = out4, sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)
 }
 
-for (gene in genes[,1]) {
+num_cores <- 20
+cl <- makeCluster(num_cores, outfile = "rmats.log")
+registerDoParallel(cl)
 
-  print(gene)
-  gtf_path <- file.path(indir, "gtf", paste0(gene, ".gtf"))
-  gff_path <- file.path(indir, "dexseq.gff", paste0(gene, ".dexseq.gff"))
-  graph_path <- file.path(indir, "graphml", paste0(gene, ".graphml"))
-  focalexons_path = file.path(outdir, "focalexons.collapse", paste0(gene, ".focalexons.txt"))
-  if (!file.exists(focalexons_path)) { next }
-  if (file.info(focalexons_path)$size <= 1) { next }
+results <- foreach(
+  gene        = genes[,1],                  # iterates over your gene vector
+  .packages = c("grase", "dplyr", "igraph"),      # any packages you call inside
+  .combine  = 'c',                     # or 'rbind', 'list', etc.
+  .errorhandling = "pass"
+#  .verbose  = TRUE
+) %dopar% {
 
-  g <- igraph::read_graph(graph_path, format = "graphml")
+#for (gene in genes[,1]) {
+  tryCatch({
 
-  rmats_outdir = paste0(indir, '/grase_results/gene_files/', gene)
-  fromGTF_A3SS = paste0(rmats_outdir, '/', 'fromGTF.A3SS.txt')
-  fromGTF_A5SS = paste0(rmats_outdir, '/', 'fromGTF.A5SS.txt')
-  fromGTF_SE = paste0(rmats_outdir, '/', 'fromGTF.SE.txt')
-  fromGTF_RI = paste0(rmats_outdir, '/', 'fromGTF.RI.txt')
-  map_rMATS(g, gene, gff_path, fromGTF_A3SS, fromGTF_A5SS, fromGTF_SE, fromGTF_RI, focalexons_path, grase_output_dir)
+    print(gene)
+    gtf_path <- file.path(indir, "gtf", paste0(gene, ".gtf"))
+    gff_path <- file.path(indir, "dexseq.gff", paste0(gene, ".dexseq.gff"))
+    graph_path <- file.path(indir, "graphml", paste0(gene, ".graphml"))
+    focalexons_path = file.path(outdir, "focalexons.filtered", paste0(gene, ".focalexons.txt"))
+    if (!file.exists(focalexons_path)) { return(NULL) }
+    if (file.info(focalexons_path)$size <= 1) { return(NULL) }
 
+    g <- igraph::read_graph(graph_path, format = "graphml")
+
+    rmats_outdir = paste0(indir, '/grase_results.integrate/gene_files/', gene)
+    fromGTF_A3SS = paste0(rmats_outdir, '/', 'fromGTF.A3SS.txt')
+    fromGTF_A5SS = paste0(rmats_outdir, '/', 'fromGTF.A5SS.txt')
+    fromGTF_SE = paste0(rmats_outdir, '/', 'fromGTF.SE.txt')
+    fromGTF_RI = paste0(rmats_outdir, '/', 'fromGTF.RI.txt')
+    map_rMATS(g, gene, gff_path, fromGTF_A3SS, fromGTF_A5SS, fromGTF_SE, fromGTF_RI, focalexons_path, grase_output_dir)
+  }, error = function(e) {
+    message("ERROR in gene ", gene, ": ", e$message)
+    return(NULL)
+  })
 }
+
+stopCluster(cl)

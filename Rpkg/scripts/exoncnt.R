@@ -123,31 +123,6 @@ count_focalexons <- function(focalexon_file, countmat, sampleinfo, outdir) {
     write_exoncnt_long(ref_counts_df, diff_counts_df, events=focalexons[!TSS_index,'event'], gene_name = gene[1], sampleinfo, file_prefix='nonTSS') 
   }
  
-#  grouped_focalexons_TSS <- focalexons[TSS_index,] %>%
-#    group_by(transcripts1, transcripts2) %>%
-#    slice_max(order_by = diff_mean, n = 1, with_ties = FALSE) %>%
-#    ungroup()
-#  
-#  grouped_focalexons <- focalexons[!TSS_index,] %>%
-#    group_by(transcripts1, transcripts2) %>%
-#    slice_max(order_by = diff_mean, n = 1, with_ties = FALSE) %>%
-#    ungroup()
-#  TSS_events = grouped_focalexons_TSS$event
-#  nonTSS_events = grouped_focalexons$event
-#
-#  if (nrow(grouped_focalexons_TSS) & nrow(grouped_focalexons_TSS[grouped_focalexons_TSS$diff_mean > 0,])) {
-#    if (nrow(grouped_focalexons_TSS) < nrow(focalexons[TSS_index,])) {
-#      write.table(grouped_focalexons_TSS, file=paste0(outdir,'/', gene[1], '.TSS.grouped.focalexons.txt'), quote=FALSE, sep="\t")
-#      write_exoncnt_long(ref_counts_df, diff_counts_df, events=TSS_events, gene_name = gene[1], sampleinfo, file_prefix='TSS.grouped') 
-#    }
-#  }
-#  if (nrow(grouped_focalexons) & nrow(grouped_focalexons[grouped_focalexons$diff_mean > 0,])) {
-#    if (nrow(grouped_focalexons) < nrow(focalexons[!TSS_index,])) {
-#      write.table(grouped_focalexons, file=paste0(outdir,'/', gene[1], '.nonTSS.grouped.focalexons.txt'), quote=FALSE, sep="\t")
-#      write_exoncnt_long(ref_counts_df, diff_counts_df, events=nonTSS_events, gene_name = gene[1], sampleinfo, file_prefix='nonTSS.grouped') 
-#    }
-#  }
-
   return (0)
 }
 
@@ -170,184 +145,32 @@ group_by_event <- function(dat, col_y, col_n) {
 
 
 
-phi_estimator <- function(dd) {
-    gene  <- unique(dd$gene)
-    event <- unique(dd$event)
-    dd <- dd[dd$n > 0, ]
-
-    if (nrow(dd) < 2) return(NULL)
-
-    m0 <- tryCatch(
-      glmmTMB(cbind(y, n - y) ~ 1, data = dd, family = binomial(link = "logit")),
-      error = function(e) NULL
-    )
-    m1 <- tryCatch(
-      glmmTMB(cbind(y, n - y) ~ 1, data = dd, family = betabinomial(link = "logit")),
-      error = function(e) NULL
-    )
-
-    if (!is.null(m1) && !is.na(logLik(m1)) && !is.null(m0) && !is.na(logLik(m0)) ) {
-      test <- tryCatch(anova(m1, m0, test = "LRT"), error = function(e) NULL)
-      if (!is.null(test) && test$`Pr(>Chisq)`[2] < 0.05) {
-        return(data.frame(gene = gene, event = event, phi = sigma(m1)))
-      }
-    }
-    return(NULL)
-}
 
 
 
 
 
-estimate_phi <- function (grouped_data) {
-
-  cl <- makeCluster(10)  # or use a fixed number like makeCluster(4)
-  clusterEvalQ(cl, library(glmmTMB))
-  clusterExport(cl, varlist = c("phi_estimator", "grouped_data"), envir = environment())
-
-  phi_list <- parLapply(cl, grouped_data, phi_estimator)
-  #for (i in seq_along(grouped_data)) {
-  # phi_list[[i]] <- phi_estimator(grouped_data[[i]])
-  #}
-  
-  stopCluster(cl)
-  phi_df <- bind_rows(Filter(Negate(is.null), phi_list))
-
-}
 
 
 
-test_model <- function(dd, prior_disp) {
-    gene  <- unique(dd$gene)
-    event <- unique(dd$event)
-    dd <- dd[dd$n > 0, ]
-    model_type = NULL
-
-    if (nrow(dd) < 2) return(NULL)
-    if (length(unique(dd$groups)) < 2) return(NULL)
-   
-    print(dd)
- 
-    # full: add group
-    m1 <- tryCatch (
-      glmmTMB(
-        cbind(y, n - y) ~ groups,
-        data   = dd,
-        family = betabinomial(link="logit"),
-        priors = prior_disp
-      ), 
-      error = function(e) NULL
-    )
-
-    # null: intercept only, with φ prior
-    m0 <- tryCatch ( 
-      glmmTMB(
-        cbind(y, n - y) ~ 1,
-        data   = dd,
-        family = betabinomial(link="logit"),
-        priors = prior_disp
-      ),
-      error = function(e) NULL
-    )
-
-    if (!is.null(m1) && !is.na(logLik(m1)) && !is.null(m0) && !is.na(logLik(m0)) ) {
-      if (all(!is.na(summary(m1)$coefficients$cond[, "Std. Error"])) && all(!is.na(summary(m0)$coefficients$cond[, "Std. Error"]))) {
-        model_type <- "betabinomial"
-      }
-      else {
-        return (NULL)
-      }
-    } else {
-      # full: add group
-      m1 <- tryCatch (
-        glmmTMB(
-          cbind(y, n - y) ~ groups,
-          data   = dd,
-          family = binomial(link="logit")
-        ), 
-        error = function(e) NULL
-      )
-
-      # null: intercept only, with φ prior
-      m0 <- tryCatch ( 
-        glmmTMB(
-          cbind(y, n - y) ~ 1,
-          data   = dd,
-          family = binomial(link="logit")
-        ),
-        error = function(e) NULL
-      )
-
-      if (!is.null(m1) && !is.na(logLik(m1)) && !is.null(m0) && !is.na(logLik(m0)) ) {
-        if (all(!is.na(summary(m1)$coefficients$cond[, "Std. Error"])) && all(!is.na(summary(m0)$coefficients$cond[, "Std. Error"]))) {
-          model_type <- "binomial"
-        }
-        else {
-          return (NULL)
-        }
-      }
-      else {
-        return (NULL)
-      }
-    }
-
-    # LRT statistic & p‐value
-    LR   <- 2 * (logLik(m1) - logLik(m0))
-    pval <- pchisq(as.numeric(LR), df = 1, lower.tail = FALSE)
-    
-    # extract MAP φ and group slope
-    m0_beta0_hat <- fixef(m0)$cond[1]
-    m1_beta0_hat <- fixef(m1)$cond[1]
-    beta1_hat <- fixef(m1)$cond[2]
-    phi_hat  <- sigma(m1)
-    
-    return (data.frame(
-        gene = gene,
-        event = event,
-        LRT = as.numeric(LR),
-        p.value = pval,
-        model = model_type,
-        m0_beta0 = m0_beta0_hat,
-        m1_beta0 = m1_beta0_hat,
-        beta1 = beta1_hat,
-        phi = phi_hat
-      )
-    )
-}
-
-run_test_model <- function (grouped_data, prior_disp, cl_num) {
-
-  cl <- makeCluster(cl_num)  # or use a fixed number like makeCluster(4)
-  clusterEvalQ(cl, library(glmmTMB))
-  clusterExport(cl, varlist = c("test_model", "grouped_data", "prior_disp"), envir = environment())
-
-  result_list <- parLapply(cl, grouped_data, function(dd) {
-    test_model(
-      dd        = dd,
-      prior_disp      = prior_disp
-    )
-  })
-
-  stopCluster(cl)
-  results <- bind_rows(Filter(Negate(is.null), result_list))
-
-}
 
 
 
-focalexon_path = '~/graphml.dexseq.v34/focalexons.filtered'
-outdir = '~/graphml.dexseq.v34/exoncnts.filtered'
+
+
+focalexon_path = '~/graphml.dexseq.v34/focalexons.nocollapse'
+outdir = '~/graphml.dexseq.v34/dice_exoncnts.nocollapse'
 
 focalexon_files <- list.files(path = focalexon_path,
                                  pattern = "focalexons.txt$", full.names=TRUE)
 #focalexon_master <- paste0(focalexon_path, '/cat')
-exoncnt_master <- paste0(outdir,'/cat')
+#exoncnt_master <- paste0(outdir,'/cat')
 
 cond1 = 'B'
 cond2 = 'CD8T'
 
-countFiles_allB <- list.files(paste0('~/graphml.dexseq.v34/dexseq_output_monaco_b_vs_cd8/count_files/B'), full.names=TRUE)
-countFiles_CD8T = list.files(paste0('~/graphml.dexseq.v34/dexseq_output_monaco_b_vs_cd8/count_files/CD8'), full.names=TRUE)
+countFiles_allB <- list.files(paste0('~/graphml.dexseq.v34/dexseq_output_dice_b_vs_cd8/count_files/B'), full.names=TRUE)
+countFiles_CD8T = list.files(paste0('~/graphml.dexseq.v34/dexseq_output_dice_b_vs_cd8/count_files/CD8'), full.names=TRUE)
 countFiles = c(countFiles_allB, countFiles_CD8T)
 B_ncells = length(countFiles_allB)
 CD8T_ncells = length(countFiles_CD8T)

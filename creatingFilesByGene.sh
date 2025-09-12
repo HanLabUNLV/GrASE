@@ -1,4 +1,7 @@
 #!/bin/bash
+#
+#bash creatingFilesByGene.sh -r -s ~/graphml.dexseq.v34/rmats_output_dice_b_vs_cd8/ -a ~/graphml.dexseq.v34/gencode.v34.annotation.gtf -d dexseq_prepare_annotation.py  -g ~/graphml.dexseq.v34/graphml -p 10
+#
 
 print_usage(){
     echo "Usage: bash creatingFilesByGene.sh [-r] [-m] [-s /splicing_software_directory] [-a annotation.gtf] [-d dexseq_prepare_annotation.py]  [-g /graphml_directory] [-p num_threads]"
@@ -142,6 +145,7 @@ cat grase_results/tmp/all_genes.txt | while read line; do
 	fi
 done
 
+mv grase_results/tmp/all_genes.txt grase_results/
 rm -r grase_results/tmp
 
 echo "Done!"

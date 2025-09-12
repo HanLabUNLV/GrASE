@@ -50,6 +50,7 @@ def get_args():
 def get_gene_files(gene):
 	gene = os.path.join(args.gene_files_directory, gene)
 	grase_output_dir = os.path.abspath(os.path.join(args.gene_files_directory, os.pardir))
+	g = None
 
 	if args.splicing_software == 'r':
 		fromGTF_A3SS = fromGTF_A5SS = fromGTF_SE = fromGTF_RI = ''
@@ -156,16 +157,18 @@ def get_results_files():
 
 
 def process_gene(gene):
+	print(gene)
 	if args.splicing_software == 'r':
 		g, gene, gff, fromGTF_SE, fromGTF_RI, fromGTF_A3SS, fromGTF_A5SS, grase_output_dir = get_gene_files(gene)
-		g = map_DEXSeq_from_gff(g, gff)
-		g = map_rMATS(g, gene, gff, fromGTF_A3SS, fromGTF_A5SS, fromGTF_SE, fromGTF_RI, grase_output_dir)
+		if g is not None:
+			g = map_DEXSeq_from_gff(g, gff)
+			g = map_rMATS(g, gene, gff, fromGTF_A3SS, fromGTF_A5SS, fromGTF_SE, fromGTF_RI, grase_output_dir)
 	elif args.splicing_software == 'm':
 		g, gene, gff, delta_psi, grase_output_dir = get_gene_files(gene)
 		g = map_DEXSeq_from_gff(g, gff)
 		g = map_majiq(g, gene, gff, delta_psi, grase_output_dir)
 
-	style_and_plot(g, gene)
+	#style_and_plot(g, gene)
 
 
 
@@ -187,30 +190,32 @@ def map_DEXSeq_from_gff(g, gff):
 
 	g.es["dexseq_fragment"] = ''
 	for x in gff:
-		if x.split()[2] == "aggregate_gene":
-			g["strand"] = x.split()[6]
-			g["gene"] = x.split()[-1].strip('\"')
-		if x.split()[2] == "exonic_part":
-			leftCoords.append(x.split()[3])
-			rightCoords.append(x.split()[4])
-			dex_frag.append(x.split()[-1].strip('\"'))
-			transcripts.append(x.split()[11].strip(';').strip('\"').split("+"))
+	  if x.split()[2] == "aggregate_gene":
+	    g["strand"] = x.split()[6]
+	    g["gene"] = x.split()[-1].strip('\"')
+	  if x.split()[2] == "exonic_part":
+	    leftCoords.append(x.split()[3])
+	    rightCoords.append(x.split()[4])
+	    dex_frag.append(x.split()[-1].strip('\"'))
+	    transcripts.append(x.split()[11].strip(';').strip('\"').split("+"))
+
+	pos_to_name = dict(zip(g.vs["position"], g.vs["name"]))
 
 	if g["strand"] == '-':
-		for x in range(len(rightCoords)):
-			rightCoords[x] = str(int(rightCoords[x]) + 1)
-			g.add_edges([(rightCoords[x], leftCoords[x])])
-			g.es[-1]["dexseq_fragment"] = dex_frag[x]
-			for transcript in transcripts[x]:
-				g.es[-1][transcript] = True
+	  for x in range(len(rightCoords)):
+	    rightCoords[x] = str(int(rightCoords[x]) + 1)
+	    g.add_edges([(pos_to_name[rightCoords[x]], pos_to_name[leftCoords[x]])])
+	    g.es[-1]["dexseq_fragment"] = dex_frag[x]
+	    for transcript in transcripts[x]:
+	      g.es[-1][transcript] = True
 
 	if g["strand"] == '+':
-		for x in range(len(rightCoords)):
-			rightCoords[x] = str(int(rightCoords[x]) + 1)
-			g.add_edges([(leftCoords[x], rightCoords[x])])
-			g.es[-1]["dexseq_fragment"] = dex_frag[x]
-			for transcript in transcripts[x]:
-				g.es[-1][transcript] = True
+	  for x in range(len(rightCoords)):
+	    rightCoords[x] = str(int(rightCoords[x]) + 1)
+	    g.add_edges([(pos_to_name[leftCoords[x]], pos_to_name[rightCoords[x]])])
+	    g.es[-1]["dexseq_fragment"] = dex_frag[x]
+	    for transcript in transcripts[x]:
+	      g.es[-1][transcript] = True
 
 	return g
 
@@ -344,7 +349,7 @@ def map_majiq_RI(g, junc_start, junc_end, dx_ID, dx_gff, ID, eventType):
 
 
 
-def map_rMATS_event_overhang(g, fromGTF, eventType, gene, gff, grase_output_dir):
+def map_rMATS_event_overhang(g, fromGTF, eventType, gene, gff, grase_output_dir, pos_to_name):
 	"""
 	Takes a fromGTF.event.txt rMATS output file and reads it. This function will take the coordinates of rMATS events in
 	order to create edges on the igraph object that map those events with corresponding DEXSeq fragments. The goal is to
@@ -396,17 +401,17 @@ def map_rMATS_event_overhang(g, fromGTF, eventType, gene, gff, grase_output_dir)
 		if eventType == "A3SS":
 			# finds the edge that spans the vertex labelled with longES coordinates to the vertex labelled with longEE coordinates
 			# ultimately labels the edge that corresponds to the rMATS long edge
-			g.es.find(_within=(g.vs.find(longES[x]).index, g.vs.find(longEE[x]).index))["rmats"] = "rmats long"
+			g.es.find(_within=(g.vs.find(pos_to_name[longES[x]]).index, g.vs.find(pos_to_name[longEE[x]]).index))["rmats"] = "rmats long"
 			# finds the edge that spans the vertex labelled with shortES coordinates to the vertex labelled with shortEE coordinates
 			# ultimately labels the edge that corresponds to the rMATS short edge
-			g.es.find(_within=(g.vs.find(shortES[x]).index, g.vs.find(shortEE[x]).index))["rmats"] = "rmats short"
+			g.es.find(_within=(g.vs.find(pos_to_name[shortES[x]]).index, g.vs.find(pos_to_name[shortEE[x]]).index))["rmats"] = "rmats short"
 
 			# cannot assume longES = shortES or longEE = shortEE since gene strandedness (+/-) affects the layout of the graph
 			if longES[x] == shortES[x]:
 				# for every adjacent pair of nodes (aka every dexseq fragment edge) from the beginning to the end of the overhang,
 				# label that edge with an eventType attribute. In addition, append the dexseq fragment label at that edge to the
 				# dx_ID dictionary {rMATS ID: [dexseq fragment list]}
-				for i in range(g.vs.find(longEE[x]).index, g.vs.find(shortEE[x]).index):
+				for i in range(g.vs.find(pos_to_name[longEE[x]]).index, g.vs.find(pos_to_name[shortEE[x]]).index):
 					# since an overhang fragment cannot line up with an exon, there will only be one edge between adjacent pairs
 					# of nodes over that fragment. Find that one edge (corresponding to dexseq fragment) and label it.
 					for k in range(len(g.es.select(_within=(i, i+1)))):
@@ -420,7 +425,7 @@ def map_rMATS_event_overhang(g, fromGTF, eventType, gene, gff, grase_output_dir)
 			# cannot assume longES = shortES or longEE = shortEE since gene strandedness (+/-) affects the layout of the graph.
 			# works exactly the same as longES[x] == shortES[x], but in reverse order
 			if longEE[x] == shortEE[x]:
-				for i in range(g.vs.find(longES[x]).index, g.vs.find(shortES[x]).index):
+				for i in range(g.vs.find(pos_to_name[longES[x]]).index, g.vs.find(pos_to_name[shortES[x]]).index):
 					for k in range(len(g.es.select(_within=(i, i+1)))):
 						if g.es.select(_within=(i, i+1))[k]["dexseq_fragment"] != '':
 							g.es.select(_within=(i, i+1))[k][eventType] = True
@@ -430,10 +435,10 @@ def map_rMATS_event_overhang(g, fromGTF, eventType, gene, gff, grase_output_dir)
 							dx_gff[g.es.select(_within=(i, i+1))[k]["dexseq_fragment"]].append(eventType + "_" + ID[x])
 		if eventType == "A5SS":
 			# works exactly the same as A3SS events, but in reverse order (A5SS and A3SS are on opposite sides of the exon)
-			g.es.find(_within=(g.vs.find(longEE[x]).index, g.vs.find(longES[x]).index))["rmats"] = "rmats long"
-			g.es.find(_within=(g.vs.find(shortEE[x]).index, g.vs.find(shortES[x]).index))["rmats"] = "rmats short"
+			g.es.find(_within=(g.vs.find(pos_to_name[longEE[x]]).index, g.vs.find(pos_to_name[longES[x]]).index))["rmats"] = "rmats long"
+			g.es.find(_within=(g.vs.find(pos_to_name[shortEE[x]]).index, g.vs.find(pos_to_name[shortES[x]]).index))["rmats"] = "rmats short"
 			if longES[x] == shortES[x]:
-				for i in range(g.vs.find(shortEE[x]).index, g.vs.find(longEE[x]).index):
+				for i in range(g.vs.find(pos_to_name[shortEE[x]]).index, g.vs.find(pos_to_name[longEE[x]]).index):
 					for k in range(len(g.es.select(_within=(i, i+1)))):
 						if g.es.select(_within=(i, i+1))[k]["dexseq_fragment"] != '':
 							g.es.select(_within=(i, i+1))[k][eventType] = True
@@ -442,7 +447,7 @@ def map_rMATS_event_overhang(g, fromGTF, eventType, gene, gff, grase_output_dir)
 								dx_gff[g.es.select(_within=(i, i+1))[k]["dexseq_fragment"]] = []
 							dx_gff[g.es.select(_within=(i, i+1))[k]["dexseq_fragment"]].append(eventType+ "_" + ID[x])
 			if longEE[x] == shortEE[x]:
-				for i in range(g.vs.find(shortES[x]).index, g.vs.find(longES[x]).index):
+				for i in range(g.vs.find(pos_to_name[shortES[x]]).index, g.vs.find(pos_to_name[longES[x]]).index):
 					for k in range(len(g.es.select(_within=(i, i+1)))):
 						if g.es.select(_within=(i, i+1))[k]["dexseq_fragment"] != '':
 							g.es.select(_within=(i, i+1))[k][eventType] = True
@@ -473,7 +478,7 @@ def map_rMATS_event_overhang(g, fromGTF, eventType, gene, gff, grase_output_dir)
 
 
 
-def map_rMATS_event_full_fragment(g, fromGTF, eventType, gene, gff, grase_output_dir):
+def map_rMATS_event_full_fragment(g, fromGTF, eventType, gene, gff, grase_output_dir, pos_to_name):
 	"""
 	Takes a fromGTF.event.txt rMATS output file and reads it. This function will take the coordinates of rMATS events in
 	order to create edges on the igraph object that map those events with corresponding DEXSeq fragments. The goal is to
@@ -518,7 +523,7 @@ def map_rMATS_event_full_fragment(g, fromGTF, eventType, gene, gff, grase_output
 			# for every dexseq fragment edge from the beginning to the end of the exon, label that edge with an eventType
 			# attribute. In addition, append the dexseq fragment label at that edge to the dx_ID dictionary
 			# {rMATS ID: [dexseq fragment list]}
-			for i in range(g.vs.find(exonStart[x]).index, g.vs.find(exonEnd[x]).index):
+			for i in range(g.vs.find(pos_to_name[exonStart[x]]).index, g.vs.find(pos_to_name[exonEnd[x]]).index):
 				# as SE exons can be exactly the same as dexseq fragments (causing 2 edges to exist over the same node pair),
 				# we choose to select the edge labelled as dexseq fragment, and then label that edge with an eventType attribute.
 				for k in range(len(g.es.select(_within=(i, i+1)))):
@@ -530,7 +535,7 @@ def map_rMATS_event_full_fragment(g, fromGTF, eventType, gene, gff, grase_output
 						dx_gff[g.es.select(_within=(i, i+1))[k]["dexseq_fragment"]].append(eventType + "_" + ID[x])
 		# works exactly the same as strand == +, but in the reverse direction
 		if g["strand"] == '-':
-			for i in range(g.vs.find(exonEnd[x]).index, g.vs.find(exonStart[x]).index):
+			for i in range(g.vs.find(pos_to_name[exonEnd[x]]).index, g.vs.find(pos_to_name[exonStart[x]]).index):
 				for k in range(len(g.es.select(_within=(i, i+1)))):
 					if g.es.select(_within=(i, i+1))[k]["dexseq_fragment"] != '':
 						g.es.select(_within=(i, i+1))[k][eventType] = True
@@ -565,17 +570,18 @@ def map_rMATS(g, gene, gff, fromGTF_A3SS, fromGTF_A5SS, fromGTF_SE, fromGTF_RI, 
 	g.es["rmats"] = ""
 	g.es["A3SS"] = g.es["A5SS"] = g.es["SE"] = g.es["RI"] = False
 
+	pos_to_name = dict(zip(g.vs["position"], g.vs["name"]))
 	if fromGTF_A3SS:
-		g = map_rMATS_event_overhang(g, fromGTF_A3SS, "A3SS", gene, gff, grase_output_dir)
+		g = map_rMATS_event_overhang(g, fromGTF_A3SS, "A3SS", gene, gff, grase_output_dir, pos_to_name)
 		fromGTF_A3SS.close()
 	if fromGTF_A5SS:
-		g = map_rMATS_event_overhang(g, fromGTF_A5SS, "A5SS", gene, gff, grase_output_dir)
+		g = map_rMATS_event_overhang(g, fromGTF_A5SS, "A5SS", gene, gff, grase_output_dir, pos_to_name)
 		fromGTF_A5SS.close()
 	if fromGTF_SE:
-		g = map_rMATS_event_full_fragment(g, fromGTF_SE, "SE", gene, gff, grase_output_dir)
+		g = map_rMATS_event_full_fragment(g, fromGTF_SE, "SE", gene, gff, grase_output_dir, pos_to_name)
 		fromGTF_SE.close()
 	if fromGTF_RI:
-		g = map_rMATS_event_full_fragment(g, fromGTF_RI, "RI", gene, gff, grase_output_dir)
+		g = map_rMATS_event_full_fragment(g, fromGTF_RI, "RI", gene, gff, grase_output_dir, pos_to_name)
 		fromGTF_RI.close()
 
 	gff.close()
@@ -1264,7 +1270,10 @@ def main():
 	for file in os.listdir(remove_files_dir):
 		os.remove(os.path.join(remove_files_dir, file))
 	p = Pool(args.nthread)
-	p.map(process_gene, genes)
+	#p.map(process_gene, genes)
+	for gene in genes:
+		process_gene(gene)
+  
 
 	print("Done processing genes.\n")
 	print("Processing results...\n")

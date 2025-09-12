@@ -1,22 +1,20 @@
 #!/usr/bin/env Rscript
 
-suppressPackageStartupMessages({
-  library(data.table)
-  library(dplyr)
-  library(readr)
-  library(fs)
-})
+library(data.table)
+library(dplyr)
+library(readr)
+library(fs)
 
 # =========================
 # CONFIG — set your paths
 # =========================
-output_dir         <- "/RAID10/mirahan/graphml.dexseq.v34/grase_results/results2"
+output_dir         <- "~/graphml.dexseq.v34/grase_results.integrate/results"
 rmats_results_path <- file.path(output_dir, "SplicingEvents", "rMATS_TestedEvents.txt")
 dexseq_tmp_dir     <- file.path(output_dir, "tmp")   # where combined.dexseq.*.mapped.txt live
-merged_graph_path  <- "/RAID10/mirahan/graphml.dexseq.v34/exoncnts.collapse/test2.focalexons.tsv"
+merged_graph_path  <- "~/graphml.dexseq.v34/dice_exoncnts.filtered/test.txt"
 
-summary_path       <- file.path(output_dir, "summary.txt")
-intersections_path <- file.path(output_dir, "intersections.txt")
+summary_path       <- file.path(output_dir, "summary.new.txt")
+intersections_path <- file.path(output_dir, "intersections.new.txt")
 
 dir_create(output_dir)
 dir_create(file.path(output_dir, "GraphEvents"))
@@ -63,13 +61,13 @@ append_rows <- function(rows_dt, path) {
 # Readers
 # =========================
 
-# rMATS↔DEX mapping files you already produce
+# rMATS-DEX mapping files you already produced
 read_rmats_dex_mapped <- function(tmp_dir) {
   types <- c("A3SS","A5SS","SE","RI")
   out <- rbindlist(lapply(types, function(ty) {
     fn <- file.path(tmp_dir, paste0('combined.fromGTF.', ty, '.txt')) 
     if (!file.exists(fn)) return(NULL)
-    dt <- fread(fn, sep = "\t", header = TRUE, na.strings = c("", "NA"))
+    dt <- data.table(read.table(fn, sep = "\t", header = TRUE, na.strings = c("", "NA")))
     colnames(dt)[which(names(dt) == "ID")] <- "rMATSEventID"
     colnames(dt)[which(names(dt) == "DexseqFragment")] <- "rmats_alt_parts"
     colnames(dt)[which(names(dt) == "DexseqRefFrag")] <- "rmats_ref_parts"
@@ -83,7 +81,7 @@ read_rmats_dex_mapped <- function(tmp_dir) {
     dt[]
   }), fill = TRUE)
   if (is.null(out) || nrow(out) == 0) {
-    stop("No rMATS↔DEX mapping files found under: ", tmp_dir)
+    stop("No rMATS-DEX mapping files found under: ", tmp_dir)
   }
   out
 }
@@ -99,21 +97,21 @@ rmats_parts_per_event <- function(map_dt) {
 
 # Graph (focal-exon) events
 read_graph_events <- function(merged_graph_path) {
-  g <- fread(merged_graph_path, sep = "\t", header = TRUE, na.strings = c("", "NA"))
-  needed <- c("gene","event","ref_ex_part","setdiff1","setdiff2","LRT","p.value","FDR")
+  g <- data.table(read.table(merged_graph_path, sep = "\t", header = TRUE, na.strings = c("", "NA")))
+  needed <- c("gene","event","ref_ex_part","setdiff","LRT","pvalue","padj")
   miss <- setdiff(needed, names(g))
   if (length(miss)) stop("merged graph file missing columns: ", paste(miss, collapse=", "))
   g[, GeneID := as.character(gene)]
   g[, GraphEvent := as.integer(event)]
-  g[, graph_ref_parts := lapply(ref_ex_part,              function(z) split_parts(z, unique_out=TRUE, sort_out=TRUE))]
-  g[, graph_alt_parts := lapply(paste(setdiff1,setdiff2, sep=","), function(z) split_parts(z, unique_out=TRUE, sort_out=TRUE))]
+  g[, graph_ref_parts := lapply(ref_ex_part, function(z) split_parts(z, unique_out=TRUE, sort_out=TRUE))]
+  g[, graph_alt_parts := lapply(setdiff, function(z) split_parts(z, unique_out=TRUE, sort_out=TRUE))]
   g[]
 }
 
 # rMATS per-event results (your rMATS_TestedEvents.txt)
 read_rmats_results <- function(p) {
   stopifnot(file.exists(p))
-  dt <- fread(p, sep = "\t", header = TRUE, na.strings = c("", "NA"))
+  dt <- data.table(read.table(p, sep = "\t", header = TRUE, na.strings = c("", "NA")))
   if (!"GeneID" %in% names(dt)) stop("Expected column 'GeneID' in rMATS results.")
   if ("ID" %in% names(dt)) setnames(dt, "ID", "rMATSEventID")
   if (!"rMATSEventID" %in% names(dt)) stop("Expected column 'ID' (event id).")
@@ -124,7 +122,7 @@ read_rmats_results <- function(p) {
 }
 
 # =========================
-# Crosswalk: Graph ↔ rMATS
+# Crosswalk: Graph <-> rMATS
 # =========================
 match_graph_to_rmats_one_gene <- function(ge_gene, re_gene, mode = c("strict","lenient")) {
   mode <- match.arg(mode)
@@ -184,17 +182,17 @@ build_graph_rmats_crosswalk <- function(merged_graph_path, tmp_dir, mode = c("st
 # =========================
 # MAIN
 # =========================
-message("[1/5] Loading inputs...")
+#exit()
+
 graph_all <- read_graph_events(merged_graph_path)
 rmats_res <- read_rmats_results(rmats_results_path)
 
 # Graph tested/sig
-graph_tested <- graph_all[!is.na(p.value) | !is.na(FDR)]
-graph_sig    <- graph_all[!is.na(FDR) & FDR <= 0.05]
+graph_tested <- graph_all[!is.na(p.value) | !is.na(padj)]
+graph_sig    <- graph_all[!is.na(padj) & padj <= 0.05]
 fwrite(graph_tested, file.path(output_dir, "GraphEvents", "Graph_TestedEvents.txt"), sep="\t")
 fwrite(graph_sig,    file.path(output_dir, "GraphEvents", "Graph_SigEvents.txt"),    sep="\t")
 
-message("[2/5] Building Graph↔rMATS crosswalk...")
 xwalk_strict  <- build_graph_rmats_crosswalk(merged_graph_path, dexseq_tmp_dir, "strict")
 xwalk_lenient <- build_graph_rmats_crosswalk(merged_graph_path, dexseq_tmp_dir, "lenient")
 fwrite(xwalk_strict,  file.path(output_dir, "Crosswalks", "Graph_to_rMATS.strict.tsv"),  sep="\t")
@@ -204,11 +202,9 @@ fwrite(xwalk_lenient, file.path(output_dir, "Crosswalks", "Graph_to_rMATS.lenien
 xwalk_1to1 <- xwalk_strict[!is.na(rMATSEventID)][, .N, by=.(GeneID, GraphEvent)][N==1][
   xwalk_strict, on=.(GeneID, GraphEvent)][, N := NULL][]
 
-message("[3/5] Creating event-level merged table...")
 # Carry key graph annotations through
-graph_keep <- graph_all[, .(gene, GeneID, event = GraphEvent, LRT, p.value, FDR,
-                            source, sink, ref_ex_part, setdiff1, setdiff2,
-                            transcripts1, transcripts2, path1, path2)]
+graph_keep <- graph_all[, .(gene, GeneID, event = GraphEvent, LRT, p.value, padj,
+                            source, sink, ref_ex_part = graph_ref_parts, setdiff = graph_alt_parts)]
 
 event_level_merged <- merge(
   graph_keep,
@@ -221,14 +217,12 @@ event_level_merged <- merge(event_level_merged, rmats_keep, by = c("GeneID","rMA
 
 # Canonicalize the set columns for readability
 event_level_merged[, `:=`(
-  ref_ex_part  = vapply(strsplit(ref_ex_part,  ","), canon_join, "", USE.NAMES = FALSE),
-  setdiff1     = vapply(strsplit(setdiff1,     ","), canon_join, "", USE.NAMES = FALSE),
-  setdiff2     = vapply(strsplit(setdiff2,     ","), canon_join, "", USE.NAMES = FALSE)
+  ref_ex_part  = vapply(ref_ex_part, canon_join, "", USE.NAMES = FALSE),
+  setdiff     = vapply(setdiff, canon_join, "", USE.NAMES = FALSE)
 )]
 
 fwrite(event_level_merged, file.path(output_dir, "Merged", "Graph_rMATS_event_level_merged.tsv"), sep="\t")
 
-message("[4/5] Summary + intersections...")
 # Counts
 num_graph_tested   <- nrow(graph_tested)
 num_graph_sig      <- nrow(graph_sig)
@@ -240,16 +234,16 @@ num_rmats_sig      <- rmats_res %>% filter(!is.na(FDR) & FDR <= 0.05) %>% nrow()
 # Event-level sig overlap via strict crosswalk
 rmats_sig_ids <- rmats_res %>% filter(!is.na(FDR) & FDR <= 0.05) %>% pull(rMATSEventID) %>% unique()
 graph_sig_ids <- event_level_merged %>%
-  filter(!is.na(FDR) & FDR <= 0.05, !is.na(rMATSEventID)) %>%
+  filter(!is.na(padj) & padj <= 0.05, !is.na(rMATSEventID)) %>%
   pull(rMATSEventID) %>% unique()
 inter_event_sig_overlap <- length(intersect(graph_sig_ids, rmats_sig_ids))
 
 summary_rows <- data.table(
   CountType = c(
     "Graph/FocalExon Tested Events",
-    "Graph/FocalExon Sig Events (FDR<=0.05)",
-    "Graph↔rMATS Crosswalk (strict) matches",
-    "Graph↔rMATS Crosswalk (lenient) matches",
+    "Graph/FocalExon Sig Events (padj<=0.05)",
+    "Graph:rMATS Crosswalk (strict) matches",
+    "Graph:rMATS Crosswalk (lenient) matches",
     "rMATS Tested Events",
     "rMATS Sig Events (FDR<=0.05)",
     "Event-level Sig Overlap (via strict crosswalk)"
@@ -272,7 +266,7 @@ genes_rmats_sig <- unique(rmats_res$GeneID[!is.na(rmats_res$FDR) & rmats_res$FDR
 inter_gene_sig_overlap <- length(intersect(genes_graph_sig, genes_rmats_sig))
 intersections_rows <- data.table(
   Intersection = c(
-    "Genes with Graph Sig (FDR<=0.05)",
+    "Genes with Graph Sig (padj<=0.05)",
     "Genes with rMATS Sig (FDR<=0.05)",
     "Gene-level Sig Overlap"
   ),
@@ -280,5 +274,4 @@ intersections_rows <- data.table(
 )
 append_rows(intersections_rows, intersections_path)
 
-message("[5/5] Done.")
 

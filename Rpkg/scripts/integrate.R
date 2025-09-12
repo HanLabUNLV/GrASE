@@ -1,5 +1,6 @@
 # Description:
 # It integrates and compares alternative splicing analysis results from rMATS and DEXSeq.
+# This script should be run after running  scripts/rmats.R to populate the directory grase_results/results/tmp/
 #
 # Vocabulary:
 #   rMATS - (fromGTF)
@@ -367,9 +368,9 @@ get_grase_results_rMATS <- function(grase_directory, rmats_directory, dexseq_res
 }
 
 #
-grase_directory = "/RAID10/mirahan/graphml.dexseq.v34/grase_results"
-rmats_directory = "/RAID10/mirahan/graphml.dexseq.v34/rmats_output_monaco_b_vs_cd8"
-dexseq_results = "/RAID10/mirahan/graphml.dexseq.v34/dexseq_output_monaco_b_vs_cd8/DEXSeq_Monaco_B_vs_CD8_results.txt"
+grase_directory = "~/graphml.dexseq.v34/grase_results.integrate"
+rmats_directory = "~/graphml.dexseq.v34/rmats_output_dice_b_vs_cd8"
+dexseq_results = "~/graphml.dexseq.v34/dexseq_output_dice_b_vs_cd8/DEXSeq_DICE_B_vs_CD8_results_new.txt"
 nthread = 1 
                     
 
