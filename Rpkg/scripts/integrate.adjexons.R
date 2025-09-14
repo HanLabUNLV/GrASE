@@ -95,7 +95,7 @@ rmats_parts_per_event <- function(map_dt) {
   ), by = .(GeneID, rMATSEventID)]
 }
 
-# Graph (focal-exon) events
+# Graph (bipartition-exon) events
 read_graph_events <- function(merged_graph_path) {
   g <- data.table(read.table(merged_graph_path, sep = "\t", header = TRUE, na.strings = c("", "NA")))
   needed <- c("gene","event","ref_ex_part","setdiff","LRT","pvalue","padj")

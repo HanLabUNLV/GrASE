@@ -1,10 +1,10 @@
 #' Run grase API
 #'
-#' @param task Task to perform ("plot_graphs" or "find_focal_exons")
+#' @param task Task to perform ("plot_graphs" or "find_bipartitions")
 #' @param gene Gene ID
 #' @param indir Input directory containing GTF and GraphML
 #' @param outdir Output directory
-#' @param tx_ids Vector of transcript IDs (required for "find_focal_exons")
+#' @param tx_ids Vector of transcript IDs (required for "find_bipartitions")
 #' @export
 run_grase <- function(task, gene, indir, outdir, tx_ids = NULL) {
   gtf_path <- file.path(indir, "gtf", paste0(gene, ".gtf"))
@@ -30,13 +30,13 @@ run_grase <- function(task, gene, indir, outdir, tx_ids = NULL) {
     return(invisible(TRUE))
   }
 
-  if (task == "find_focal_exons_between_tx") {
+  if (task == "find_bipartitions_between_tx") {
     stopifnot(!is.null(tx_ids) && length(tx_ids) == 2)
-    return(focal_exons_between_tx(gene, g, sg, tx_ids, outdir))
+    return(bipartitions_between_tx(gene, g, sg, tx_ids, outdir))
   }
 
-  if (task == "find_focal_exons_gene") {
-    return(focal_exons_gene(gene, g, sg, outdir))
+  if (task == "find_bipartitions_gene") {
+    return(bipartitions_gene(gene, g, sg, outdir))
   }
   stop("Unsupported task: ", task)
 }

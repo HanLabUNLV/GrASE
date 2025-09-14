@@ -164,12 +164,12 @@ cond1 = 'B'
 cond2 = 'CD8T'
 
 if (file.exists(exoncnt_master)) {
-  focalexoncnts <- read.table(exoncnt_master, header=TRUE, row.names=NULL)
-  focalexoncnts$groups <- factor(focalexoncnts$groups, levels = c(cond1, cond2))
+  bipartitioncnts <- read.table(exoncnt_master, header=TRUE, row.names=NULL)
+  bipartitioncnts$groups <- factor(bipartitioncnts$groups, levels = c(cond1, cond2))
 }
 
 
-grouped_data <- group_by_event(focalexoncnts, 'diff', 'n')
+grouped_data <- group_by_event(bipartitioncnts, 'diff', 'n')
 
 if (file.exists(paste0(outdir,'/phi.txt'))) {
   phi_df <- read.table(paste0(outdir,'/phi.txt'), header=TRUE, row.names=NULL)

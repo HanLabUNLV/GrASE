@@ -5,13 +5,13 @@ library(doParallel)
 library(foreach)
 
 #/RAID10/mirahan/graphml.dexseq.v34/
-genelist_file = '../grase_results.integrate/all_genes.txt'
+genelist_file = '../grase_results.bipart/all_genes.txt'
 genes <- read.table(genelist_file, header=FALSE, sep="\t")
 
 
 indir = '~/graphml.dexseq.v34/'
 outdir = '~/graphml.dexseq.v34/'
-grase_output_dir = file.path(outdir, 'grase_results.integrate/')
+grase_output_dir = file.path(outdir, 'grase_results.bipart/')
 eventTypes =  c('A3SS', 'A5SS', 'SE', 'RI')
 
 rmats_df = data.frame(matrix(nrow = 0, ncol = 4)) 
@@ -47,18 +47,18 @@ results <- foreach(
     gtf_path <- file.path(indir, "gtf", paste0(gene, ".gtf"))
     gff_path <- file.path(indir, "dexseq.gff", paste0(gene, ".dexseq.gff"))
     graph_path <- file.path(indir, "graphml", paste0(gene, ".graphml"))
-    focalexons_path = file.path(outdir, "focalexons.filtered", paste0(gene, ".focalexons.txt"))
-    if (!file.exists(focalexons_path)) { return(NULL) }
-    if (file.info(focalexons_path)$size <= 1) { return(NULL) }
+    bipartitions_path = file.path(outdir, "bipartitions.nocollapse", paste0(gene, ".focalexons.all.txt"))
+    if (!file.exists(bipartitions_path)) { return(NULL) }
+    if (file.info(bipartitions_path)$size <= 1) { return(NULL) }
 
     g <- igraph::read_graph(graph_path, format = "graphml")
 
-    rmats_outdir = paste0(indir, '/grase_results.integrate/gene_files/', gene)
+    rmats_outdir = paste0(indir, '/grase_results.bipart/gene_files/', gene)
     fromGTF_A3SS = paste0(rmats_outdir, '/', 'fromGTF.A3SS.txt')
     fromGTF_A5SS = paste0(rmats_outdir, '/', 'fromGTF.A5SS.txt')
     fromGTF_SE = paste0(rmats_outdir, '/', 'fromGTF.SE.txt')
     fromGTF_RI = paste0(rmats_outdir, '/', 'fromGTF.RI.txt')
-    map_rMATS(g, gene, gff_path, fromGTF_A3SS, fromGTF_A5SS, fromGTF_SE, fromGTF_RI, focalexons_path, grase_output_dir)
+    map_rMATS(g, gene, gff_path, fromGTF_A3SS, fromGTF_A5SS, fromGTF_SE, fromGTF_RI, bipartitions_path, grase_output_dir)
   }, error = function(e) {
     message("ERROR in gene ", gene, ": ", e$message)
     return(NULL)

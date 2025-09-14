@@ -46,8 +46,8 @@ for (gene in genes) {
 #  outdir = '/data2/han_lab/stevepark/SplicingGraphs/indir/'
 
 
-  filename = file.path(outdir, "focalexons.nocollapse", paste0(gene, ".focalexons.txt"))
-  runninglog = file.path(outdir, "focalexons.nocollapse", paste0(gene, ".running"))
+  filename = file.path(outdir, "bipartitions.nocollapse", paste0(gene, ".bipartitions.txt"))
+  runninglog = file.path(outdir, "bipartitions.nocollapse", paste0(gene, ".running"))
   if (file.exists(filename) | file.exists(runninglog)) {
     message(paste("skipping existing ", filename))
     flush.console()
@@ -90,16 +90,16 @@ for (gene in genes) {
   grase::style_and_plot(g, gene, outdir) 
 
   # call your downstream function, fully namespaced
-  cat("  calling grase::focal_exons_gene_powerset()\n"); flush.console()
+  cat("  calling grase::bipartition_paths()\n"); flush.console()
    
-  focalexondir = file.path(outdir, "focalexons.nocollapse") 
-  if(DEBUG_MODE) print("focalexondir")
-  if(DEBUG_MODE) print(focalexondir)
-  focalexons <- grase::focal_exons_gene_powerset(
+  bipartitiondir = file.path(outdir, "bipartitions.nocollapse") 
+  if(DEBUG_MODE) print("bipartitiondir")
+  if(DEBUG_MODE) print(bipartitiondir)
+  bipartitions <- grase::bipartition_paths(
       gene     = gene,
       g        = g,
       sg       = sg,
-      outdir   = focalexondir, 
+      outdir   = bipartitiondir, 
       max_path = 20,
       collapse_bubbles = FALSE 
   )

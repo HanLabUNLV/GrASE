@@ -52,42 +52,42 @@ write_exoncnt_long <- function(ref_counts_df, diff_counts_df, events, gene_name,
 
 }
 
-count_focalexons <- function(focalexon_file, countmat, sampleinfo, outdir) {
-  focalexons <- as.data.frame(read_tsv(focalexon_file, col_types = cols(.default = "c")))  # Reads columns as characters
-  focalexons <- focalexons[!(is.na(focalexons$setdiff1) & is.na(focalexons$setdiff2)),]
-  if (length(focalexons) == 0) { return (0) }
-  gene <- focalexons$gene
-  focalexons$event = rownames(focalexons)
+count_bipartitions <- function(bipartition_file, countmat, sampleinfo, outdir) {
+  bipartitions <- as.data.frame(read_tsv(bipartition_file, col_types = cols(.default = "c")))  # Reads columns as characters
+  bipartitions <- bipartitions[!(is.na(bipartitions$setdiff1) & is.na(bipartitions$setdiff2)),]
+  if (length(bipartitions) == 0) { return (0) }
+  gene <- bipartitions$gene
+  bipartitions$event = rownames(bipartitions)
   n_samples = ncol(countmat)-2
 
-  focalexons$ref_ex_part[is.na(focalexons$ref_ex_part)] <- 'NA'
-  focalexons$setdiff1[is.na(focalexons$setdiff1)] <- 'NA'
-  focalexons$setdiff2[is.na(focalexons$setdiff2)] <- 'NA'
-  ref_counts_dict <- t(sapply(unique(focalexons$ref_ex_part), sum_exon_counts, counts_df=countmat))
-  diff1_counts_dict <- t(sapply(unique(focalexons$setdiff1), sum_exon_counts, counts_df=countmat))
-  diff2_counts_dict <- t(sapply(unique(focalexons$setdiff2), sum_exon_counts, counts_df=countmat))
+  bipartitions$ref_ex_part[is.na(bipartitions$ref_ex_part)] <- 'NA'
+  bipartitions$setdiff1[is.na(bipartitions$setdiff1)] <- 'NA'
+  bipartitions$setdiff2[is.na(bipartitions$setdiff2)] <- 'NA'
+  ref_counts_dict <- t(sapply(unique(bipartitions$ref_ex_part), sum_exon_counts, counts_df=countmat))
+  diff1_counts_dict <- t(sapply(unique(bipartitions$setdiff1), sum_exon_counts, counts_df=countmat))
+  diff2_counts_dict <- t(sapply(unique(bipartitions$setdiff2), sum_exon_counts, counts_df=countmat))
 
-  ref_counts_df = matrix(0, nrow(focalexons), n_samples)
-  diff1_counts_df = matrix(0, nrow(focalexons), n_samples)
-  diff2_counts_df = matrix(0, nrow(focalexons), n_samples)
-  if (sum(!is.na(focalexons$ref_ex_part)) > 0) ref_counts_df = matrix(ref_counts_dict[focalexons$ref_ex_part,], nrow = nrow(focalexons), ncol=n_samples)
-  if (sum(!is.na(focalexons$setdiff1)) > 0) diff1_counts_df = matrix(diff1_counts_dict[focalexons$setdiff1,], nrow = nrow(focalexons), ncol=n_samples)
-  if (sum(!is.na(focalexons$setdiff2)) > 0) diff2_counts_df = matrix(diff2_counts_dict[focalexons$setdiff2,], nrow = nrow(focalexons), ncol=n_samples)
+  ref_counts_df = matrix(0, nrow(bipartitions), n_samples)
+  diff1_counts_df = matrix(0, nrow(bipartitions), n_samples)
+  diff2_counts_df = matrix(0, nrow(bipartitions), n_samples)
+  if (sum(!is.na(bipartitions$ref_ex_part)) > 0) ref_counts_df = matrix(ref_counts_dict[bipartitions$ref_ex_part,], nrow = nrow(bipartitions), ncol=n_samples)
+  if (sum(!is.na(bipartitions$setdiff1)) > 0) diff1_counts_df = matrix(diff1_counts_dict[bipartitions$setdiff1,], nrow = nrow(bipartitions), ncol=n_samples)
+  if (sum(!is.na(bipartitions$setdiff2)) > 0) diff2_counts_df = matrix(diff2_counts_dict[bipartitions$setdiff2,], nrow = nrow(bipartitions), ncol=n_samples)
 
   
-  rownames(ref_counts_df) = rownames(focalexons) 
-  rownames(diff1_counts_df) = rownames(focalexons) 
-  rownames(diff2_counts_df) = rownames(focalexons) 
+  rownames(ref_counts_df) = rownames(bipartitions) 
+  rownames(diff1_counts_df) = rownames(bipartitions) 
+  rownames(diff2_counts_df) = rownames(bipartitions) 
  
   colnames(ref_counts_df) = colnames(countmat[,1:n_samples]) 
   colnames(diff1_counts_df) = colnames(countmat[,1:n_samples]) 
   colnames(diff2_counts_df) = colnames(countmat[,1:n_samples]) 
 
-  focalexons$ref_mean = rowMeans(ref_counts_df)
-  focalexons$diff1_mean = rowMeans(diff1_counts_df)
-  focalexons$diff2_mean = rowMeans(diff2_counts_df)
-  focalexons$diff_mean = do.call(pmax, c(focalexons[, c("diff1_mean", "diff2_mean")], na.rm = TRUE))
-  focalexons <- focalexons %>%
+  bipartitions$ref_mean = rowMeans(ref_counts_df)
+  bipartitions$diff1_mean = rowMeans(diff1_counts_df)
+  bipartitions$diff2_mean = rowMeans(diff2_counts_df)
+  bipartitions$diff_mean = do.call(pmax, c(bipartitions[, c("diff1_mean", "diff2_mean")], na.rm = TRUE))
+  bipartitions <- bipartitions %>%
     mutate(
       which   = case_when(
         is.na(diff1_mean) & is.na(diff2_mean) ~ NA_character_,
@@ -101,26 +101,26 @@ count_focalexons <- function(focalexon_file, countmat, sampleinfo, outdir) {
     filter(!is.na(setdiff))
 
   ref_counts_df <- as.data.frame(cbind(ref_counts_df, event = rownames(ref_counts_df)), na.rm=TRUE)
-  ref_counts_df <- inner_join(focalexons[,c('gene', 'event', 'source', 'sink', 'ref_ex_part', 'setdiff')], ref_counts_df, by = "event")
+  ref_counts_df <- inner_join(bipartitions[,c('gene', 'event', 'source', 'sink', 'ref_ex_part', 'setdiff')], ref_counts_df, by = "event")
 
   diff1_counts_df <- as.data.frame(cbind(diff1_counts_df, event = rownames(diff1_counts_df)), na.rm=TRUE)
-  diff1_counts_df <- inner_join(focalexons[focalexons$which=='diff1',c('gene', 'event', 'source', 'sink', 'ref_ex_part', 'setdiff')], diff1_counts_df, by = "event")
+  diff1_counts_df <- inner_join(bipartitions[bipartitions$which=='diff1',c('gene', 'event', 'source', 'sink', 'ref_ex_part', 'setdiff')], diff1_counts_df, by = "event")
 
   diff2_counts_df <- as.data.frame(cbind(diff2_counts_df, event = rownames(diff2_counts_df)), na.rm=TRUE)
-  diff2_counts_df <- inner_join(focalexons[focalexons$which=='diff2',c('gene', 'event', 'source', 'sink', 'ref_ex_part', 'setdiff')], diff2_counts_df, by = "event")
+  diff2_counts_df <- inner_join(bipartitions[bipartitions$which=='diff2',c('gene', 'event', 'source', 'sink', 'ref_ex_part', 'setdiff')], diff2_counts_df, by = "event")
 
   diff_counts_df <- bind_rows(diff1_counts_df, diff2_counts_df) %>%
        arrange(as.numeric(event))
 
-  TSS_index = focalexons$source == 'R' | focalexons$sink == 'L'
+  TSS_index = bipartitions$source == 'R' | bipartitions$sink == 'L'
 
-  if (nrow(focalexons[TSS_index & (focalexons$diff_mean > 0),])) {
-    write.table(focalexons[TSS_index,], file=paste0(outdir,'/', gene[1], '.TSS.focalexons.txt'), quote=FALSE, sep="\t")
-    write_exoncnt_long(ref_counts_df, diff_counts_df, events=focalexons[TSS_index,'event'], gene_name = gene[1], sampleinfo, file_prefix='TSS') 
+  if (nrow(bipartitions[TSS_index & (bipartitions$diff_mean > 0),])) {
+    write.table(bipartitions[TSS_index,], file=paste0(outdir,'/', gene[1], '.TSS.bipartitions.txt'), quote=FALSE, sep="\t")
+    write_exoncnt_long(ref_counts_df, diff_counts_df, events=bipartitions[TSS_index,'event'], gene_name = gene[1], sampleinfo, file_prefix='TSS') 
   }
-  if (nrow(focalexons[!TSS_index & (focalexons$diff_mean > 0),])) {
-    write.table(focalexons[!TSS_index,], file=paste0(outdir,'/', gene[1], '.nonTSS.focalexons.txt'), quote=FALSE, sep="\t")
-    write_exoncnt_long(ref_counts_df, diff_counts_df, events=focalexons[!TSS_index,'event'], gene_name = gene[1], sampleinfo, file_prefix='nonTSS') 
+  if (nrow(bipartitions[!TSS_index & (bipartitions$diff_mean > 0),])) {
+    write.table(bipartitions[!TSS_index,], file=paste0(outdir,'/', gene[1], '.nonTSS.bipartitions.txt'), quote=FALSE, sep="\t")
+    write_exoncnt_long(ref_counts_df, diff_counts_df, events=bipartitions[!TSS_index,'event'], gene_name = gene[1], sampleinfo, file_prefix='nonTSS') 
   }
  
   return (0)
@@ -158,12 +158,12 @@ group_by_event <- function(dat, col_y, col_n) {
 
 
 
-focalexon_path = '~/graphml.dexseq.v34/focalexons.nocollapse'
+bipartition_path = '~/graphml.dexseq.v34/bipartitions.nocollapse'
 outdir = '~/graphml.dexseq.v34/dice_exoncnts.nocollapse'
 
-focalexon_files <- list.files(path = focalexon_path,
-                                 pattern = "focalexons.txt$", full.names=TRUE)
-#focalexon_master <- paste0(focalexon_path, '/cat')
+bipartition_files <- list.files(path = bipartition_path,
+                                 pattern = "bipartitions.txt$", full.names=TRUE)
+#bipartition_master <- paste0(bipartition_path, '/cat')
 #exoncnt_master <- paste0(outdir,'/cat')
 
 cond1 = 'B'
@@ -195,13 +195,13 @@ names(sampleinfo) <- rownames(sampleTable)
 cl_num = 30
 cl <- makeCluster(cl_num, type = "PSOCK", outfile='cl.log')
 clusterEvalQ(cl, {library(tidyverse)})
-clusterExport(cl, c("write_exoncnt_long", "count_focalexons","sum_exon_counts","read_counts","sampleinfo", "outdir"))
+clusterExport(cl, c("write_exoncnt_long", "count_bipartitions","sum_exon_counts","read_counts","sampleinfo", "outdir"))
 
 # run the jobs
-res <- parallel::parLapply(cl, focalexon_files, function(f) {
+res <- parallel::parLapply(cl, bipartition_files, function(f) {
   tryCatch({
-    gene_id <- sub("\\.focalexons\\.txt$", "", basename(f))
-    count_focalexons(focalexon_file = f, countmat = read_counts[read_counts$gene==gene_id,], sampleinfo, outdir)
+    gene_id <- sub("\\.bipartitions\\.txt$", "", basename(f))
+    count_bipartitions(bipartition_file = f, countmat = read_counts[read_counts$gene==gene_id,], sampleinfo, outdir)
   }, error = function(e) {
     msg <- sprintf("[%s] ERROR in %s (PID %d): %s\n",
                    format(Sys.time(), "%Y-%m-%d %H:%M:%S"),

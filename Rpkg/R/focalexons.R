@@ -76,15 +76,15 @@ find_reference_exonic_part <- function(source, sink, ex_part1_set, ex_part2_set,
 
 
 
-#' Compute focal exons from graph and splicing structure
+#' Compute diff exons from graph and splicing structure
 #' @export
-focal_exons_between_tx <- function(gene, g, sg, tx_ids, outdir) {
+diff_exons_between_tx <- function(gene, g, sg, tx_ids, outdir) {
 
   bubbles_df <- SplicingGraphs::bubbles(sg)
   tx_ex_part1 <- from_exon_path_to_exonic_part_path(g, from_vpath_to_exon_path(g, as.character(SplicingGraphs::txpath(sg)[[tx_ids[1]]])))
   tx_ex_part2 <- from_exon_path_to_exonic_part_path(g, from_vpath_to_exon_path(g, as.character(SplicingGraphs::txpath(sg)[[tx_ids[2]]])))
 
-  focalexons_df <- data.frame()
+  bipartitions_df <- data.frame()
   for (bubble_idx in seq_along(bubbles_df$partitions)) {
     source <- bubbles_df$source[[bubble_idx]]
     sink <- bubbles_df$sink[[bubble_idx]]
@@ -135,32 +135,19 @@ focal_exons_between_tx <- function(gene, g, sg, tx_ids, outdir) {
         path1 = paste(vpath1, collapse=", "),
         path2 = paste(vpath2, collapse=", ")
       )
-      focalexons_df <- rbind(focalexons_df, new_row)
+      bipartitions_df <- rbind(bipartitions_df, new_row)
     }
   }
 
-  if (nrow(focalexons_df) > 0) {
-    focalexons_df <- focalexons_df %>% dplyr::rowwise() %>% dplyr::mutate(adj_cnt = count_items(ref_ex_part)) %>% dplyr::ungroup()
-    focalexons_filtered <- focalexons_df %>%
-      dplyr::group_by(setdiff1, setdiff2) %>%
-      dplyr::filter(adj_cnt == min(adj_cnt)) %>%
-      dplyr::ungroup() %>%
-      dplyr::select(-adj_cnt)
-  } else {
-    focalexons_filtered <- focalexons_df
-  }
-
-  write.table(focalexons_df, file.path(outdir, paste0(gene, ".focalexons.all.txt")), sep = "\t", quote = FALSE, row.names = FALSE)
-  write.table(focalexons_filtered, file.path(outdir, paste0(gene, ".focalexons.txt")), sep = "\t", quote = FALSE, row.names = FALSE)
-
-  return(focalexons_filtered)
+  write.table(bipartitions_df, file.path(outdir, paste0(gene, ".bipartitions.all.txt")), sep = "\t", quote = FALSE, row.names = FALSE)
+  return(bipartitions_df)
 }
 
 
 
-#' Compute focal exons from graph and splicing structure
+#' Compute diff exons from graph and splicing structure
 #' @export
-focal_exons_gene_ovr <- function(gene, g, sg, outdir) {
+diff_exons_gene_ovr <- function(gene, g, sg, outdir) {
 
   bubbles_df <- SplicingGraphs::bubbles(sg)
 
@@ -169,7 +156,7 @@ focal_exons_gene_ovr <- function(gene, g, sg, outdir) {
   tx_exonpaths = lapply(txpaths, from_vpath_to_exon_path, g=g)
   tx_ex_parts = lapply(tx_exonpaths, from_exon_path_to_exonic_part_path, g=g)
 
-  focalexons_df <- data.frame()
+  bipartitions_df <- data.frame()
   for (bubble_idx in seq_along(bubbles_df$partitions)) {
     source <- bubbles_df$source[[bubble_idx]]
     sink <- bubbles_df$sink[[bubble_idx]]
@@ -232,23 +219,23 @@ focal_exons_gene_ovr <- function(gene, g, sg, outdir) {
         path2 = paste(sapply(vpath_rest, function(vec) paste(vec, collapse = "-")), collapse=", ")
       )
       log_debug(new_row)
-      focalexons_df <- rbind(focalexons_df, new_row)
+      bipartitions_df <- rbind(bipartitions_df, new_row)
     }
   }
 
-  if (nrow(focalexons_df) > 0) {
-    focalexons_df <- focalexons_df %>% dplyr::rowwise() %>% dplyr::mutate(adj_cnt = count_items(ref_ex_part)) %>% dplyr::ungroup()
-    focalexons_filtered <- focalexons_df %>%
+  if (nrow(bipartitions_df) > 0) {
+    bipartitions_df <- bipartitions_df %>% dplyr::rowwise() %>% dplyr::mutate(ref_part_cnt = count_items(ref_ex_part)) %>% dplyr::ungroup()
+    bipartitions_filtered <- bipartitions_df %>%
       dplyr::group_by(setdiff1, setdiff2) %>%
-      dplyr::filter(adj_cnt == min(adj_cnt)) %>%
+      dplyr::filter(ref_part_cnt == min(ref_part_cnt)) %>%
       dplyr::ungroup() %>%
-      dplyr::select(-adj_cnt)
+      dplyr::select(-ref_part_cnt)
   } else {
-    focalexons_filtered <- focalexons_df
+    bipartitions_filtered <- bipartitions_df
   }
 
-  write.table(focalexons_df, file.path(outdir, paste0(gene, ".focalexons.all.txt")), sep = "\t", quote = FALSE, row.names = FALSE)
-  write.table(focalexons_filtered, file.path(outdir, paste0(gene, ".focalexons.txt")), sep = "\t", quote = FALSE, row.names = FALSE)
+  write.table(bipartitions_df, file.path(outdir, paste0(gene, ".bipartitions.all.txt")), sep = "\t", quote = FALSE, row.names = FALSE)
+  write.table(bipartitions_filtered, file.path(outdir, paste0(gene, ".bipartitions.txt")), sep = "\t", quote = FALSE, row.names = FALSE)
 
 }
 
@@ -629,7 +616,7 @@ intersect_stream <- function(lst) {
 }
 
 #' @export
-find_focal_and_ref_exparts_for_split <- function(g, source, sink, split, parsed_partitions, parsed_paths, tx_ex_parts, focalexons_df, gene=gene) {
+find_diff_and_ref_exparts_for_split <- function(g, source, sink, split, parsed_partitions, parsed_paths, tx_ex_parts, bipartitions_df, gene=gene) {
 
       group1 = as.numeric(split$group1)
       group2 = as.numeric(split$group2)
@@ -707,8 +694,8 @@ find_focal_and_ref_exparts_for_split <- function(g, source, sink, split, parsed_
         path2 = paste(sapply(vpath2, function(vec) paste(vec, collapse = "-")), collapse=", ")
       )
       log_debug(new_row)
-      focalexons_df <- rbind(focalexons_df, new_row)
-  return(list(focalexons_df = focalexons_df))
+      bipartitions_df <- rbind(bipartitions_df, new_row)
+  return(list(bipartitions_df = bipartitions_df))
 }
 
 
@@ -837,15 +824,15 @@ update_txpaths_after_bubble_collapse2 <- function(g, tx_list, epath) {
 
 
 
-#' Compute focal exons from graph and splicing structure
+#' Compute diff exons from graph and splicing structure
 #' @export
-focal_exons_gene_powerset <- function(gene, g, sg, outdir, max_path = 20, collapse_bubbles=TRUE) {
+bipartition_paths <- function(gene, g, sg, outdir, max_path = 20, collapse_bubbles=TRUE) {
 
 
 #options(keep.source = TRUE)
 #Rprof("mem.line.out", line.profiling = TRUE, memory.profiling = TRUE)
 
-  focalexons_df <- data.frame()
+  bipartitions_df <- data.frame()
   g <- grase::set_edge_names(g)
 
   txpaths <- grase::txpath_from_edgeattr(g)
@@ -922,8 +909,8 @@ focal_exons_gene_powerset <- function(gene, g, sg, outdir, max_path = 20, collap
     rm(contain_dag)
     
     for (split in valid_splits) {
-      retval = grase::find_focal_and_ref_exparts_for_split(g=g, source=source, sink=sink,  split=split, parsed_partitions=parsed_partitions, parsed_paths=parsed_paths, tx_ex_parts=tx_ex_parts, focalexons_df=focalexons_df, gene=gene) 
-      focalexons_df = retval$focalexons_df
+      retval = grase::find_diff_and_ref_exparts_for_split(g=g, source=source, sink=sink,  split=split, parsed_partitions=parsed_partitions, parsed_paths=parsed_paths, tx_ex_parts=tx_ex_parts, bipartitions_df=bipartitions_df, gene=gene) 
+      bipartitions_df = retval$bipartitions_df
     }
 
     if (collapse_bubbles) {
@@ -983,29 +970,29 @@ focal_exons_gene_powerset <- function(gene, g, sg, outdir, max_path = 20, collap
     }
   }
 
-  if (nrow(focalexons_df) > 0) {
-    focalexons_df <- focalexons_df %>% dplyr::rowwise() %>% dplyr::mutate(adj_cnt = count_items(ref_ex_part)) %>% dplyr::ungroup()
+  if (nrow(bipartitions_df) > 0) {
+    bipartitions_df <- bipartitions_df %>% dplyr::rowwise() %>% dplyr::mutate(ref_part_cnt = count_items(ref_ex_part)) %>% dplyr::ungroup()
     # remove rows where no setdiff1 or setdiff2 are found
-    focalexons_filtered <- focalexons_df[!((focalexons_df$setdiff1=="") & (focalexons_df$setdiff2=="")),]
+    bipartitions_filtered <- bipartitions_df[!((bipartitions_df$setdiff1=="") & (bipartitions_df$setdiff2=="")),]
     # for all rows with same setdiff1 and setdiff2, only retain the row with minimum number of ref_ex_part 
-    focalexons_filtered <- focalexons_filtered %>%
+    bipartitions_filtered <- bipartitions_filtered %>%
       dplyr::group_by(setdiff1, setdiff2) %>%
-      dplyr::filter(adj_cnt == min(adj_cnt)) %>%
+      dplyr::filter(ref_part_cnt == min(ref_part_cnt)) %>%
       dplyr::ungroup() %>%
-      dplyr::select(-adj_cnt)
+      dplyr::select(-ref_part_cnt)
   } else {
-    focalexons_filtered <- focalexons_df
+    bipartitions_filtered <- bipartitions_df
   }
 
-  filename_all = file.path(outdir, paste0(gene, ".focalexons.all.txt"))
-  filename = file.path(outdir, paste0(gene, ".focalexons.txt"))
+  filename_all = file.path(outdir, paste0(gene, ".bipartitions.all.txt"))
+  filename = file.path(outdir, paste0(gene, ".bipartitions.txt"))
   log_debug(paste0("filename :", filename))
 
-  write.table(focalexons_df, filename_all , sep = "\t", quote = FALSE, row.names = FALSE)
-  write.table(focalexons_filtered, filename, sep = "\t", quote = FALSE, row.names = FALSE)
+  write.table(bipartitions_df, filename_all , sep = "\t", quote = FALSE, row.names = FALSE)
+  write.table(bipartitions_filtered, filename, sep = "\t", quote = FALSE, row.names = FALSE)
 
 #Rprof(NULL)
-  focalexons_filtered
+  bipartitions_filtered
 }
 
 
