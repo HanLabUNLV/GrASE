@@ -94,7 +94,8 @@ map_rMATS_event_overhang <- function(g, fromGTF_path, eventType, gene, gff_path,
 
     if (eventType == "A3SS") {
       
-      if (les == ses) {   # strand "-"
+      if (strand == '-') {   # strand "-"
+        stopifnot(les == ses)
         bubble_source = v_fles
         bubble_sink = v_les
         path1 = v_lee
@@ -107,14 +108,15 @@ map_rMATS_event_overhang <- function(g, fromGTF_path, eventType, gene, gff_path,
           bipartition_info = bipartition_info[bipartition_info$source == bubble_source & bipartition_info$sink == bubble_sink,] 
         }
       }
-      else if (lee == see) {  # strand "+"
+      else if (strand == '+') {  # strand "+"
+        stopifnot(lee == see)
         bubble_source = v_flee
         bubble_sink = v_lee
         path1 = v_les
         path2 = v_ses
 
         match_diff <- sapply(diff2_vlists, function(x) {if(nrow(x)) {x[1,1] == v_les & x[nrow(x),2] == v_ses} else { FALSE }})
-        match_ref <- sapply(ref_vlists, function(x) {if(nrow(x)) {x[1,2] == v_fles} else { FALSE }})
+        match_ref <- sapply(ref_vlists, function(x) {if(nrow(x)) {x[1,2] == v_flee} else { FALSE }})
         bipartition_info = bipartitions[match_diff & match_ref,]
         if (nrow(bipartition_info) > 1) { 
           bipartition_info = bipartition_info[bipartition_info$source == bubble_source & bipartition_info$sink == bubble_sink,] 
@@ -122,20 +124,22 @@ map_rMATS_event_overhang <- function(g, fromGTF_path, eventType, gene, gff_path,
       }
     }
     if (eventType == "A5SS") {
-      if (les == ses) {   # strand "+"
-        bubble_source = v_fles
-        bubble_sink = v_les
+      if (strand == '+') {   # strand "+"
+        stopifnot(les == ses)
+        bubble_source = v_les
+        bubble_sink = v_fles
         path1 = v_lee
         path2 = v_see
 
         match_diff <- sapply(diff2_vlists, function(x) {if(nrow(x)) {x[1,1] == v_see & x[nrow(x),2] == v_lee} else {FALSE}})
-        match_ref <- sapply(ref_vlists, function(x) {if(nrow(x)) {x[nrow(x),2] == v_flee} else { FALSE }})
+        match_ref <- sapply(ref_vlists, function(x) {if(nrow(x)) {x[nrow(x),1] == v_fles} else { FALSE }})
         bipartition_info = bipartitions[match_diff & match_ref,]
         if (nrow(bipartition_info) > 1) { 
           bipartition_info = bipartition_info[bipartition_info$source == bubble_source & bipartition_info$sink == bubble_sink,] 
         }
       }
-      else if (lee == see) {  # strand "-"
+      else if (strand == '-') {  # strand "-"
+        stopifnot(lee == see)
         bubble_source = v_lee
         bubble_sink = v_flee
         path1 = v_les
@@ -201,17 +205,19 @@ map_rMATS_event_overhang <- function(g, fromGTF_path, eventType, gene, gff_path,
   }
 
   if (length(rmats2dex) == 0) {
-    return(g)
+    rmats_new_df <- rmats_df
+    rmats_new_df[c("DexseqFragment", "DexseqRefFrag", "bipartID")] <- NA
+  } else {
+    rmats2dex_df <- tibble(ID = names(rmats2dex), 
+                      DexseqFragment = sapply(rmats2dex, function(x) paste(sort(unique(x)), collapse = ",")),
+                      DexseqRefFrag = sapply(rmats2dex_ref, function(x) paste(sort(unique(x)), collapse = ","))
+                  )
+    rmats2bipart_df <- tibble(ID = names(rmats2bipart), 
+                      bipartID = sapply(rmats2bipart, function(x) paste(sort(unique(x)), collapse = ",")),
+                  )
+    rmats_new_df <- left_join(rmats_df, rmats2dex_df, by = "ID") 
+    rmats_new_df <- left_join(rmats_new_df, rmats2bipart_df, by = "ID") 
   }
-  rmats2dex_df <- tibble(ID = names(rmats2dex), 
-                    DexseqFragment = sapply(rmats2dex, function(x) paste(sort(unique(x)), collapse = ",")),
-                    DexseqRefFrag = sapply(rmats2dex_ref, function(x) paste(sort(unique(x)), collapse = ","))
-                )
-  rmats2bipart_df <- tibble(ID = names(rmats2bipart), 
-                    bipartID = sapply(rmats2bipart, function(x) paste(sort(unique(x)), collapse = ",")),
-                )
-  rmats_new_df <- left_join(rmats_df, rmats2dex_df, by = "ID") 
-  rmats_new_df <- left_join(rmats_new_df, rmats2bipart_df, by = "ID") 
 
   out1 <- file.path(grase_output_dir, 'gene_files', gene, "output", paste0("fromGTF_", eventType, ".txt"))
   out2 <- file.path(grase_output_dir, "results", "tmp", paste0("combined.fromGTF.", eventType, ".txt"))
@@ -439,18 +445,19 @@ map_rMATS_event_full_fragment <- function(g, fromGTF_path, eventType, gene, gff_
   }
 
   if (length(rmats2dex) == 0) {
-    return(g)
-  }
-  rmats2dex_df <- tibble(ID = names(rmats2dex), 
-                    DexseqFragment = sapply(rmats2dex, function(x) paste(unique(x), collapse = ",")),
-                    DexseqRefFrag = sapply(rmats2dex_ref, function(x) paste(unique(x), collapse = ","))
-              )
-  rmats2bipart_df <- tibble(ID = names(rmats2bipart),
-                    bipartID = sapply(rmats2bipart, function(x) paste(sort(unique(x)), collapse = ",")),
+    rmats_new_df <- rmats_df
+    rmats_new_df[c("DexseqFragment", "DexseqRefFrag", "bipartID")] <- NA
+  } else {
+    rmats2dex_df <- tibble(ID = names(rmats2dex), 
+                      DexseqFragment = sapply(rmats2dex, function(x) paste(unique(x), collapse = ",")),
+                      DexseqRefFrag = sapply(rmats2dex_ref, function(x) paste(unique(x), collapse = ","))
                 )
-  rmats_new_df <- left_join(rmats_df, rmats2dex_df, by = "ID")
-  rmats_new_df <- left_join(rmats_new_df, rmats2bipart_df, by = "ID")
-
+    rmats2bipart_df <- tibble(ID = names(rmats2bipart),
+                      bipartID = sapply(rmats2bipart, function(x) paste(sort(unique(x)), collapse = ",")),
+                  )
+    rmats_new_df <- left_join(rmats_df, rmats2dex_df, by = "ID")
+    rmats_new_df <- left_join(rmats_new_df, rmats2bipart_df, by = "ID")
+  }
   out1 <- file.path(grase_output_dir, 'gene_files', gene, "output", paste0("fromGTF_", eventType, ".txt"))
   out2 <- file.path(grase_output_dir, "results", "tmp", paste0("combined.fromGTF.", eventType, ".txt"))
   write.table(rmats_new_df, file = out1, sep = "\t", row.names = FALSE, col.names = FALSE, quote = FALSE)
