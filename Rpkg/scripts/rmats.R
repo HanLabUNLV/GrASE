@@ -5,7 +5,7 @@ library(doParallel)
 library(foreach)
 
 #/RAID10/mirahan/graphml.dexseq.v34/
-genelist_file = '../grase_results.bipart/all_genes.txt'
+genelist_file = '~/graphml.dexseq.v34/grase_results.bipart/all_genes.txt'
 genes <- read.table(genelist_file, header=FALSE, sep="\t")
 
 
@@ -47,7 +47,7 @@ results <- foreach(
     gtf_path <- file.path(indir, "gtf", paste0(gene, ".gtf"))
     gff_path <- file.path(indir, "dexseq.gff", paste0(gene, ".dexseq.gff"))
     graph_path <- file.path(indir, "graphml", paste0(gene, ".graphml"))
-    bipartitions_path = file.path(outdir, "bipartitions.nocollapse", paste0(gene, ".focalexons.all.txt"))
+    bipartitions_path = file.path(outdir, "bipartitions.filtered", paste0(gene, ".bipartitions.internal.txt"))
     if (!file.exists(bipartitions_path)) { return(NULL) }
     if (file.info(bipartitions_path)$size <= 1) { return(NULL) }
 
@@ -58,7 +58,12 @@ results <- foreach(
     fromGTF_A5SS = paste0(rmats_outdir, '/', 'fromGTF.A5SS.txt')
     fromGTF_SE = paste0(rmats_outdir, '/', 'fromGTF.SE.txt')
     fromGTF_RI = paste0(rmats_outdir, '/', 'fromGTF.RI.txt')
-    map_rMATS(g, gene, gff_path, fromGTF_A3SS, fromGTF_A5SS, fromGTF_SE, fromGTF_RI, bipartitions_path, grase_output_dir)
+
+    bipartitions <- read.table(bipartitions_path, sep="\t", header=TRUE)
+
+    if (nrow(bipartitions)) {
+      map_rMATS(g, gene, gff_path, fromGTF_A3SS, fromGTF_A5SS, fromGTF_SE, fromGTF_RI, bipartitions, grase_output_dir)
+    }
   }, error = function(e) {
     message("ERROR in gene ", gene, ": ", e$message)
     return(NULL)

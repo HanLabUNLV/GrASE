@@ -12,7 +12,7 @@ map_rMATS(
   fromGTF_A5SS,
   fromGTF_SE,
   fromGTF_RI,
-  bipartitions_path,
+  bipartitions,
   grase_output_dir
 )
 }

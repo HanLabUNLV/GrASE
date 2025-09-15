@@ -5,7 +5,7 @@ library(dplyr)
 .onLoad <- function(libname, pkgname) {
   op <- options()
   op.my_package <- list(
-    my_package.debug = TRUE 
+    my_package.debug = FALSE 
   )
   toset <- !(names(op.my_package) %in% names(op))
   if (any(toset)) options(op.my_package[toset])
@@ -71,12 +71,12 @@ map_rMATS_event_overhang <- function(g, fromGTF_path, eventType, gene, gff_path,
 
   for (x in seq_along(rmats_1base$ID)) {
     id <- as.character(rmats_1base$ID[x])
-    les <- rmats_1base$longExonStart_0base[x]
-    lee <- rmats_1base$longExonEnd[x]
-    ses <- rmats_1base$shortES[x]
-    see <- rmats_1base$shortEE[x]
-    fles <- rmats_1base$flankingES[x]
-    flee <- rmats_1base$flankingEE[x]
+    les <- format(rmats_1base$longExonStart_0base[x], scientific = FALSE)
+    lee <- format(rmats_1base$longExonEnd[x], scientific = FALSE)
+    ses <- format(rmats_1base$shortES[x], scientific = FALSE)
+    see <- format(rmats_1base$shortEE[x], scientific = FALSE)
+    fles <- format(rmats_1base$flankingES[x], scientific = FALSE)
+    flee <- format(rmats_1base$flankingEE[x], scientific = FALSE)
 
     v_les = V(g)[position == les]$name
     v_lee = V(g)[position == lee]$name
@@ -298,12 +298,12 @@ map_rMATS_event_full_fragment <- function(g, fromGTF_path, eventType, gene, gff_
 
   for (x in seq_along(rmats_1base$ID)) {
     id <- as.character(rmats_1base$ID[x])
-    es <- rmats_1base$exonStart_0base[x]
-    ee <- rmats_1base$exonEnd[x]
-    ues <- rmats_1base$upstreamES[x]
-    uee <- rmats_1base$upstreamEE[x]
-    des <- rmats_1base$downstreamES[x]
-    dee <- rmats_1base$downstreamEE[x]
+    es <- format(rmats_1base$exonStart_0base[x], scientific = FALSE)
+    ee <- format(rmats_1base$exonEnd[x], scientific = FALSE)
+    ues <- format(rmats_1base$upstreamES[x], scientific = FALSE)
+    uee <- format(rmats_1base$upstreamEE[x], scientific = FALSE)
+    des <- format(rmats_1base$downstreamES[x], scientific = FALSE)
+    dee <- format(rmats_1base$downstreamEE[x], scientific = FALSE)
 
     v_es = V(g)[position == es]$name
     v_ee = V(g)[position == ee]$name
@@ -495,16 +495,13 @@ map_rMATS_event_full_fragment <- function(g, fromGTF_path, eventType, gene, gff_
 
 #' map rMATS events to grase graph
 #' @export
-map_rMATS <- function(g, gene, gff, fromGTF_A3SS, fromGTF_A5SS, fromGTF_SE, fromGTF_RI, bipartitions_path, grase_output_dir) {
+map_rMATS <- function(g, gene, gff, fromGTF_A3SS, fromGTF_A5SS, fromGTF_SE, fromGTF_RI, bipartitions, grase_output_dir) {
   # Initialize edge attributes
   E(g)$rmats <- ""
   E(g)$A3SS <- FALSE
   E(g)$A5SS <- FALSE
   E(g)$SE <- FALSE
   E(g)$RI <- FALSE
-
-  bipartitions <- read.table(bipartitions_path, sep="\t", header=TRUE)
-  bipartitions <- bipartitions[bipartitions$source != 'R' & bipartitions$sink != 'L',]
 
   if (!is.null(fromGTF_A3SS)) {
     g <- map_rMATS_event_overhang(g, fromGTF_A3SS, "A3SS", gene, gff, bipartitions, grase_output_dir)
