@@ -1,0 +1,10 @@
+
+bash creatingFilesByGene.sh -r -s ~/graphml.dexseq.v34/rmats_output_dice_b_vs_cd8/ -a ~/graphml.dexseq.v34/gencode.v34.annotation.gtf -d dexseq_prepare_annotation.py -g ~/graphml.dexseq.v34/graphml -p 40
+Rscript scripts/adjexons.all.R &> nocollapse.out &
+Rscript scripts/filterTSSTTS.R
+Rscript scripts/rmats.R
+Rscript scripts/integrate.R
+Rscript scripts/exoncnt.R &> dice_exoncnt.log &
+Rscript scripts/exontest.R &> dice_exontest.log &
+Rscript scripts/integrate.adjexons.R
+
