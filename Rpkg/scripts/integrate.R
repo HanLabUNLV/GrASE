@@ -17,7 +17,7 @@ library(stringr)
 library(fs)
 
 # Helper function to read and preprocess DEXSeq-to-rMATS mapping files
-dex_to_mats <- function(file_path) {
+map_dex2mats <- function(file_path) {
   df <- readr::read_tsv(file_path, col_types = cols(.default = "c")) %>%
     filter(GeneID != "GeneID") %>%
     mutate(
@@ -29,7 +29,7 @@ dex_to_mats <- function(file_path) {
 }
 
 # Helper function to read and preprocess rMATS-to-DEXSeq mapping files
-mats_to_dex <- function(file_path, event_type) {
+map_mats2dex <- function(file_path, event_type) {
   df <- readr::read_tsv(file_path, col_types = cols(.default = "c")) %>%
     filter(GeneID != "GeneID") %>%
     mutate(ID = paste(event_type, ID, sep = "_")) %>%
@@ -47,16 +47,16 @@ get_results_files <- function(grase_directory, rmats_directory, dexseq_results) 
 
   JCEC <- readr::read_tsv(rmats_files[str_ends(rmats_files, "A3SS.MATS.JCEC.txt")], col_types = cols(.default = "c")) 
   colnames(JCEC)[1] <- "ID"
-  results$A3SS_MATS <- JCEC %>% mutate(ID = paste("A3SS", ID, sep = "_"))
+  results$A3SS_JCEC <- JCEC %>% mutate(ID = paste("A3SS", ID, sep = "_"))
   JCEC <- readr::read_tsv(rmats_files[str_ends(rmats_files, "A5SS.MATS.JCEC.txt")], col_types = cols(.default = "c")) 
   colnames(JCEC)[1] <- "ID"
-  results$A5SS_MATS <- JCEC %>% mutate(ID = paste("A5SS", ID, sep = "_"))
+  results$A5SS_JCEC <- JCEC %>% mutate(ID = paste("A5SS", ID, sep = "_"))
   JCEC <- readr::read_tsv(rmats_files[str_ends(rmats_files, "SE.MATS.JCEC.txt")], col_types = cols(.default = "c")) 
   colnames(JCEC)[1] <- "ID"
-  results$SE_MATS <- JCEC %>% mutate(ID = paste("SE", ID, sep = "_"))
+  results$SE_JCEC <- JCEC %>% mutate(ID = paste("SE", ID, sep = "_"))
   JCEC <- readr::read_tsv(rmats_files[str_ends(rmats_files, "RI.MATS.JCEC.txt")], col_types = cols(.default = "c")) 
   colnames(JCEC)[1] <- "ID"
-  results$RI_MATS <- JCEC %>% mutate(ID = paste("RI", ID, sep = "_"))
+  results$RI_JCEC <- JCEC %>% mutate(ID = paste("RI", ID, sep = "_"))
   
   results$output_dir <- fs::path(grase_directory, "results")
   grase_results_tmp <- fs::path(results$output_dir, "tmp")
@@ -64,14 +64,14 @@ get_results_files <- function(grase_directory, rmats_directory, dexseq_results) 
   tmp_files <- fs::dir_ls(grase_results_tmp)
 
   # Load mapping files
-  results$dex_to_A3SS <- dex_to_mats(tmp_files[str_ends(tmp_files, "A3SS.mapped.txt")])
-  results$dex_to_A5SS <- dex_to_mats(tmp_files[str_ends(tmp_files, "A5SS.mapped.txt")])
-  results$dex_to_SE <- dex_to_mats(tmp_files[str_ends(tmp_files, "SE.mapped.txt")])
-  results$dex_to_RI <- dex_to_mats(tmp_files[str_ends(tmp_files, "RI.mapped.txt")])
-  results$A3SS_to_dex <- mats_to_dex(tmp_files[str_ends(tmp_files, "fromGTF.A3SS.txt")], "A3SS")
-  results$A5SS_to_dex <- mats_to_dex(tmp_files[str_ends(tmp_files, "fromGTF.A5SS.txt")], "A5SS")
-  results$SE_to_dex <- mats_to_dex(tmp_files[str_ends(tmp_files, "fromGTF.SE.txt")], "SE")
-  results$RI_to_dex <- mats_to_dex(tmp_files[str_ends(tmp_files, "fromGTF.RI.txt")], "RI")
+  results$dex_to_A3SS <- map_dex2mats(tmp_files[str_ends(tmp_files, "A3SS.mapped.txt")])
+  results$dex_to_A5SS <- map_dex2mats(tmp_files[str_ends(tmp_files, "A5SS.mapped.txt")])
+  results$dex_to_SE <- map_dex2mats(tmp_files[str_ends(tmp_files, "SE.mapped.txt")])
+  results$dex_to_RI <- map_dex2mats(tmp_files[str_ends(tmp_files, "RI.mapped.txt")])
+  results$A3SS_to_dex <- map_mats2dex(tmp_files[str_ends(tmp_files, "fromGTF.A3SS.txt")], "A3SS")
+  results$A5SS_to_dex <- map_mats2dex(tmp_files[str_ends(tmp_files, "fromGTF.A5SS.txt")], "A5SS")
+  results$SE_to_dex <- map_mats2dex(tmp_files[str_ends(tmp_files, "fromGTF.SE.txt")], "SE")
+  results$RI_to_dex <- map_mats2dex(tmp_files[str_ends(tmp_files, "fromGTF.RI.txt")], "RI")
 
   # Load DEXSeq results
   results$dexseqResults <- read.table(dexseq_results, sep="\t", header=TRUE)
@@ -79,7 +79,7 @@ get_results_files <- function(grase_directory, rmats_directory, dexseq_results) 
   return(results)
 }
 
-# A safer, more idiomatic R function to filter data frames
+# filter data frames
 filter_df_rMATS <- function(input_df, type, level, ...) {
   df <- input_df %>% filter(...)      # additional filters passed to dplyr::filter
 
@@ -136,7 +136,7 @@ filter_df_rMATS_minpval <- function(input_df, type, level, ...) {
 
 
 
-get_grase_results_rMATS <- function(grase_directory, rmats_directory, dexseq_results) {
+integrate_rMATS_DEXSeq_results <- function(grase_directory, rmats_directory, dexseq_results) {
 
   files <- get_results_files(grase_directory, rmats_directory, dexseq_results) 
   
@@ -163,35 +163,35 @@ get_grase_results_rMATS <- function(grase_directory, rmats_directory, dexseq_res
   dex_to_rmats_exploded <- dex_to_rmats %>%
     separate_rows(rMATS_ID, sep = ",")
 
-  dex_to_rmats_ex_MATS <- bind_rows(
-      left_join(dex_to_rmats_exploded, A3SS_MATS, by = c("groupID" = "GeneID", "rMATS_ID" = "ID")),
-      left_join(dex_to_rmats_exploded, A5SS_MATS, by = c("groupID" = "GeneID", "rMATS_ID" = "ID")),
-      left_join(dex_to_rmats_exploded, SE_MATS, by = c("groupID" = "GeneID", "rMATS_ID" = "ID")),
-      left_join(dex_to_rmats_exploded, RI_MATS, by = c("groupID" = "GeneID", "rMATS_ID" = "ID"))
+  dex_to_rmats_ex_JCEC <- bind_rows(
+      left_join(dex_to_rmats_exploded, A3SS_JCEC, by = c("groupID" = "GeneID", "rMATS_ID" = "ID")),
+      left_join(dex_to_rmats_exploded, A5SS_JCEC, by = c("groupID" = "GeneID", "rMATS_ID" = "ID")),
+      left_join(dex_to_rmats_exploded, SE_JCEC, by = c("groupID" = "GeneID", "rMATS_ID" = "ID")),
+      left_join(dex_to_rmats_exploded, RI_JCEC, by = c("groupID" = "GeneID", "rMATS_ID" = "ID"))
     ) %>%
     filter(!is.na(geneSymbol)) # Corresponds to dropna(subset="ID.1")
 
-  dex_to_rmats_ex_dexRes_MATS <- dex_to_rmats_dexRes %>%                                      # Mapped.ExonsToEvents.txt
+  dex_to_rmats_ex_dexRes_JCEC <- dex_to_rmats_dexRes %>%                                      # Mapped.ExonsToEvents.txt
     separate_rows(rMATS_ID, sep = ",") %>%
-    left_join(dex_to_rmats_ex_MATS, by = c("groupID", "rMATS_ID", "featureID")) %>%
+    left_join(dex_to_rmats_ex_JCEC, by = c("groupID", "rMATS_ID", "featureID")) %>%
     mutate(across(c(FDR), as.numeric))
     
   num_exons_detected <- nrow(dex_to_rmats_dexRes)
 
   # rMATS Detected Exons
-  res <- filter_df_rMATS(dex_to_rmats_ex_dexRes_MATS, "Exon", "Secondary", !is.na(rMATS_ID) & rMATS_ID != "")
+  res <- filter_df_rMATS(dex_to_rmats_ex_dexRes_JCEC, "Exon", "Secondary", !is.na(rMATS_ID) & rMATS_ID != "")
   exon_rmats_detected <- res$df; num_exons_rmats_detected <- res$num_events                   # rMATS_DetectedExons.txt
 
   # rMATS Tested Exons
-  res <- filter_df_rMATS(dex_to_rmats_ex_dexRes_MATS, "Exon", "Secondary", !is.na(ID))
+  res <- filter_df_rMATS(dex_to_rmats_ex_dexRes_JCEC, "Exon", "Secondary", !is.na(ID))
   exon_rmats_tested <- res$df; num_exons_rmats_tested <- res$num_events                       # rMATS_TestedExons.txt
   
   # rMATS Significant Exons
-  res <- filter_df_rMATS(dex_to_rmats_ex_dexRes_MATS, "Exon", "Secondary", FDR <= 0.05)
+  res <- filter_df_rMATS(dex_to_rmats_ex_dexRes_JCEC, "Exon", "Secondary", FDR <= 0.05)
   exon_rmats_sig <- res$df; num_exons_rmats_sig <- res$num_events                             # rMATS_SigExons.txt
 
   # DEXSeq Tested Exons
-  res <- filter_df_rMATS(dex_to_rmats_ex_dexRes_MATS, "Exon", "Primary", !is.na(padj))
+  res <- filter_df_rMATS(dex_to_rmats_ex_dexRes_JCEC, "Exon", "Primary", !is.na(padj))
   exon_dex_tested_full <- res$df
   res_sec <- filter_df_rMATS(exon_dex_tested_full, "Exon", "Secondary", !is.na(rMATS_ID) & rMATS_ID != "")
   exon_dex_tested_rmats_detected <- res_sec$df; num_exons_dex_tested_rmats_detected <- res_sec$num_events     # DexTested__rMATS_DetectedExons.txt
@@ -206,7 +206,7 @@ get_grase_results_rMATS <- function(grase_directory, rmats_directory, dexseq_res
   num_exons_dex_tested <- nrow(exon_dex_tested)
 
   # DEXSeq Significant Exons
-  res <- filter_df_rMATS(dex_to_rmats_ex_dexRes_MATS, "Exon", "Primary", padj <= 0.05)
+  res <- filter_df_rMATS(dex_to_rmats_ex_dexRes_JCEC, "Exon", "Primary", padj <= 0.05)
   exon_dex_sig_full <- res$df
   res_sec <- filter_df_rMATS(exon_dex_sig_full, "Exon", "Secondary", !is.na(rMATS_ID) & rMATS_ID != "")
   exon_dex_sig_rmats_detected <- res_sec$df; num_exons_dex_sig_rmats_detected <- res_sec$num_events         # DexSig__rMATS_DetectedExons.txt
@@ -222,40 +222,41 @@ get_grase_results_rMATS <- function(grase_directory, rmats_directory, dexseq_res
 
 
   # Event Counts ##################################################################################
-  rmats_to_dex <- bind_rows(A3SS_to_dex, A5SS_to_dex, SE_to_dex, RI_to_dex) %>%
-    arrange(GeneID, ID)
+  rmap_mats2dex <- bind_rows(A3SS_to_dex, A5SS_to_dex, SE_to_dex, RI_to_dex) %>%
+    arrange(GeneID, ID) %>%
+    select('ID', 'GeneID', 'DexseqFragment', 'DexseqRefFrag', 'bipartID')
 
-  rmats_to_dex_MATS <- bind_rows(                                                             # rMATS_to_DEX_Exons.txt
-      left_join(rmats_to_dex, A3SS_MATS, by = c("GeneID", "ID")),
-      left_join(rmats_to_dex, A5SS_MATS, by = c("GeneID", "ID")),
-      left_join(rmats_to_dex, SE_MATS, by = c("GeneID", "ID")),
-      left_join(rmats_to_dex, RI_MATS, by = c("GeneID", "ID"))
+  rmap_mats2dex_JCEC <- bind_rows(                                                             # rMATS_to_DEX_Exons.txt
+      left_join(rmap_mats2dex, A3SS_JCEC, by = c("GeneID", "ID")),
+      left_join(rmap_mats2dex, A5SS_JCEC, by = c("GeneID", "ID")),
+      left_join(rmap_mats2dex, SE_JCEC, by = c("GeneID", "ID")),
+      left_join(rmap_mats2dex, RI_JCEC, by = c("GeneID", "ID"))
     ) %>%
     filter(!is.na(geneSymbol)) # Corresponds to dropna(subset="ID.1")
-  names(rmats_to_dex_MATS)[names(rmats_to_dex_MATS)=='ID...2'] <- 'ID'
+  names(rmap_mats2dex_JCEC)[names(rmap_mats2dex_JCEC)=='ID...1'] <- 'ID'
 
-  rmats_to_dex_ex_dexRes <- rmats_to_dex %>%
+  rmap_mats2dex_ex_dexRes <- rmap_mats2dex %>%
     separate_rows(DexseqFragment, sep = ",") %>%
     left_join(rename(dexseqResults, GeneID = groupID, DexseqFragment = featureID), by = c("GeneID", "DexseqFragment")) %>%
     mutate(padj = as.numeric(padj))
 
-  rmats_to_dex_ex_MATS_dexRes <- rmats_to_dex_MATS %>%                                        # Mapped.EventsToExons.txt
+  rmap_mats2dex_ex_JCEC_dexRes <- rmap_mats2dex_JCEC %>%                                        # Mapped.EventsToExons.txt
     separate_rows(DexseqFragment, sep = ",") %>%
-    full_join(rmats_to_dex_ex_dexRes, by = c("GeneID", "ID", "DexseqFragment")) %>%
+    full_join(rmap_mats2dex_ex_dexRes, by = c("GeneID", "ID", "DexseqFragment")) %>%
     mutate(across(c(padj, FDR), as.numeric))
 
-  num_events_detected <- nrow(rmats_to_dex)
+  num_events_detected <- nrow(rmap_mats2dex)
   
   # DEXSeq Tested Events
-  res <- filter_df_rMATS(rmats_to_dex_ex_MATS_dexRes, "Event", "Secondary", !is.na(padj))
+  res <- filter_df_rMATS(rmap_mats2dex_ex_JCEC_dexRes, "Event", "Secondary", !is.na(padj))
   event_dex_tested <- res$df; num_events_dex_tested <- res$num_events                                     # DexTestedEvents.txt
 
   # DEXSeq Significant Events
-  res <- filter_df_rMATS(rmats_to_dex_ex_MATS_dexRes, "Event", "Secondary", padj <= 0.05)
+  res <- filter_df_rMATS(rmap_mats2dex_ex_JCEC_dexRes, "Event", "Secondary", padj <= 0.05)
   event_dex_sig <- res$df; num_events_dex_sig <- res$num_events                                           # DexSigEvents.txt
 
   # rMATS Tested Events
-  res <- filter_df_rMATS(rmats_to_dex_ex_MATS_dexRes, "Event", "Primary", !is.na(geneSymbol))
+  res <- filter_df_rMATS(rmap_mats2dex_ex_JCEC_dexRes, "Event", "Primary", !is.na(geneSymbol))
   event_rmats_tested_full <- res$df
   res_sec <- filter_df_rMATS(event_rmats_tested_full, "Event", "Secondary", !is.na(padj))
   event_rmats_tested_dex_tested <- res_sec$df; num_events_rmats_tested_dex_tested <- res_sec$num_events   # rMATS_Tested__DexTestedEvents.txt
@@ -268,7 +269,7 @@ get_grase_results_rMATS <- function(grase_directory, rmats_directory, dexseq_res
   num_events_rmats_tested <- nrow(event_rmats_tested)
 
   # rMATS Significant Events
-  res <- filter_df_rMATS(rmats_to_dex_ex_MATS_dexRes, "Event", "Primary", FDR <= 0.05)
+  res <- filter_df_rMATS(rmap_mats2dex_ex_JCEC_dexRes, "Event", "Primary", FDR <= 0.05)
   event_rmats_sig_full <- res$df
   res_sec <- filter_df_rMATS(event_rmats_sig_full, "Event", "Secondary", !is.na(padj))
   event_rmats_sig_dex_tested <- res_sec$df; num_events_rmats_sig_dex_tested <- res_sec$num_events         # rMATS_Sig__DexTestedEvents.txt
@@ -360,20 +361,20 @@ get_grase_results_rMATS <- function(grase_directory, rmats_directory, dexseq_res
   
   # Save mapping files
   readr::write_tsv(dex_to_rmats_dexRes, fs::path(output_dir, "DEX_to_rMATS_Events.txt"))
-  readr::write_tsv(rmats_to_dex_MATS, fs::path(output_dir, "rMATS_to_DEX_Exons.txt"))
-  readr::write_tsv(dex_to_rmats_ex_dexRes_MATS, fs::path(output_dir, "Mapped.ExonsToEvents.txt"))
-  readr::write_tsv(rmats_to_dex_ex_MATS_dexRes, fs::path(output_dir, "Mapped.EventsToExons.txt"))
+  readr::write_tsv(rmap_mats2dex_JCEC, fs::path(output_dir, "rMATS_to_DEX_Exons.txt"))
+  readr::write_tsv(dex_to_rmats_ex_dexRes_JCEC, fs::path(output_dir, "Mapped.ExonsToEvents.txt"))
+  readr::write_tsv(rmap_mats2dex_ex_JCEC_dexRes, fs::path(output_dir, "Mapped.EventsToExons.txt"))
 
   return(0)
 }
 
 #
-grase_directory = "~/graphml.dexseq.v34/grase_results.integrate"
+grase_directory = "~/graphml.dexseq.v34/grase_results.bipart"
 rmats_directory = "~/graphml.dexseq.v34/rmats_output_dice_b_vs_cd8"
 dexseq_results = "~/graphml.dexseq.v34/dexseq_output_dice_b_vs_cd8/DEXSeq_DICE_B_vs_CD8_results_new.txt"
 nthread = 1 
                     
 
-get_grase_results_rMATS(grase_directory, rmats_directory, dexseq_results)
+#integrate_rMATS_DEXSeq_results(grase_directory, rmats_directory, dexseq_results)
 
 

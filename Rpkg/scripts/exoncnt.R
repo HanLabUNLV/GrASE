@@ -1,7 +1,6 @@
 library(parallel)
-library(MASS)
-library(matrixStats)
-library(glmmTMB)
+#library(MASS)
+#library(matrixStats)
 library(tidyverse)
 library(grase)
 
@@ -25,7 +24,7 @@ sum_exon_counts <- function(count_col, counts_df) {
 }
 
 
-write_exoncnt_long <- function(ref_counts_df, diff_counts_df, events, gene_name, sampleinfo, file_prefix) {
+write_exoncnt_long <- function(ref_counts_df, diff_counts_df, events, gene_name, sampleinfo) {
 
   ref_long <- ref_counts_df[ref_counts_df$event %in% events,] %>% 
       pivot_longer(
@@ -47,17 +46,17 @@ write_exoncnt_long <- function(ref_counts_df, diff_counts_df, events, gene_name,
 #  exoncnts <- exoncnts[!is.na(exoncnts$diff),]
 #  exoncnts <- exoncnts[exoncnts$n > 10,]
   if (nrow(exoncnts) > 1) {
-    write.table(exoncnts, file=paste0(outdir,'/', gene_name, '.', file_prefix, '.exoncnt.txt'), quote=FALSE, sep="\t")
+    write.table(exoncnts, file=paste0(outdir,'/', gene_name, '.exoncnt.txt'), quote=FALSE, sep="\t")
   }
 
 }
 
 count_bipartitions <- function(bipartition_file, countmat, sampleinfo, outdir) {
   bipartitions <- as.data.frame(read_tsv(bipartition_file, col_types = cols(.default = "c")))  # Reads columns as characters
+  bipartitions$event = rownames(bipartitions)
   bipartitions <- bipartitions[!(is.na(bipartitions$setdiff1) & is.na(bipartitions$setdiff2)),]
   if (length(bipartitions) == 0) { return (0) }
   gene <- bipartitions$gene
-  bipartitions$event = rownames(bipartitions)
   n_samples = ncol(countmat)-2
 
   bipartitions$ref_ex_part[is.na(bipartitions$ref_ex_part)] <- 'NA'
@@ -70,11 +69,10 @@ count_bipartitions <- function(bipartition_file, countmat, sampleinfo, outdir) {
   ref_counts_df = matrix(0, nrow(bipartitions), n_samples)
   diff1_counts_df = matrix(0, nrow(bipartitions), n_samples)
   diff2_counts_df = matrix(0, nrow(bipartitions), n_samples)
-  if (sum(!is.na(bipartitions$ref_ex_part)) > 0) ref_counts_df = matrix(ref_counts_dict[bipartitions$ref_ex_part,], nrow = nrow(bipartitions), ncol=n_samples)
-  if (sum(!is.na(bipartitions$setdiff1)) > 0) diff1_counts_df = matrix(diff1_counts_dict[bipartitions$setdiff1,], nrow = nrow(bipartitions), ncol=n_samples)
-  if (sum(!is.na(bipartitions$setdiff2)) > 0) diff2_counts_df = matrix(diff2_counts_dict[bipartitions$setdiff2,], nrow = nrow(bipartitions), ncol=n_samples)
+  if (sum(!is.na(bipartitions$ref_ex_part)) > 0) ref_counts_df = as.data.frame(matrix(ref_counts_dict[bipartitions$ref_ex_part,], nrow = nrow(bipartitions), ncol=n_samples))
+  if (sum(!is.na(bipartitions$setdiff1)) > 0) diff1_counts_df = as.data.frame(matrix(diff1_counts_dict[bipartitions$setdiff1,], nrow = nrow(bipartitions), ncol=n_samples))
+  if (sum(!is.na(bipartitions$setdiff2)) > 0) diff2_counts_df = as.data.frame(matrix(diff2_counts_dict[bipartitions$setdiff2,], nrow = nrow(bipartitions), ncol=n_samples))
 
-  
   rownames(ref_counts_df) = rownames(bipartitions) 
   rownames(diff1_counts_df) = rownames(bipartitions) 
   rownames(diff2_counts_df) = rownames(bipartitions) 
@@ -86,6 +84,12 @@ count_bipartitions <- function(bipartition_file, countmat, sampleinfo, outdir) {
   bipartitions$ref_mean = rowMeans(ref_counts_df)
   bipartitions$diff1_mean = rowMeans(diff1_counts_df)
   bipartitions$diff2_mean = rowMeans(diff2_counts_df)
+
+  ref_counts_df$event = bipartitions$event
+  diff1_counts_df$event = bipartitions$event
+  diff2_counts_df$event = bipartitions$event
+
+
   bipartitions$diff_mean = do.call(pmax, c(bipartitions[, c("diff1_mean", "diff2_mean")], na.rm = TRUE))
   bipartitions <- bipartitions %>%
     mutate(
@@ -100,27 +104,19 @@ count_bipartitions <- function(bipartition_file, countmat, sampleinfo, outdir) {
     ) %>%
     filter(!is.na(setdiff))
 
-  ref_counts_df <- as.data.frame(cbind(ref_counts_df, event = rownames(ref_counts_df)), na.rm=TRUE)
   ref_counts_df <- inner_join(bipartitions[,c('gene', 'event', 'source', 'sink', 'ref_ex_part', 'setdiff')], ref_counts_df, by = "event")
 
-  diff1_counts_df <- as.data.frame(cbind(diff1_counts_df, event = rownames(diff1_counts_df)), na.rm=TRUE)
   diff1_counts_df <- inner_join(bipartitions[bipartitions$which=='diff1',c('gene', 'event', 'source', 'sink', 'ref_ex_part', 'setdiff')], diff1_counts_df, by = "event")
 
-  diff2_counts_df <- as.data.frame(cbind(diff2_counts_df, event = rownames(diff2_counts_df)), na.rm=TRUE)
   diff2_counts_df <- inner_join(bipartitions[bipartitions$which=='diff2',c('gene', 'event', 'source', 'sink', 'ref_ex_part', 'setdiff')], diff2_counts_df, by = "event")
 
   diff_counts_df <- bind_rows(diff1_counts_df, diff2_counts_df) %>%
        arrange(as.numeric(event))
 
-  TSS_index = bipartitions$source == 'R' | bipartitions$sink == 'L'
 
-  if (nrow(bipartitions[TSS_index & (bipartitions$diff_mean > 0),])) {
-    write.table(bipartitions[TSS_index,], file=paste0(outdir,'/', gene[1], '.TSS.bipartitions.txt'), quote=FALSE, sep="\t")
-    write_exoncnt_long(ref_counts_df, diff_counts_df, events=bipartitions[TSS_index,'event'], gene_name = gene[1], sampleinfo, file_prefix='TSS') 
-  }
-  if (nrow(bipartitions[!TSS_index & (bipartitions$diff_mean > 0),])) {
-    write.table(bipartitions[!TSS_index,], file=paste0(outdir,'/', gene[1], '.nonTSS.bipartitions.txt'), quote=FALSE, sep="\t")
-    write_exoncnt_long(ref_counts_df, diff_counts_df, events=bipartitions[!TSS_index,'event'], gene_name = gene[1], sampleinfo, file_prefix='nonTSS') 
+  if (nrow(bipartitions[bipartitions$diff_mean > 0,])) {
+    write.table(bipartitions, file=paste0(outdir,'/', gene[1], '.bipartitions.txt'), quote=FALSE, sep="\t")
+    write_exoncnt_long(ref_counts_df, diff_counts_df, events=bipartitions$event, gene_name = gene[1], sampleinfo) 
   }
  
   return (0)
@@ -155,14 +151,13 @@ group_by_event <- function(dat, col_y, col_n) {
 
 
 
+#exit()
 
-
-
-bipartition_path = '~/graphml.dexseq.v34/bipartitions.nocollapse'
-outdir = '~/graphml.dexseq.v34/dice_exoncnts.nocollapse'
+bipartition_path = '~/graphml.dexseq.v34/bipartitions.filtered'
+outdir = '~/graphml.dexseq.v34/dice_exoncnts'
 
 bipartition_files <- list.files(path = bipartition_path,
-                                 pattern = "bipartitions.txt$", full.names=TRUE)
+                                 pattern = "bipartitions.internal.txt$", full.names=TRUE)
 #bipartition_master <- paste0(bipartition_path, '/cat')
 #exoncnt_master <- paste0(outdir,'/cat')
 
@@ -193,20 +188,20 @@ names(sampleinfo) <- rownames(sampleTable)
 
 
 cl_num = 30
-cl <- makeCluster(cl_num, type = "PSOCK", outfile='cl.log')
+cl <- makeCluster(cl_num, type = "PSOCK", outfile='exoncnt.log')
 clusterEvalQ(cl, {library(tidyverse)})
 clusterExport(cl, c("write_exoncnt_long", "count_bipartitions","sum_exon_counts","read_counts","sampleinfo", "outdir"))
 
 # run the jobs
 res <- parallel::parLapply(cl, bipartition_files, function(f) {
   tryCatch({
-    gene_id <- sub("\\.bipartitions\\.txt$", "", basename(f))
+    gene_id <- sub("\\.bipartitions\\.internal\\.txt$", "", basename(f))
     count_bipartitions(bipartition_file = f, countmat = read_counts[read_counts$gene==gene_id,], sampleinfo, outdir)
   }, error = function(e) {
     msg <- sprintf("[%s] ERROR in %s (PID %d): %s\n",
                    format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
                    f, Sys.getpid(), conditionMessage(e))
-    cat(msg, file = "cl_errors.log", append = TRUE)
+    cat(msg, file = "exoncnt_errors.log", append = TRUE)
     NULL
   })
 })

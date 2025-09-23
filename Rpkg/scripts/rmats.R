@@ -14,8 +14,8 @@ outdir = '~/graphml.dexseq.v34/'
 grase_output_dir = file.path(outdir, 'grase_results.bipart/')
 eventTypes =  c('A3SS', 'A5SS', 'SE', 'RI')
 
-rmats_df = data.frame(matrix(nrow = 0, ncol = 4)) 
-colnames(rmats_df) = c('GeneID', 'ID', 'DexseqFragment', 'DexseqRefFrag')
+rmats_df = data.frame(matrix(nrow = 0, ncol = 14)) 
+colnames(rmats_df) = c('ID', 'GeneID', 'geneSymbol', 'chr', 'strand', 'longExonStart_0base', 'longExonEnd', 'shortES', 'shortEE', 'flankingES', 'flankingEE',  'DexseqFragment', 'DexseqRefFrag', 'bipartID')
 for (eventType in eventTypes) {
   out2 <- file.path(grase_output_dir, "results", "tmp", paste0("combined.fromGTF.", eventType, ".txt"))
   write.table(rmats_df, file = out2, sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)

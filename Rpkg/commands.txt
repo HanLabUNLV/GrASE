@@ -4,7 +4,7 @@ Rscript scripts/adjexons.all.R &> nocollapse.out &
 Rscript scripts/filterTSSTTS.R
 Rscript scripts/rmats.R
 Rscript scripts/integrate.R
-Rscript scripts/exoncnt.R &> dice_exoncnt.log &
-Rscript scripts/exontest.R &> dice_exontest.log &
+Rscript scripts/exoncnt.R &> dice_exoncnt.out &
+Rscript scripts/exontest.R &> dice_exontest.out &
 Rscript scripts/integrate.adjexons.R
 
