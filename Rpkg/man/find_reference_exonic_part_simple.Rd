@@ -2,7 +2,7 @@
 % Please edit documentation in R/bipartitions.R
 \name{find_reference_exonic_part_simple}
 \alias{find_reference_exonic_part_simple}
-\title{Find reference exonic part near bubble region}
+\title{Find reference exonic part near bubble region between two partitions}
 \usage{
 find_reference_exonic_part_simple(
   source,
@@ -15,5 +15,5 @@ find_reference_exonic_part_simple(
 )
 }
 \description{
-Find reference exonic part near bubble region
+Find reference exonic part near bubble region between two partitions
 }

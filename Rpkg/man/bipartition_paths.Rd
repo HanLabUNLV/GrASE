@@ -4,7 +4,7 @@
 \alias{bipartition_paths}
 \title{Compute diff exons from graph and splicing structure}
 \usage{
-bipartition_paths(gene, g, sg, outdir, max_path = 20, collapse_bubbles = TRUE)
+bipartition_paths(gene, g, sg, outdir, max_path = 20, collapse_bubbles = FALSE)
 }
 \description{
 Compute diff exons from graph and splicing structure
