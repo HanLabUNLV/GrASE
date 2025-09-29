@@ -22,7 +22,7 @@ gene_summary = sim_deds %>% group_by(geneID)
 genes =  unique(gene_summary$geneID)
 
 num_cores <- 20
-cl <- makeCluster(num_cores, outfile = "multipath.log")
+cl <- makeCluster(num_cores, outfile = "n_choose_2.log")
 registerDoParallel(cl)
 
 results <- foreach(
@@ -43,8 +43,8 @@ results <- foreach(
 #  outdir = '/data2/han_lab/stevepark/SplicingGraphs/indir/'
 
 
-  filename = file.path(outdir, "multipaths.nocollapse", paste0(gene, ".multipaths.txt"))
-  runninglog = file.path(outdir, "multipaths.nocollapse", paste0(gene, ".running"))
+  filename = file.path(outdir, "n_choose_2.nocollapse", paste0(gene, ".n_choose_2.txt"))
+  runninglog = file.path(outdir, "n_choose_2.nocollapse", paste0(gene, ".running"))
   if (file.exists(filename) | file.exists(runninglog)) {
     message(paste("skipping existing ", filename))
     flush.console()
@@ -88,16 +88,16 @@ results <- foreach(
   g <- igraph::read_graph(graph_path, format = "graphml")
 
   # call your downstream function, fully namespaced
-  cat("  calling grase::multipath_paths()\n"); flush.console()
+  cat("  calling grase::n_choose_2_paths()\n"); flush.console()
    
-  multipathdir = file.path(outdir, "multipaths.nocollapse") 
-  if(DEBUG_MODE) print("multipathdir")
-  if(DEBUG_MODE) print(multipathdir)
-  grase::multinomial_paths(
+  pairwisedir = file.path(outdir, "n_choose_2.nocollapse") 
+  if(DEBUG_MODE) print("pairwisedir")
+  if(DEBUG_MODE) print(pairwisedir)
+  grase::n_choose_2_paths(
       gene     = gene,
       g        = g,
       sg       = sg,
-      outdir   = multipathdir, 
+      outdir   = pairwisedir, 
       max_path = 20,
       collapse_bubbles = FALSE 
   )
@@ -113,5 +113,3 @@ results <- foreach(
 
 }
 stopCluster(cl)
-
-

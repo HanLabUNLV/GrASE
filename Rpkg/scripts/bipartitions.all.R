@@ -22,7 +22,7 @@ gene_summary = sim_deds %>% group_by(geneID)
 genes =  unique(gene_summary$geneID)
 
 num_cores <- 20
-cl <- makeCluster(num_cores, outfile = "nocollapse.log")
+cl <- makeCluster(num_cores, outfile = "bipartitions.log")
 registerDoParallel(cl)
 
 results <- foreach(
