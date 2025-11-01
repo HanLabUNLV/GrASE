@@ -1,8 +1,71 @@
 #' Style and plot splicing graph
 #' @export
+
+shortest_edges <- function(g, coords) {
+  nm <- igraph::V(g)$name
+  D <- as.matrix(dist(coords))
+  diag(D) <- Inf
+  dmin <- min(D, na.rm = TRUE)
+  tol  <- max(1e-9, dmin * 1e-6)       # small tolerance for float ties
+  pairs <- which(abs(D - dmin) <= tol, arr.ind = TRUE)
+  pairs <- pairs[pairs[,1] < pairs[,2], , drop = FALSE]  # drop duplicates (j,i)
+  pairs <- cbind.data.frame(nm[pairs[,1]], nm[pairs[,2]])
+  pairs
+}
+
+# Pull a node toward the average y of its sg_id neighbors (sg-1 and sg+1).
+# alpha controls how strongly it moves (0 = no move, 1 = snap to neighbor mean).
+pull_vertical_outlier_toward_neighbors <- function(g, coords, target = NULL, alpha = 0.6) {
+  sid <- as.integer(igraph::V(g)$sg_id)
+  nm  <- igraph::V(g)$name
+
+  k <- if (is.null(target)) {
+    # pick the biggest |z| outlier in y
+    y <- coords[,2]; z <- (y - stats::median(y)) / stats::mad(y, constant = 1.4826)
+    which.max(abs(z))
+  } else {
+    match(target, nm, nomatch = NA_integer_)
+  }
+  if (is.na(k)) return(coords)
+
+  y_prev <- coords[which(sid == sid[k] - 1)[1], 2]
+  y_next <- coords[which(sid == sid[k] + 1)[1], 2]
+  y_ref  <- mean(c(y_prev, y_next), na.rm = TRUE)
+
+  if (is.finite(y_ref)) {
+    coords[k,2] <- (1 - alpha) * coords[k,2] + alpha * y_ref
+  }
+  coords
+}
+
+# increase curvature for shortest edges
+increase_curve_shortest_edges <- function(g, coords, ec) {
+  nm <- igraph::V(g)$name
+  el <- igraph::as_edgelist(g)
+
+  pairs = shortest_edges(g, coords)
+
+  # --- select edges that connect ANY closest pair ---
+  if (igraph::is_directed(g)) {
+    # allow both directions
+    edge_keys  <- paste(el[,1], el[,2], sep = "->")
+    pair_keys  <- c(paste(pairs[,1], pairs[,2], sep = "->"),
+                    paste(pairs[,2], pairs[,1], sep = "->"))
+    sel <- edge_keys %in% pair_keys
+  } 
+  hit <- sum(sel)
+
+  # --- double curvature only for those edges (keep sign) ---
+  if (hit > 0) {
+    ec[sel] <- pmax(pmin(ec[sel] * 2, 0.95), -0.95)   # clamp to safe range
+  }
+  ec
+}
+
 style_and_plot <- function(g, gene, outdir) {
-  color_dict <- c("ex" = "purple", "in" = "grey", "R" = "black", "L" = "black", "ex_part" = "dark green")
-  width_dict <- c("ex" = 1, "in" = 0.4, "R" = 0.2, "L" = 0.2, "ex_part" = 1)
+  color_dict <- c("ex" = "darkorange", "in" = "black", "R" = "black", "L" = "black", "ex_part" = "dark green")
+  width_dict <- c("ex" = 1, "in" = 1.2, "R" = 1.2, "L" = 1.2, "ex_part" = 1)
+  lty_dict <- c("ex" = "solid", "in" = "dotted", "R" = "dotted", "L" = "dotted", "ex_part" ="solid")
 
   layout.kamada.kawai.deterministic <- function(...)
   {   
@@ -10,35 +73,7 @@ style_and_plot <- function(g, gene, outdir) {
     igraph::layout.kamada.kawai(...)
   }
    
-  # place vertices in numeric order on a line: R at far left, L at far right
-  layout_linear_by_sgid <- function(g) {
-  sid <- suppressWarnings(as.integer(igraph::V(g)$sg_id))
-  if (length(sid) != igraph::vcount(g) || any(is.na(sid))) {
-    stop("Vertex attribute sg_id must be numeric-like and length vcount(g).")
-  }
-  ord <- order(sid)
-  x <- integer(length(sid)); x[ord] <- seq_along(sid)
-  cbind(x, y = 0)
-  }
-
   grDevices::pdf(file = file.path(outdir, paste0(gene, ".pdf")), width = 32, height = 8) 
-
-  lin <- layout_linear_by_sgid(g) 
-  plot(
-    g,  
-    layout = lin,
-    main   = paste(gene, "(linear by sg_id)"),
-    vertex.shape = "none",
-    vertex.label = igraph::V(g)$name,     # shows R..L even though we order by sg_id
-    vertex.label.cex = 1.5,
-    edge.label  = igraph::E(g)$dexseq_fragment,
-    edge.label.cex = 1.5,
-    edge.arrow.size = 0.5,
-    edge.color = sapply(igraph::E(g)$ex_or_in, function(x) color_dict[x]),
-    edge.width = sapply(igraph::E(g)$ex_or_in, function(x) width_dict[x]),
-    edge.curved = ifelse(igraph::E(g)$ex_or_in == "in", 0.35, 0)  # curve introns a bit 
-  )
-
 
   layers_num <- as.integer(igraph::V(g)$sg_id)
   sug <- igraph::layout_with_sugiyama(g, layers = layers_num)$layout
@@ -56,7 +91,14 @@ style_and_plot <- function(g, gene, outdir) {
 
   # circles sized to fit labels
   lbl   <- as.character(igraph::V(g)$name)
-  vsize <- 3 # tweak if labels feel tight
+  vsize <- 2 # tweak if labels feel tight
+
+  # Inspect
+  sug_lr <- pull_vertical_outlier_toward_neighbors(g, sug_lr, alpha = 0.7)
+  base_curve <- 0.30
+  ec <- igraph::curve_multiple(g, base_curve)                    
+  ec [ec == 0] = base_curve
+  ec <- increase_curve_shortest_edges(g, sug_lr, ec)
 
   plot(
     g,  
@@ -76,13 +118,14 @@ style_and_plot <- function(g, gene, outdir) {
     vertex.label.dist  = 0,
 
     # edges: all curved + green labels
-    edge.curved        = 0.30,              # all edges curved
+    edge.curved        = ec,              # all edges curved
     edge.label         = igraph::E(g)$dexseq_fragment,
     edge.label.cex     = 1,
     edge.label.color   = "darkgreen",       # green edge labels
     edge.arrow.size    = 0.4,
     edge.color         = sapply(igraph::E(g)$ex_or_in, function(x) color_dict[x]),
-    edge.width         = sapply(igraph::E(g)$ex_or_in, function(x) width_dict[x])
+    edge.width         = sapply(igraph::E(g)$ex_or_in, function(x) width_dict[x]),
+    edge.lty = sapply(igraph::E(g)$ex_or_in, function(x) lty_dict[x])
 
   )
   grDevices::dev.off()
@@ -110,7 +153,7 @@ plottx <- function (gene, outdir, gene_edges, gene_nodes) {
   y <- rep(1, length(gene_nodes))
 
   #splice junctions as points
-  points(x, y+0*2, cex=3, col="orange")
+  points(x, y+0*2, cex=3, col="black")
   text(x,y,labels=c("R",1:(length(gene_nodes)-2),"L"))
 
   iArrows <- igraph:::igraph.Arrows
@@ -153,7 +196,7 @@ plottx <- function (gene, outdir, gene_edges, gene_nodes) {
       x1 <- c(x1, as.numeric(exon_edges$to[j])+1)
     }
     text(x=-1, y=y, tx_list[i], cex=0.8, xpd = TRUE)
-    segments(x0 = x0, y0 = y, x1 = x1, y1 = y, col="darkorchid", lwd=2)
+    segments(x0 = x0, y0 = y, x1 = x1, y1 = y, col="darkorange", lwd=2)
     count = count + 1
   }
 
