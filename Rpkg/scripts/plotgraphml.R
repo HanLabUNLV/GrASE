@@ -8,6 +8,7 @@ indir = '/mnt/storage/jaquino/scRNAseq_sim_pt2/grase/graphml.dexseq.v34/'
 outdir = '/mnt/storage/jaquino/scRNAseq_sim_pt2/grase/graphml.dexseq.v34/'
 
 genes = c('ENSG00000000457.14', 'ENSG00000001631.15')
+genes = c('ENSG00000004809.14')
 
 for (gene in genes) {
 
