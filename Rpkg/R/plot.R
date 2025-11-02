@@ -111,7 +111,7 @@ style_and_plot <- function(g, gene, outdir) {
     vertex.size        = vsize,
     vertex.frame.color = "black",
     vertex.frame.width = 1.4,
-    vertex.color       = grDevices::adjustcolor("white", alpha.f = 0.00), # hollow
+    vertex.color       = grDevices::adjustcolor("white", alpha.f = 1), # filled
     vertex.label       = lbl,
     vertex.label.cex   = 1,
     vertex.label.color = "black",
