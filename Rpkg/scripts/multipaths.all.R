@@ -21,7 +21,7 @@ sim_deds <- read.table(paste0(indir,"genelist"), header=TRUE, sep="\t")
 gene_summary = sim_deds %>% group_by(geneID)
 genes =  unique(gene_summary$geneID)
 
-num_cores <- 20
+num_cores <- 40
 cl <- makeCluster(num_cores, outfile = "multipath.log")
 registerDoParallel(cl)
 
@@ -43,8 +43,8 @@ results <- foreach(
 #  outdir = '/data2/han_lab/stevepark/SplicingGraphs/indir/'
 
 
-  filename = file.path(outdir, "multipaths.nocollapse", paste0(gene, ".multipaths.txt"))
-  runninglog = file.path(outdir, "multipaths.nocollapse", paste0(gene, ".running"))
+  filename = file.path(outdir, "multinomial.nocollapse", paste0(gene, ".multinomial.txt"))
+  runninglog = file.path(outdir, "multinomial.nocollapse", paste0(gene, ".running"))
   if (file.exists(filename) | file.exists(runninglog)) {
     message(paste("skipping existing ", filename))
     flush.console()
@@ -90,7 +90,7 @@ results <- foreach(
   # call your downstream function, fully namespaced
   cat("  calling grase::multipath_paths()\n"); flush.console()
    
-  multipathdir = file.path(outdir, "multipaths.nocollapse") 
+  multipathdir = file.path(outdir, "multinomial.nocollapse") 
   if(DEBUG_MODE) print("multipathdir")
   if(DEBUG_MODE) print(multipathdir)
   grase::multinomial_paths(

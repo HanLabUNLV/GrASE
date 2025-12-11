@@ -1,16 +1,20 @@
 
 
-bipartitions_path = '~/graphml.dexseq.v34/bipartitions.nocollapse'
-outdir = '~/graphml.dexseq.v34/bipartitions.filtered'
+#bipartitions_path = '~/graphml.dexseq.v34/bipartitions.nocollapse'
+#outdir = '~/graphml.dexseq.v34/bipartitions.filtered'
+#bipartitions_path = '~/graphml.dexseq.v34/multinomial.nocollapse'
+#outdir = '~/graphml.dexseq.v34/multinomial.filtered'
+bipartitions_path = '~/graphml.dexseq.v34/n_choose_2.nocollapse'
+outdir = '~/graphml.dexseq.v34/n_choose_2.filtered'
 
 bipartitions_files <- list.files(path = bipartitions_path,
-                                 pattern = "bipartitions.all.txt$", full.names=TRUE)
+                                 pattern = "all.txt$", full.names=TRUE)
 for (f in bipartitions_files) {
    
   print(paste0("infile :", f))
-  gene <- sub("\\.bipartitions\\.all\\.txt$", "", basename(f))
-  filename_internal = file.path(outdir, paste0(gene, ".bipartitions.internal.txt"))
-  filename_TSS = file.path(outdir, paste0(gene, ".bipartitions.TSSTTS.txt"))
+  gene <- sub("\\.all\\.txt$", "", basename(f))
+  filename_internal = file.path(outdir, paste0(gene, ".internal.txt"))
+  filename_TSS = file.path(outdir, paste0(gene, ".TSSTTS.txt"))
 
   bipartitions <- tryCatch({
     read.table(f, sep="\t", header=TRUE)
