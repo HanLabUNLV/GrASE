@@ -38,7 +38,7 @@ map_mats2dex <- function(file_path, event_type) {
 }
 
 # Function to get all necessary results files
-get_results_files <- function(grase_directory, rmats_directory, dexseq_results) {
+get_results_files <- function(grase_directory, results_dir, rmats_directory, dexseq_results) {
   results <- list()
 
   # Load rMATS results if specified
@@ -58,7 +58,7 @@ get_results_files <- function(grase_directory, rmats_directory, dexseq_results) 
   colnames(JCEC)[1] <- "ID"
   results$RI_JCEC <- JCEC %>% mutate(ID = paste("RI", ID, sep = "_"))
   
-  results$output_dir <- fs::path(grase_directory, "results")
+  results$output_dir <- fs::path(grase_directory, results_dir)
   grase_results_tmp <- fs::path(results$output_dir, "tmp")
   
   tmp_files <- fs::dir_ls(grase_results_tmp)
@@ -136,9 +136,9 @@ filter_df_rMATS_minpval <- function(input_df, type, level, ...) {
 
 
 
-integrate_rMATS_DEXSeq_results <- function(grase_directory, rmats_directory, dexseq_results) {
+integrate_rMATS_DEXSeq_results <- function(grase_directory, results_dir, rmats_directory, dexseq_results) {
 
-  files <- get_results_files(grase_directory, rmats_directory, dexseq_results) 
+  files <- get_results_files(grase_directory, results_dir, rmats_directory, dexseq_results) 
   
   # Create output directories if they don't exist
   fs::dir_create(files$output_dir, "SplicingEvents", recurse = TRUE)
@@ -369,12 +369,13 @@ integrate_rMATS_DEXSeq_results <- function(grase_directory, rmats_directory, dex
 }
 
 #
-grase_directory = "~/graphml.dexseq.v34/grase_results.bipart"
+nthread = 1 
 rmats_directory = "~/graphml.dexseq.v34/rmats_output_dice_b_vs_cd8"
 dexseq_results = "~/graphml.dexseq.v34/dexseq_output_dice_b_vs_cd8/DEXSeq_DICE_B_vs_CD8_results_new.txt"
-nthread = 1 
-                    
+grase_directory = "~/graphml.dexseq.v34/grase_results/"
 
-#integrate_rMATS_DEXSeq_results(grase_directory, rmats_directory, dexseq_results)
+results_directory = "results.bipartitions"
+integrate_rMATS_DEXSeq_results(grase_directory, results_directory, rmats_directory, dexseq_results)
 
-
+results_directory = "results.n_choose_2"
+integrate_rMATS_DEXSeq_results(grase_directory, results_directory, rmats_directory, dexseq_results)

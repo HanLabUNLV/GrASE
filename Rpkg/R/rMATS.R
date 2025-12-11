@@ -542,7 +542,7 @@ map_rMATS_bipartition <- function(g, gene, gff, fromGTF_A3SS, fromGTF_A5SS, from
 
 #' Map rMATS events using multinomial analysis (k-way partitions)
 #' @export
-map_rMATS_multinomial <- function(g, gene, gff, fromGTF_A3SS, fromGTF_A5SS, fromGTF_SE, fromGTF_RI, bipartitions, grase_output_dir) {
+map_rMATS_multinomial <- function(g, gene, gff, fromGTF_A3SS, fromGTF_A5SS, fromGTF_SE, fromGTF_RI, bipartitions, grase_output_dir, results_dir) {
   # Convert multinomial to bipartition format for rMATS compatibility
   # Strategy: Create pairwise comparisons from k-way partitions
   
@@ -577,7 +577,6 @@ map_rMATS_multinomial <- function(g, gene, gff, fromGTF_A3SS, fromGTF_A5SS, from
     bipartition_bipartitions$path2 <- sapply(paths_split, function(x) paste(x[-1], collapse = ","))
   }
   
-  results_dir <- "results.multinomial"
   # Apply original mapping functions to converted bipartition format
   if (!is.null(fromGTF_A3SS)) {
     g <- map_rMATS_event_overhang(g, fromGTF_A3SS, "A3SS", gene, gff, bipartition_bipartitions, grase_output_dir, results_dir)
