@@ -186,11 +186,11 @@ test_model_glmmTMB_with_prior <- function(dd, prior_disp) {
    
     # Models include 'priors' for empirical Bayes moderation
     m1 <- tryCatch(
-      glmmTMB(cbind(y, n - y) ~ groups, data = dd, family = glmmTMB::betabinomial(link="logit"), priors = prior_disp), 
+      glmmTMB(cbind(y, n - y) ~ groups, data = dd, family = glmmTMB::betabinomial(link="logit"), priors = prior_disp, REML=TRUE), 
       error = function(e) NULL
     )
     m0 <- tryCatch(
-      glmmTMB(cbind(y, n - y) ~ 1, data = dd, family = glmmTMB::betabinomial(link="logit"), priors = prior_disp),
+      glmmTMB(cbind(y, n - y) ~ 1, data = dd, family = glmmTMB::betabinomial(link="logit"), priors = prior_disp, REML=TRUE),
       error = function(e) NULL
     )
 
@@ -213,6 +213,19 @@ test_model_glmmTMB_EB <- function(dd) {
 
     # Models include 'priors' for empirical Bayes moderation
     target_log_phi = dd$z_mod[1]
+
+    # Fallback to Binomial GLM if dispersion is missing
+    if (is.na(target_log_phi)) {
+        m1 <- tryCatch(glm(cbind(y, n - y) ~ groups, data = dd, family = binomial), error = function(e) NULL)
+        m0 <- tryCatch(glm(cbind(y, n - y) ~ 1, data = dd, family = binomial), error = function(e) NULL)
+        if (!is.null(m1) && !is.null(m0)) {
+             LR <- 2 * (logLik(m1) - logLik(m0))
+             pval <- pchisq(as.numeric(LR), df = 1, lower.tail = FALSE)
+             return(data.frame(gene=gene, event=event, LRT=as.numeric(LR), p.value=pval, model="binomial_glm", phi=NA))
+        }
+        return(NULL)
+    }
+
     m1 <- tryCatch(
       glmmTMB(cbind(y, n - y) ~ groups, 
         data = dd, 
@@ -249,6 +262,33 @@ test_model_vgam_EB <- function(dd) {
   event <- unique(dd$event)
   dd <- dd[dd$n > 0, ]
   if (nrow(dd) < 2 || length(unique(dd$groups)) < 2) return(NULL)
+  
+  phi_mod = dd$phi_mod[1]
+
+  # Fallback to Binomial GLM if dispersion is missing
+  if (is.na(phi_mod)) {
+      m1 <- tryCatch(glm(cbind(y, n - y) ~ groups, data = dd, family = binomial), error = function(e) NULL)
+      m0 <- tryCatch(glm(cbind(y, n - y) ~ 1, data = dd, family = binomial), error = function(e) NULL)
+      if (!is.null(m1) && !is.null(m0)) {
+          LR <- 2 * (logLik(m1) - logLik(m0))
+          pval <- pchisq(as.numeric(LR), df = 1, lower.tail = FALSE)
+          return(data.frame(
+            gene    = gene,
+            event   = event,
+            LRT     = as.numeric(LR),
+            p.value = pval,
+            phi_hat = NA,
+            phi_mod = NA,
+            w       = NA,
+            rho     = NA,
+            phi     = NA,
+            model   = "binomial_glm",
+            stringsAsFactors = FALSE
+          ))
+      }
+      return(NULL)
+  }
+
   phi_hat = dd$phi[1]
   phi_mod = dd$phi_mod[1]
   rho_mod = 1 / (1 + phi_mod)
@@ -320,7 +360,7 @@ test_model_multinomial_vgam_EB <- function(dd) {
 
 
 # Updated function for Wald tests in a Multinomial/Dirichlet-Multinomial setting
-test_model_multinomial_vgam_wald <- function(dd, shape0, rate0, ref_option = NULL) {
+test_model_multinomial_vgam_wald_EB <- function(dd, shape0, rate0, ref_option = NULL) {
     gene <- unique(dd$gene); event <- unique(dd$event)
     prec_mod <- dd$prec_mod[1]
  
@@ -389,7 +429,7 @@ test_model_multinomial_vgam_wald <- function(dd, shape0, rate0, ref_option = NUL
 
 
 
-exit()
+#exit()
 # --- Main Execution Script ---
 
 outdir = '~/graphml.dexseq.v34/dice_exoncnts'
@@ -427,14 +467,26 @@ if (file.exists(paste0(outdir,'/phi.glmmtmb.txt'))) {
 }
 
 
-phi_trimmed <- phi_df$phi[phi_df$phi < 1e+10]
+phi_trimmed <- phi_df$phi[phi_df$phi < 1e+10 & phi_df$phi > 0]
 
 # Moderated glmmTMB with Prior 
 fit_phi <- fitdistr(phi_trimmed, "gamma")
 shape0  <- fit_phi$estimate["shape"]
 rate0   <- fit_phi$estimate["rate"]
-prior_disp <- data.frame(prior = sprintf("gamma(%g,%g)", shape0, rate0), class = "fixef_disp", coef = "")
+prior_disp_wrong <- data.frame(prior = sprintf("gamma(%g,%g)", shape0, rate0), class = "fixef_disp", coef = "")
+print(prior_disp_wrong)
+
+# fit normal to log(phi)
+log_phi_vals <- log(phi_trimmed)
+fit_logphi <- fitdistr(log_phi_vals, "normal")
+mean_logphi <- fit_logphi$estimate["mean"]
+sd_logphi   <- fit_logphi$estimate["sd"]
+prior_disp <- data.frame(prior = sprintf("normal(%g,%g)", mean_logphi, sd_logphi), 
+  class = "fixef_disp", 
+  coef = "" # Explicitly target the intercept 
+)
 print(prior_disp)
+
 
 cl <- makeCluster(30, outfile='testglmmTMB_withprior.log')
 clusterEvalQ(cl, { library(glmmTMB); library(VGAM); library(tidyverse) })
@@ -454,7 +506,7 @@ result_list <- parLapply(cl, grouped_data, function(dd) {
 stopCluster(cl)
 
 results <- bind_rows(Filter(Negate(is.null), result_list))
-write.table(results, file=paste0(outdir,'/test_glmmTMB_prior.txt'), quote=FALSE, sep="\t")
+write.table(results, file=paste0(outdir,'/test_glmmTMB_MAP_prior.txt'), quote=FALSE, sep="\t")
 
 
 ## Empirical Bayes hyperparameters: prior mean and variance
@@ -462,10 +514,10 @@ phi_table <- moderate_phi_log_scale(phi_df)
 bipartitioncnts_eb <- bipartitioncnts %>%
   left_join(phi_table, by = c("gene", "event"))
 grouped_data_eb <- group_by_event(bipartitioncnts_eb, 'diff', 'n')
-grouped_data_eb <- Filter(function(x) !is.na(x$z_mod[1]), grouped_data_eb)
+# grouped_data_eb <- Filter(function(x) !is.na(x$z_mod[1]), grouped_data_eb)
 
 # Moderated glmmTMB with EB
-cl <- makeCluster(30, outfile='testglmmTMB_withprior.log')
+cl <- makeCluster(30, outfile='testglmmTMB_EB.log')
 clusterEvalQ(cl, { library(glmmTMB); library(VGAM); library(tidyverse) })
 clusterExport(cl, varlist = c("test_model_glmmTMB_EB"), envir = environment())
 
@@ -476,14 +528,14 @@ result_list <- parLapply(cl, grouped_data_eb, function(dd) {
       msg <- sprintf("[%s] ERROR in %s (PID %d): %s\n",
                      format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
                      dd$gene[1], Sys.getpid(), conditionMessage(e))
-      cat(msg, file = "glmmtmb_withprior.errors.log", append = TRUE)
+      cat(msg, file = "glmmtmb_EB.errors.log", append = TRUE)
       NULL
   })
 })
 stopCluster(cl)
 
 results <- bind_rows(Filter(Negate(is.null), result_list))
-write.table(results, file=paste0(outdir,'/test_glmmTMB_EB.txt'), quote=FALSE, sep="\t")
+write.table(results, file=paste0(outdir,'/test_glmmTMB_fixed_EB.txt'), quote=FALSE, sep="\t")
 
 
 
@@ -506,7 +558,7 @@ result_list <- parLapply(cl, grouped_data_eb, function(dd) {
 })
 stopCluster(cl)
 results <- bind_rows(Filter(Negate(is.null), result_list))
-write.table(results, file=paste0(outdir,'/test_VGAM_EB.txt'), quote=FALSE, sep="\t")
+write.table(results, file=paste0(outdir,'/test_VGAM_MLE_EB.txt'), quote=FALSE, sep="\t")
 
 
 
@@ -536,13 +588,13 @@ write.table(bind_rows(res_dm), paste0(outdir, "/test_DM_EB.txt"), sep="\t", quot
 
 # Run DM Wald EB
 cl <- makeCluster(30); clusterEvalQ(cl, {library(VGAM); library(tidyverse)})
-clusterExport(cl, "test_model_multinomial_vgam_wald_eb")
+clusterExport(cl, "test_model_multinomial_vgam_wald_EB")
 res_wald <- parLapply(cl, grouped_data_eb, function(dd) {
   tryCatch({
-    test_model_multinomial_vgam_wald_eb(dd) 
+    test_model_multinomial_vgam_wald_EB(dd) 
   }, error = function(e) NULL)
 })
 stopCluster(cl)
 wald_results_df <- bind_rows(Filter(Negate(is.null), res_wald))
-write.table(wald_results_df, paste0(outdir, "/test_DM_Wald_EB.txt"), sep="\t", quote=F)               
+write.table(wald_results_df, paste0(outdir, "/test_DM_Wald_EB.txt"), sep="\t", quote=F)
 
