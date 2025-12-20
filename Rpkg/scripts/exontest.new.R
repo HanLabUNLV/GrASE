@@ -5,6 +5,7 @@ library(glmmTMB)
 library(VGAM)
 library(tidyverse)
 library(grase)
+library(optparse)
 
 # --- Data Preparation Functions ---
 
@@ -198,6 +199,14 @@ test_model_glmmTMB_with_prior <- function(dd, prior_disp) {
         LR <- 2 * (logLik(m1) - logLik(m0))
         pval <- pchisq(as.numeric(LR), df = 1, lower.tail = FALSE)
         return(data.frame(gene=gene, event=event, LRT=as.numeric(LR), p.value=pval, model="betabinomial_glmmTMB_MAP_with_prior", phi=sigma(m1)))
+    } else {
+        m1 <- tryCatch(glm(cbind(y, n - y) ~ groups, data = dd, family = binomial), error = function(e) NULL)
+        m0 <- tryCatch(glm(cbind(y, n - y) ~ 1, data = dd, family = binomial), error = function(e) NULL)
+        if (!is.null(m1) && !is.null(m0)) {
+             LR <- 2 * (logLik(m1) - logLik(m0))
+             pval <- pchisq(as.numeric(LR), df = 1, lower.tail = FALSE)
+             return(data.frame(gene=gene, event=event, LRT=as.numeric(LR), p.value=pval, model="binomial_glm", phi=NA))
+        }
     }
     return(NULL)
 }
@@ -435,6 +444,37 @@ test_model_multinomial_vgam_wald_EB <- function(dd, shape0, rate0, ref_option = 
 outdir = '~/graphml.dexseq.v34/dice_exoncnts'
 exoncnt_master <- paste0(outdir,'/bipartitions.internal.exoncnt.txt')
 cond1 = 'B'; cond2 = 'CD8T'
+phifile = 'phi.glmmtmb.txt'
+args = commandArgs(trailingOnly=TRUE)
+
+option_list = list(
+  make_option(c("-f", "--file"), type="character",  
+              help="exoncnt dataset file name", metavar="character"),
+  make_option(c("-d", "--dir"), type="character", 
+              help="input/output dir name", metavar="character"),
+  make_option(c("-p", "--phi"), type="character", 
+              help="phi estimate filename", metavar="character"),
+  make_option(c("-m", "--model"), type="character", 
+              help="model name", metavar="character")
+); 
+ 
+opt_parser = OptionParser(option_list=option_list);
+opt = parse_args(opt_parser);
+print(opt)
+if (!is.null(opt$dir)) {
+  outdir = opt$dir
+}
+if (!is.null(opt$file)) {
+  exoncnt_master = paste0(outdir, '/', opt$file)
+}
+if (!is.null(opt$phi)) {
+  phifile = opt$phi
+}
+if (!is.null(opt$model)) {
+  model = opt$model 
+}
+
+
 
 if (file.exists(exoncnt_master)) {
   bipartitioncnts <- read.table(exoncnt_master, header=TRUE, row.names=NULL)
@@ -442,10 +482,11 @@ if (file.exists(exoncnt_master)) {
 }
 
 grouped_data <- group_by_event(bipartitioncnts, 'diff', 'n')
+grouped_data <- grouped_data[1:10]
 
 # Global Dispersion Estimation (glmmTMB)
-if (file.exists(paste0(outdir,'/phi.glmmtmb.txt'))) {
-  phi_df <- read.table(paste0(outdir,'/phi.glmmtmb.txt'), header=TRUE, row.names=NULL)
+if (file.exists(paste0(outdir,'/', phifile))) {
+  phi_df <- read.table(paste0(outdir,'/', phifile), header=TRUE, row.names=NULL)
 } else {
   cl <- makeCluster(20, outfile='phi.glmmtmb.log')
   clusterEvalQ(cl, library(glmmTMB))
@@ -463,138 +504,151 @@ if (file.exists(paste0(outdir,'/phi.glmmtmb.txt'))) {
   })
   stopCluster(cl)
   phi_df <- bind_rows(Filter(Negate(is.null), phi_list))
-  write.table(phi_df, file=paste0(outdir,'/phi.glmmtmb.txt'), quote=FALSE, sep="\t") 
+  write.table(phi_df, file=paste0(outdir,'/', phifile), quote=FALSE, sep="\t", row.names = FALSE) 
 }
 
 
-phi_trimmed <- phi_df$phi[phi_df$phi < 1e+10 & phi_df$phi > 0]
+if (model == 'glmmtmb_prior') {
+  phi_trimmed <- phi_df[phi_df$phi < 1e+10 & phi_df$phi > 0,'phi']
 
-# Moderated glmmTMB with Prior 
-fit_phi <- fitdistr(phi_trimmed, "gamma")
-shape0  <- fit_phi$estimate["shape"]
-rate0   <- fit_phi$estimate["rate"]
-prior_disp_wrong <- data.frame(prior = sprintf("gamma(%g,%g)", shape0, rate0), class = "fixef_disp", coef = "")
-print(prior_disp_wrong)
+  # Moderated glmmTMB with Prior 
+  fit_phi <- fitdistr(phi_trimmed, "gamma")
+  shape0  <- fit_phi$estimate["shape"]
+  rate0   <- fit_phi$estimate["rate"]
+  prior_disp_wrong_scale <- data.frame(prior = sprintf("gamma(%g,%g)", shape0, rate0), class = "fixef_disp", coef = "")
+  print(prior_disp_wrong_scale)
 
-# fit normal to log(phi)
-log_phi_vals <- log(phi_trimmed)
-fit_logphi <- fitdistr(log_phi_vals, "normal")
-mean_logphi <- fit_logphi$estimate["mean"]
-sd_logphi   <- fit_logphi$estimate["sd"]
-prior_disp <- data.frame(prior = sprintf("normal(%g,%g)", mean_logphi, sd_logphi), 
-  class = "fixef_disp", 
-  coef = "" # Explicitly target the intercept 
-)
-print(prior_disp)
+  # fit normal to log(phi)
+  log_phi_vals <- log(phi_trimmed)
+  fit_logphi <- fitdistr(log_phi_vals, "normal")
+  mean_logphi <- fit_logphi$estimate["mean"]
+  sd_logphi   <- fit_logphi$estimate["sd"]
+  prior_disp <- data.frame(prior = sprintf("normal(%g,%g)", mean_logphi, sd_logphi), 
+    class = "fixef_disp", 
+    coef = "", # Explicitly target the intercept 
+    stringsAsFactors = FALSE
+  )
+  print(prior_disp)
 
 
-cl <- makeCluster(30, outfile='testglmmTMB_withprior.log')
-clusterEvalQ(cl, { library(glmmTMB); library(VGAM); library(tidyverse) })
-clusterExport(cl, varlist = c("test_model_glmmTMB_with_prior", "prior_disp"), envir = environment())
+  cl <- makeCluster(40, outfile='testglmmTMB_withprior.log')
+  clusterEvalQ(cl, { library(glmmTMB); library(VGAM); library(tidyverse) })
+  clusterExport(cl, varlist = c("test_model_glmmTMB_with_prior", "prior_disp"), envir = environment())
 
-result_list <- parLapply(cl, grouped_data, function(dd) {
-  tryCatch({
-    test_model_glmmTMB_with_prior(dd, prior_disp) # Defaults to moderated glmmTMB BB
-  }, error = function(e) {
-      msg <- sprintf("[%s] ERROR in %s (PID %d): %s\n",
-                     format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
-                     dd$gene[1], Sys.getpid(), conditionMessage(e))
-      cat(msg, file = "glmmtmb_withprior.errors.log", append = TRUE)
-      NULL
+  result_list <- parLapply(cl, grouped_data, function(dd) {
+    tryCatch({
+      test_model_glmmTMB_with_prior(dd, prior_disp) # Defaults to moderated glmmTMB BB
+    }, error = function(e) {
+        msg <- sprintf("[%s] ERROR in %s (PID %d): %s\n",
+                       format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
+                       dd$gene[1], Sys.getpid(), conditionMessage(e))
+        cat(msg, file = "glmmtmb_withprior.errors.log", append = TRUE)
+        NULL
+    })
   })
-})
-stopCluster(cl)
+  stopCluster(cl)
 
-results <- bind_rows(Filter(Negate(is.null), result_list))
-write.table(results, file=paste0(outdir,'/test_glmmTMB_MAP_prior.txt'), quote=FALSE, sep="\t")
+  results <- bind_rows(Filter(Negate(is.null), result_list))
+  write.table(results, file=paste0(outdir,'/test_glmmTMB_MAP_prior.txt'), quote=FALSE, sep="\t", row.names = FALSE)
 
+} else if (model == 'glmmtmb_fixedEB') {
 
-## Empirical Bayes hyperparameters: prior mean and variance
-phi_table <- moderate_phi_log_scale(phi_df)
-bipartitioncnts_eb <- bipartitioncnts %>%
-  left_join(phi_table, by = c("gene", "event"))
-grouped_data_eb <- group_by_event(bipartitioncnts_eb, 'diff', 'n')
-# grouped_data_eb <- Filter(function(x) !is.na(x$z_mod[1]), grouped_data_eb)
+  ## Empirical Bayes hyperparameters: prior mean and variance
+  phi_table <- moderate_phi_log_scale(phi_df)
+  bipartitioncnts_eb <- bipartitioncnts %>%
+    left_join(phi_table, by = c("gene", "event"))
+  grouped_data_eb <- group_by_event(bipartitioncnts_eb, 'diff', 'n')
+  grouped_data_eb <- grouped_data_eb[1:10]
 
-# Moderated glmmTMB with EB
-cl <- makeCluster(30, outfile='testglmmTMB_EB.log')
-clusterEvalQ(cl, { library(glmmTMB); library(VGAM); library(tidyverse) })
-clusterExport(cl, varlist = c("test_model_glmmTMB_EB"), envir = environment())
+  # Moderated glmmTMB with EB
+  cl <- makeCluster(40, outfile='testglmmTMB_EB.log')
+  clusterEvalQ(cl, { library(glmmTMB); library(VGAM); library(tidyverse) })
+  clusterExport(cl, varlist = c("test_model_glmmTMB_EB"), envir = environment())
 
-result_list <- parLapply(cl, grouped_data_eb, function(dd) {
-  tryCatch({
-    test_model_glmmTMB_EB(dd) # Defaults to moderated glmmTMB BB
-  }, error = function(e) {
-      msg <- sprintf("[%s] ERROR in %s (PID %d): %s\n",
-                     format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
-                     dd$gene[1], Sys.getpid(), conditionMessage(e))
-      cat(msg, file = "glmmtmb_EB.errors.log", append = TRUE)
-      NULL
+  result_list <- parLapply(cl, grouped_data_eb, function(dd) {
+    tryCatch({
+      test_model_glmmTMB_EB(dd) # Defaults to moderated glmmTMB BB
+    }, error = function(e) {
+        msg <- sprintf("[%s] ERROR in %s (PID %d): %s\n",
+                       format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
+                       dd$gene[1], Sys.getpid(), conditionMessage(e))
+        cat(msg, file = "glmmtmb_EB.errors.log", append = TRUE)
+        NULL
+    })
   })
-})
-stopCluster(cl)
+  stopCluster(cl)
 
-results <- bind_rows(Filter(Negate(is.null), result_list))
-write.table(results, file=paste0(outdir,'/test_glmmTMB_fixed_EB.txt'), quote=FALSE, sep="\t")
+  results <- bind_rows(Filter(Negate(is.null), result_list))
+  write.table(results, file=paste0(outdir,'/test_glmmTMB_fixed_EB.txt'), quote=FALSE, sep="\t", row.names = FALSE)
+
+} else if (model == 'VGAM_MLE_EB') {
+
+  ## Empirical Bayes hyperparameters: prior mean and variance
+  phi_table <- moderate_phi_log_scale(phi_df)
+  bipartitioncnts_eb <- bipartitioncnts %>%
+    left_join(phi_table, by = c("gene", "event"))
+  grouped_data_eb <- group_by_event(bipartitioncnts_eb, 'diff', 'n')
+  grouped_data_eb <- grouped_data_eb[1:10]
 
 
+  # Moderated VGAM with EB
+  cl <- makeCluster(40, outfile='testVGAM_EB.log')
+  clusterEvalQ(cl, { library(glmmTMB); library(VGAM); library(tidyverse) })
+  clusterExport(cl, varlist = c("test_model_vgam_EB"), envir = environment())
 
-
-# Moderated VGAM with EB
-cl <- makeCluster(30, outfile='testVGAM_EB.log')
-clusterEvalQ(cl, { library(glmmTMB); library(VGAM); library(tidyverse) })
-clusterExport(cl, varlist = c("test_model_vgam_EB"), envir = environment())
-
-result_list <- parLapply(cl, grouped_data_eb, function(dd) {
-  tryCatch({
-    test_model_vgam_EB(dd) 
-  }, error = function(e) {
-      msg <- sprintf("[%s] ERROR in %s (PID %d): %s\n",
-                     format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
-                     f, Sys.getpid(), conditionMessage(e))
-      cat(msg, file = "vgam_eb.errors.log", append = TRUE)
-      NULL
+  result_list <- parLapply(cl, grouped_data_eb, function(dd) {
+    tryCatch({
+      test_model_vgam_EB(dd) 
+    }, error = function(e) {
+        msg <- sprintf("[%s] ERROR in %s (PID %d): %s\n",
+                       format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
+                       f, Sys.getpid(), conditionMessage(e))
+        cat(msg, file = "vgam_eb.errors.log", append = TRUE)
+        NULL
+    })
   })
-})
-stopCluster(cl)
-results <- bind_rows(Filter(Negate(is.null), result_list))
-write.table(results, file=paste0(outdir,'/test_VGAM_MLE_EB.txt'), quote=FALSE, sep="\t")
+  stopCluster(cl)
+  results <- bind_rows(Filter(Negate(is.null), result_list))
+  write.table(results, file=paste0(outdir,'/test_VGAM_MLE_EB.txt'), quote=FALSE, sep="\t", row.names = FALSE)
+
+} else if (model == 'DM_EB') {
+
+  # DM Moderation Pipeline (NEW)
+  # group_by_event on counts instead of diff/n for DM
+  grouped_counts <- bipartitioncnts %>% group_by(gene, event) %>% group_split()
+  cl <- makeCluster(20); clusterEvalQ(cl, {library(VGAM); library(tidyverse)})
+  clusterExport(cl, "prec_estimate_vgam")
+  prec_list <- parLapply(cl, grouped_counts, prec_estimate_vgam)
+  stopCluster(cl)
+  prec_table <- moderate_prec_log_scale(bind_rows(Filter(Negate(is.null), prec_list)))
 
 
+  bipartitioncnts_eb <- bipartitioncnts %>%
+    left_join(prec_table, by = c("gene", "event"))
+  grouped_eb <- group_by_event(bipartitioncnts_eb, 'diff', 'n')
 
+  # Run DM EB
+  cl <- makeCluster(40); clusterEvalQ(cl, {library(VGAM); library(tidyverse)})
+  clusterExport(cl, "test_model_multinomial_vgam_EB")
+  res_dm <- parLapply(cl, grouped_eb, function(dd) tryCatch(test_model_multinomial_vgam_EB(dd), error=function(e) NULL))
+  stopCluster(cl)
+  write.table(bind_rows(res_dm), paste0(outdir, "/test_DM_EB.txt"), sep="\t", quote=F, row.names = FALSE)
 
+} else if (model == 'DM_Wald_EB') {                                                                                            
 
-# DM Moderation Pipeline (NEW)
-# group_by_event on counts instead of diff/n for DM
-grouped_counts <- bipartitioncnts %>% group_by(gene, event) %>% group_split()
-cl <- makeCluster(20); clusterEvalQ(cl, {library(VGAM); library(tidyverse)})
-clusterExport(cl, "prec_estimate_vgam")
-prec_list <- parLapply(cl, grouped_counts, prec_estimate_vgam)
-stopCluster(cl)
-prec_table <- moderate_prec_log_scale(bind_rows(Filter(Negate(is.null), prec_list)))
-
-
-bipartitioncnts_eb <- bipartitioncnts %>%
-  left_join(prec_table, by = c("gene", "event"))
-grouped_eb <- group_by_event(bipartitioncnts_eb, 'diff', 'n')
-
-# Run DM EB
-cl <- makeCluster(30); clusterEvalQ(cl, {library(VGAM); library(tidyverse)})
-clusterExport(cl, "test_model_multinomial_vgam_EB")
-res_dm <- parLapply(cl, grouped_eb, function(dd) tryCatch(test_model_multinomial_vgam_EB(dd), error=function(e) NULL))
-stopCluster(cl)
-write.table(bind_rows(res_dm), paste0(outdir, "/test_DM_EB.txt"), sep="\t", quote=F)
-                                                                                            
-
-# Run DM Wald EB
-cl <- makeCluster(30); clusterEvalQ(cl, {library(VGAM); library(tidyverse)})
-clusterExport(cl, "test_model_multinomial_vgam_wald_EB")
-res_wald <- parLapply(cl, grouped_data_eb, function(dd) {
-  tryCatch({
-    test_model_multinomial_vgam_wald_EB(dd) 
-  }, error = function(e) NULL)
-})
-stopCluster(cl)
-wald_results_df <- bind_rows(Filter(Negate(is.null), res_wald))
-write.table(wald_results_df, paste0(outdir, "/test_DM_Wald_EB.txt"), sep="\t", quote=F)
+  # Run DM Wald EB
+  cl <- makeCluster(40); clusterEvalQ(cl, {library(VGAM); library(tidyverse)})
+  clusterExport(cl, "test_model_multinomial_vgam_wald_EB")
+  res_wald <- parLapply(cl, grouped_data_eb, function(dd) {
+    tryCatch({
+      test_model_multinomial_vgam_wald_EB(dd) 
+    }, error = function(e) NULL)
+  })
+  stopCluster(cl)
+  wald_results_df <- bind_rows(Filter(Negate(is.null), res_wald))
+  write.table(wald_results_df, paste0(outdir, "/test_DM_Wald_EB.txt"), sep="\t", quote=F, row.names = FALSE)
+} else {
+  print ("model misspecified")
+  print ("choose between glmmTMB_prior, glmmTMB_fixedEB, VGAM_MLE_EB, DM_EB, DM_Wald_EB")
+}
 
