@@ -165,12 +165,46 @@ prec_estimate_vgam <- function(dd) {
     return(data.frame(gene = gene, event = event, log_prec = log_prec_hat, var_log_prec = vc[ncol(Y), ncol(Y)]))
 }
 
+
 moderate_prec_log_scale <- function(prec_table) {
-  z_bar <- mean(prec_table$log_prec, na.rm = TRUE)
-  tau2_z <- max(var(prec_table$log_prec, na.rm = TRUE) - mean(prec_table$var_log_prec, na.rm = TRUE), 0)
+  # 1. Filter for robust estimation of the prior (ignore failed fits)
+  # log_prec is logit(rho). Values like -2e6 are numerical garbage.
+  # var_log_prec > 1000 indicates essentially no information.
+  valid_subset <- prec_table$var_log_prec < 1000 & abs(prec_table$log_prec) < 50
+  
+  # If too few valid points, fallback to simple median or original
+  if (sum(valid_subset, na.rm=TRUE) < 10) {
+      z_bar <- median(prec_table$log_prec, na.rm=TRUE)
+      tau2_z <- 0 
+  } else {
+      # 2. Estimate Prior Parameters from valid subset
+      # Use Median for center to be robust against outliers
+      z_bar <- median(prec_table$log_prec[valid_subset], na.rm = TRUE)
+      
+      # Estimate biological variance (tau2)
+      # Total Variance of estimates
+      s2_z <- var(prec_table$log_prec[valid_subset], na.rm = TRUE)
+      # Typical sampling variance (use median to be robust against outliers)
+      typical_var_z <- median(prec_table$var_log_prec[valid_subset], na.rm = TRUE)
+      
+      tau2_z <- max(s2_z - typical_var_z, 0)
+  }
+
+  # 3. Calculate Weights for ALL data points
+  # w = tau2 / (tau2 + sampling_var)
+  # If sampling_var is huge (garbage fit), w -> 0, and we shrink to z_bar
   prec_table$w_prec <- tau2_z / (tau2_z + prec_table$var_log_prec)
+  prec_table$w_prec[is.na(prec_table$w_prec)] <- 0
+  
+  # 4. Moderate
   prec_table$log_prec_mod <- (prec_table$w_prec * prec_table$log_prec) + ((1 - prec_table$w_prec) * z_bar)
   prec_table$prec_mod <- exp(prec_table$log_prec_mod)
+  
+  # 5. Convert to rho
+  # Use pmax/pmin for element-wise operations (max/min collapses vector to scalar)
+  rho_mod <- prec_table$prec_mod / (1 + prec_table$prec_mod)
+  prec_table$rho_mod <- pmax(pmin(rho_mod, 1 - 1e-6), 1e-6)
+
   return(prec_table)
 }
 
@@ -347,7 +381,7 @@ test_model_vgam_EB <- function(dd) {
 # 4. Moderated VGAM Dirichlet-Multinomial EB
 test_model_multinomial_vgam_EB <- function(dd) {
     gene <- unique(dd$gene); event <- unique(dd$event)
-    prec_mod <- dd$prec_mod[1]
+    rho_mod <- dd$rho_mod[1]
     wide_df <- dd %>% dplyr::select(sample, groups, type, count) %>% pivot_wider(names_from = type, values_from = count, values_fill = 0)
     Y <- as.matrix(wide_df[, setdiff(names(wide_df), c("sample", "groups"))])
     wide_df <- wide_df[rowSums(Y) > 0, ]
@@ -355,8 +389,32 @@ test_model_multinomial_vgam_EB <- function(dd) {
     
     if (nrow(Y) < 2 || length(unique(wide_df$groups)) < 2) return(NULL)
 
-    m1 <- tryCatch(vglm(Y ~ groups, dirmultinomial(idisp = prec_mod, zero = ncol(Y)), data = wide_df), error = function(e) NULL)
-    m0 <- tryCatch(vglm(Y ~ 1, dirmultinomial(idisp = prec_mod, zero = ncol(Y)), data = wide_df), error = function(e) NULL)
+    # --- Fix rho using Offset and Constraints ---
+    K <- ncol(Y) # Number of predictors = Number of categories (K-1 probs + 1 rho)
+    logit_rho <- qlogis(rho_mod)
+    
+    # Offset: Set the K-th predictor (rho) to logit_rho
+    off <- matrix(0, nrow = nrow(Y), ncol = K)
+    off[, K] <- logit_rho
+    
+    # Constraints: Suppress estimation of the K-th predictor
+    # Create a K x (K-1) matrix (Identity with last column removed)
+    cm <- diag(K)[, -K, drop = FALSE]
+    
+    # Apply constraints to Intercept and groups
+    clist_full <- list("(Intercept)" = cm, groups = cm)
+    clist_null <- list("(Intercept)" = cm)
+
+    m1 <- tryCatch(
+        vglm(Y ~ groups, dirmultinomial, data = wide_df, 
+             offset = off, constraints = clist_full), 
+        error = function(e) NULL
+    )
+    m0 <- tryCatch(
+        vglm(Y ~ 1, dirmultinomial, data = wide_df, 
+             offset = off, constraints = clist_null), 
+        error = function(e) NULL
+    )
 
     if (!is.null(m1) && !is.null(m0)) {
         LR <- 2 * (logLik(m1) - logLik(m0))
@@ -398,14 +456,21 @@ test_model_multinomial_vgam_wald_EB <- function(dd, shape0, rate0, ref_option = 
     
     if (nrow(Y) < 2 || length(unique(wide_df$groups)) < 2 || ncol(Y) < 2) return(NULL)
 
-    # 3. Estimate precision and apply moderation (same as previous logic)
-    m_init <- tryCatch(vglm(Y ~ 1, dirmultinomial, data = wide_df), error = function(e) NULL)
-    if (is.null(m_init)) return(NULL)
+
+    # 3. Fix rho using Offset and Constraints
+    K <- ncol(Y)
+    logit_rho <- qlogis(rho_mod)
+    
+    off <- matrix(0, nrow = nrow(Y), ncol = K)
+    off[, K] <- logit_rho
+    
+    cm <- diag(K)[, -K, drop = FALSE]
+    clist_full <- list("(Intercept)" = cm, groups = cm)
 
     # 4. Fit the Full Model with moderated precision
-    # 'zero = ncol(Y)' ensures precision is an intercept-only constant (constant across the group effect)
     m1 <- tryCatch(
-      vglm(Y ~ groups, dirmultinomial(idisp = prec_mod, zero = ncol(Y)), data = wide_df), 
+      vglm(Y ~ groups, dirmultinomial, data = wide_df, 
+           offset = off, constraints = clist_full), 
       error = function(e) NULL
     )
 
@@ -482,13 +547,13 @@ if (file.exists(exoncnt_master)) {
 }
 
 grouped_data <- group_by_event(bipartitioncnts, 'diff', 'n')
-grouped_data <- grouped_data[1:10]
+#grouped_data <- grouped_data[1:10]
 
 # Global Dispersion Estimation (glmmTMB)
 if (file.exists(paste0(outdir,'/', phifile))) {
   phi_df <- read.table(paste0(outdir,'/', phifile), header=TRUE, row.names=NULL)
-} else {
-  cl <- makeCluster(20, outfile='phi.glmmtmb.log')
+ } else {
+  cl <- makeCluster(30, outfile='phi.glmmtmb.log')
   clusterEvalQ(cl, library(glmmTMB))
   clusterExport(cl, varlist = c("phi_estimate_glmmTMB", "grouped_data"), envir = environment())
   phi_list <- parLapply(cl, grouped_data, function(dd) {
@@ -558,7 +623,7 @@ if (model == 'glmmtmb_prior') {
   bipartitioncnts_eb <- bipartitioncnts %>%
     left_join(phi_table, by = c("gene", "event"))
   grouped_data_eb <- group_by_event(bipartitioncnts_eb, 'diff', 'n')
-  grouped_data_eb <- grouped_data_eb[1:10]
+  #grouped_data_eb <- grouped_data_eb[1:10]
 
   # Moderated glmmTMB with EB
   cl <- makeCluster(40, outfile='testglmmTMB_EB.log')
@@ -588,7 +653,7 @@ if (model == 'glmmtmb_prior') {
   bipartitioncnts_eb <- bipartitioncnts %>%
     left_join(phi_table, by = c("gene", "event"))
   grouped_data_eb <- group_by_event(bipartitioncnts_eb, 'diff', 'n')
-  grouped_data_eb <- grouped_data_eb[1:10]
+  #grouped_data_eb <- grouped_data_eb[1:10]
 
 
   # Moderated VGAM with EB
@@ -615,17 +680,23 @@ if (model == 'glmmtmb_prior') {
 
   # DM Moderation Pipeline (NEW)
   # group_by_event on counts instead of diff/n for DM
-  grouped_counts <- bipartitioncnts %>% group_by(gene, event) %>% group_split()
-  cl <- makeCluster(20); clusterEvalQ(cl, {library(VGAM); library(tidyverse)})
-  clusterExport(cl, "prec_estimate_vgam")
-  prec_list <- parLapply(cl, grouped_counts, prec_estimate_vgam)
-  stopCluster(cl)
-  prec_table <- moderate_prec_log_scale(bind_rows(Filter(Negate(is.null), prec_list)))
-
+  prec_file = 'prec_dm.txt'
+  if (file.exists(paste0(outdir,'/', prec_file))) {
+    prec_table <- read.table(paste0(outdir,'/', prec_file), header=TRUE, row.names=NULL)
+  } else {
+    grouped_counts <- bipartitioncnts %>% group_by(gene, event) %>% group_split()
+    cl <- makeCluster(30); clusterEvalQ(cl, {library(VGAM); library(tidyverse)})
+    clusterExport(cl, "prec_estimate_vgam")
+    prec_list <- parLapply(cl, grouped_counts, prec_estimate_vgam)
+    stopCluster(cl)
+    prec_table <- moderate_prec_log_scale(bind_rows(Filter(Negate(is.null), prec_list)))
+    write.table(prec_table, paste0(outdir,'/', prec_file), sep="\t", quote=F, row.names = FALSE)
+  }
 
   bipartitioncnts_eb <- bipartitioncnts %>%
     left_join(prec_table, by = c("gene", "event"))
-  grouped_eb <- group_by_event(bipartitioncnts_eb, 'diff', 'n')
+  grouped_eb <- bipartitioncnts_eb %>% group_by(gene, event) %>% group_split()
+  #grouped_eb <- group_by_event(bipartitioncnts_eb, 'diff', 'n')
 
   # Run DM EB
   cl <- makeCluster(40); clusterEvalQ(cl, {library(VGAM); library(tidyverse)})
@@ -636,10 +707,28 @@ if (model == 'glmmtmb_prior') {
 
 } else if (model == 'DM_Wald_EB') {                                                                                            
 
+  # DM Moderation Pipeline (Same as DM_EB)
+  prec_file = 'prec_dm.txt'
+  if (file.exists(paste0(outdir,'/', prec_file))) {
+    prec_table <- read.table(paste0(outdir,'/', prec_file), header=TRUE, row.names=NULL)
+  } else {
+    grouped_counts <- bipartitioncnts %>% group_by(gene, event) %>% group_split()
+    cl <- makeCluster(30); clusterEvalQ(cl, {library(VGAM); library(tidyverse)})
+    clusterExport(cl, "prec_estimate_vgam")
+    prec_list <- parLapply(cl, grouped_counts, prec_estimate_vgam)
+    stopCluster(cl)
+    prec_table <- moderate_prec_log_scale(bind_rows(Filter(Negate(is.null), prec_list)))
+    write.table(prec_table, paste0(outdir,'/', prec_file), sep="\t", quote=F, row.names = FALSE)
+  }
+
+  bipartitioncnts_eb <- bipartitioncnts %>%
+    left_join(prec_table, by = c("gene", "event"))
+  grouped_eb <- bipartitioncnts_eb %>% group_by(gene, event) %>% group_split()
+
   # Run DM Wald EB
   cl <- makeCluster(40); clusterEvalQ(cl, {library(VGAM); library(tidyverse)})
   clusterExport(cl, "test_model_multinomial_vgam_wald_EB")
-  res_wald <- parLapply(cl, grouped_data_eb, function(dd) {
+  res_wald <- parLapply(cl, grouped_eb, function(dd) {
     tryCatch({
       test_model_multinomial_vgam_wald_EB(dd) 
     }, error = function(e) NULL)
