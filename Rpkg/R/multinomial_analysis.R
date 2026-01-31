@@ -73,6 +73,9 @@ find_diff_and_ref_exparts_general <- function(
   D <- lapply(seq_len(r), function(k) {
     # Get union of all OTHER groups (equivalent to ex_part2_union in binary case)
     other_groups_union <- Reduce(union, U[-k])
+    if (all(sapply(ex_parts[[k]], length) == 0)) {
+      return("no_exon_part")
+    }
     # Apply setdiff to each path in group k, then intersect results
     setdiff_results <- lapply(ex_parts[[k]], setdiff, other_groups_union)
     intersect_stream(setdiff_results)
@@ -110,10 +113,20 @@ find_diff_and_ref_exparts_general <- function(
 
   # Add variable number of columns
   for (k in seq_len(r)) {
-    new_row[[paste0("setdiff", k)]] <- format_edges(D[[k]])
+    if (identical(D[[k]], "no_exon_part")) {
+      new_row[[paste0("setdiff", k)]] <- "no_exon_part"
+    } else if (length(D[[k]]) == 0) {
+      new_row[[paste0("setdiff", k)]] <- "{}"
+    } else {
+      new_row[[paste0("setdiff", k)]] <- format_edges(if (length(D[[k]]) > 0) D[[k]] else "empty")
+    }
     new_row[[paste0("transcripts", k)]] <- paste(tx_list[[k]], collapse=", ")
     new_row[[paste0("path", k)]] <- paste(
       sapply(vpaths_list[[k]], function(vec) paste(vec, collapse="-")),
+      collapse=", "
+    )
+    new_row[[paste0("exparts", k)]] <- paste(
+      sapply(ex_parts[[k]], function(vec) if(length(vec) > 0) paste(vec, collapse="-") else "empty"),
       collapse=", "
     )
   }
@@ -271,14 +284,30 @@ multinomial_paths <- function(gene, g, sg, outdir, max_path = 20, collapse_bubbl
     multipaths_df <- multipaths_df %>% dplyr::rowwise() %>% dplyr::mutate(ref_part_cnt = count_items(ref_ex_part)) %>% dplyr::ungroup()
     # remove rows where all setdiff columns are empty
     setdiff_cols <- grep("^setdiff[0-9]+$", names(multipaths_df), value = TRUE)
+    path_cols <- grep("^path[0-9]+$", names(multipaths_df), value = TRUE)
+
     if (length(setdiff_cols) > 0) {
-      # Check if all setdiff columns are empty for each row
-      all_empty <- apply(multipaths_df[setdiff_cols], 1, function(row) all(row == "" | is.na(row)))
-      multipaths_filtered <- multipaths_df[!all_empty, ]
+      # Pass the entire dataframe to apply so we can access both path and setdiff columns
+      keep_rows <- apply(multipaths_df, 1, function(row) {
+        # Get values for paths that exist (non-empty string in standardized df)
+        p_vals <- row[path_cols]
+        active_mask <- p_vals != "" & !is.na(p_vals)
+        if (!any(active_mask)) return(FALSE)
+
+        # Get corresponding setdiff columns
+        active_path_cols <- names(p_vals)[active_mask]
+        active_setdiff_cols <- gsub("path", "setdiff", active_path_cols)
+
+        # Check if corresponding setdiff values are valid
+        # We want to filter out "{}", but keep "no_exon_part" and valid edge IDs (starting with "E")
+        sd_vals <- row[active_setdiff_cols]
+        all(sd_vals != "{}" & !is.na(sd_vals))
+      })
+      multipaths_filtered <- multipaths_df[keep_rows, ]
     } else {
       multipaths_filtered <- multipaths_df
     }
-    
+     
     # For multinomial, we can't use the same grouping logic as binary case
     # Just remove duplicates based on all setdiff columns and ref_ex_part
     if (nrow(multipaths_filtered) > 0 && length(setdiff_cols) > 0) {
