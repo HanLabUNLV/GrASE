@@ -3,6 +3,7 @@ library(parallel)
 #library(matrixStats)
 library(tidyverse)
 library(grase)
+library(optparse)
 
 # Function to sum counts across columns for matching gene:exon keys
 # Function to compute column-wise sum for a gene's exons
@@ -155,6 +156,7 @@ count_multinomial <- function(multinomial_file, countmat, sampleinfo, outdir) {
     # This ensures mutate() and pivot_longer() downstream will not error.
     counts_out <- as.data.frame(matrix(counts_dict[vals,], nrow = nrow(multi_df), ncol=n_samples))
     colnames(counts_out) <- colnames(countmat)[1:n_samples]
+    counts_out$exon_part <- vals
     return(counts_out)
   }
   
@@ -179,7 +181,7 @@ count_multinomial <- function(multinomial_file, countmat, sampleinfo, outdir) {
     counts_df <- get_counts_df(col)
     
     # Add mean counts to the summary data frame
-    multi_df[[paste0(col, "_mean")]] <- rowMeans(counts_df, na.rm=TRUE)
+    multi_df[[paste0(col, "_mean")]] <- rowMeans(counts_df[,1:n_samples], na.rm=TRUE)
     
     # Convert to long format and store
     long_dfs[[col]] <- counts_df %>%
@@ -195,7 +197,9 @@ count_multinomial <- function(multinomial_file, countmat, sampleinfo, outdir) {
     mutate(
       gene = gene_id,
       groups = sampleinfo[sample]
-    )
+    ) %>%
+    relocate(exon_part, .after = type) %>%
+    arrange(as.numeric(event))
     
   # Save the updated definitions (with means) and the long-format counts
   write.table(multi_df, file=paste0(outdir,'/', gene_id, '.multinomial.txt'), 
@@ -228,6 +232,7 @@ count_multinomial <- function(multinomial_file, countmat, sampleinfo, outdir) {
 
 #exit()
 
+analysis_type = 'all' 
 cond1 = 'B'
 cond2 = 'CD8T'
 
@@ -253,97 +258,116 @@ sampleTable = data.frame(
 sampleinfo <- as.vector(sampleTable[,"condition"])
 names(sampleinfo) <- rownames(sampleTable)
 
+args = commandArgs(trailingOnly=TRUE)
+
+option_list = list(
+  make_option(c("-t", "--type"), type="character",  
+              help="partition type", metavar="character")
+); 
+ 
+opt_parser = OptionParser(option_list=option_list);
+opt = parse_args(opt_parser);
+print(opt)
+if (!is.null(opt$type)) {
+  analysis_type = opt$type
+} 
 
 
 
-# input files
-bipartition_path = '~/graphml.dexseq.v34/bipartitions.filtered'
-outdir = '~/graphml.dexseq.v34/dice_exoncnts'
 
-bipartition_files <- list.files(path = bipartition_path,
-                                 pattern = "bipartitions.internal.txt$", full.names=TRUE)
-#bipartition_master <- paste0(bipartition_path, '/cat')
-#exoncnt_master <- paste0(outdir,'/cat')
 
-cl_num = 30
-cl <- makeCluster(cl_num, type = "PSOCK", outfile='exoncnt.bipartition.log')
-clusterEvalQ(cl, {library(tidyverse)})
-clusterExport(cl, c("write_exoncnt_long", "count_bipartitions","sum_exon_counts","read_counts","sampleinfo", "outdir"))
+if (analysis_type == 'all' || analysis_type == 'bipartition') {
 
-# run the jobs
-res <- parallel::parLapply(cl, bipartition_files, function(f) {
-  tryCatch({
-    gene_id <- sub("\\.bipartitions\\.internal\\.txt$", "", basename(f))
-    count_bipartitions(bipartition_file = f, countmat = read_counts[read_counts$gene==gene_id,], sampleinfo, outdir, 'bipartitions')
-  }, error = function(e) {
-    msg <- sprintf("[%s] ERROR in %s (PID %d): %s\n",
-                   format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
-                   f, Sys.getpid(), conditionMessage(e))
-    cat(msg, file = "exoncnt.bipartition.errors.log", append = TRUE)
-    NULL
+  # input files
+  bipartition_path = '~/graphml.dexseq.v34/bipartitions.filtered'
+  outdir = '~/graphml.dexseq.v34/dice_exoncnts'
+
+  bipartition_files <- list.files(path = bipartition_path,
+                                   pattern = "bipartitions.internal.txt$", full.names=TRUE)
+  #bipartition_master <- paste0(bipartition_path, '/cat')
+  #exoncnt_master <- paste0(outdir,'/cat')
+
+  cl_num = 30
+  cl <- makeCluster(cl_num, type = "PSOCK", outfile='exoncnt.bipartition.log')
+  clusterEvalQ(cl, {library(tidyverse)})
+  clusterExport(cl, c("write_exoncnt_long", "count_bipartitions","sum_exon_counts","read_counts","sampleinfo", "outdir"))
+
+  # run the jobs
+  res <- parallel::parLapply(cl, bipartition_files, function(f) {
+    tryCatch({
+      gene_id <- sub("\\.bipartitions\\.internal\\.txt$", "", basename(f))
+      count_bipartitions(bipartition_file = f, countmat = read_counts[read_counts$gene==gene_id,], sampleinfo, outdir, 'bipartitions')
+    }, error = function(e) {
+      msg <- sprintf("[%s] ERROR in %s (PID %d): %s\n",
+                     format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
+                     f, Sys.getpid(), conditionMessage(e))
+      cat(msg, file = "exoncnt.bipartition.errors.log", append = TRUE)
+      NULL
+    })
   })
-})
-stopCluster(cl)
+  stopCluster(cl)
 
+} else if (analysis_type == 'all' || analysis_type == 'n_choose_2') {
 
-# input files
-n_choose_2_path = '~/graphml.dexseq.v34/n_choose_2.filtered'
-outdir = '~/graphml.dexseq.v34/dice_exoncnts'
+  # input files
+  n_choose_2_path = '~/graphml.dexseq.v34/n_choose_2.filtered'
+  outdir = '~/graphml.dexseq.v34/dice_exoncnts'
 
-n_choose_2_files <- list.files(path = n_choose_2_path,
-                                 pattern = "n_choose_2.internal.txt$", full.names=TRUE)
-#n_choose_2_master <- paste0(n_choose_2_path, '/cat')
-#exoncnt_master <- paste0(outdir,'/cat')
+  n_choose_2_files <- list.files(path = n_choose_2_path,
+                                   pattern = "n_choose_2.internal.txt$", full.names=TRUE)
+  #n_choose_2_master <- paste0(n_choose_2_path, '/cat')
+  #exoncnt_master <- paste0(outdir,'/cat')
 
-cl_num = 30
-cl <- makeCluster(cl_num, type = "PSOCK", outfile='exoncnt.n_choose_2.log')
-clusterEvalQ(cl, {library(tidyverse)})
-clusterExport(cl, c("write_exoncnt_long", "count_bipartitions","sum_exon_counts","read_counts","sampleinfo", "outdir"))
+  cl_num = 30
+  cl <- makeCluster(cl_num, type = "PSOCK", outfile='exoncnt.n_choose_2.log')
+  clusterEvalQ(cl, {library(tidyverse)})
+  clusterExport(cl, c("write_exoncnt_long", "count_bipartitions","sum_exon_counts","read_counts","sampleinfo", "outdir"))
 
-# run the jobs
-res <- parallel::parLapply(cl, n_choose_2_files, function(f) {
-  tryCatch({
-    gene_id <- sub("\\.n_choose_2\\.internal\\.txt$", "", basename(f))
-    count_bipartitions(bipartition_file = f, countmat = read_counts[read_counts$gene==gene_id,], sampleinfo, outdir, 'n_choose_2')
-  }, error = function(e) {
-    msg <- sprintf("[%s] ERROR in %s (PID %d): %s\n",
-                   format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
-                   f, Sys.getpid(), conditionMessage(e))
-    cat(msg, file = "exoncnt.n_choose_2.errors.log", append = TRUE)
-    NULL
+  # run the jobs
+  res <- parallel::parLapply(cl, n_choose_2_files, function(f) {
+    tryCatch({
+      gene_id <- sub("\\.n_choose_2\\.internal\\.txt$", "", basename(f))
+      count_bipartitions(bipartition_file = f, countmat = read_counts[read_counts$gene==gene_id,], sampleinfo, outdir, 'n_choose_2')
+    }, error = function(e) {
+      msg <- sprintf("[%s] ERROR in %s (PID %d): %s\n",
+                     format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
+                     f, Sys.getpid(), conditionMessage(e))
+      cat(msg, file = "exoncnt.n_choose_2.errors.log", append = TRUE)
+      NULL
+    })
   })
-})
-stopCluster(cl)
+  stopCluster(cl)
+
+} else if (analysis_type == 'all' || analysis_type == 'multinomial') {
 
 
+  # input files
+  multinomial_path = '~/graphml.dexseq.v34/multinomial.filtered'
+  outdir = '~/graphml.dexseq.v34/dice_exoncnts'
 
-# input files
-multinomial_path = '~/graphml.dexseq.v34/multinomial.filtered'
-outdir = '~/graphml.dexseq.v34/dice_exoncnts'
+  multinomial_files <- list.files(path = multinomial_path,
+                                   pattern = "multinomial.internal.txt$", full.names=TRUE)
+  #multinomial_master <- paste0(multinomial_path, '/cat')
+  #exoncnt_master <- paste0(outdir,'/cat')
 
-multinomial_files <- list.files(path = multinomial_path,
-                                 pattern = "multinomial.internal.txt$", full.names=TRUE)
-#multinomial_master <- paste0(multinomial_path, '/cat')
-#exoncnt_master <- paste0(outdir,'/cat')
+  cl_num = 30
+  cl <- makeCluster(cl_num, type = "PSOCK", outfile='exoncnt.multinomial.log')
+  clusterEvalQ(cl, {library(tidyverse)})
+  clusterExport(cl, c("write_exoncnt_long", "count_multinomial","sum_exon_counts","read_counts","sampleinfo", "outdir"))
 
-cl_num = 30
-cl <- makeCluster(cl_num, type = "PSOCK", outfile='exoncnt.multinomial.log')
-clusterEvalQ(cl, {library(tidyverse)})
-clusterExport(cl, c("write_exoncnt_long", "count_multinomial","sum_exon_counts","read_counts","sampleinfo", "outdir"))
-
-# run the jobs
-res <- parallel::parLapply(cl, multinomial_files, function(f) {
-  tryCatch({
-    gene_id <- sub("\\.multinomial\\.internal\\.txt$", "", basename(f))
-    count_multinomial(multinomial_file = f, countmat = read_counts[read_counts$gene==gene_id,], sampleinfo, outdir)
-  }, error = function(e) {
-    msg <- sprintf("[%s] ERROR in %s (PID %d): %s\n",
-                   format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
-                   f, Sys.getpid(), conditionMessage(e))
-    cat(msg, file = "exoncnt.multinomial.errors.log", append = TRUE)
-    NULL
+  # run the jobs
+  res <- parallel::parLapply(cl, multinomial_files, function(f) {
+    tryCatch({
+      gene_id <- sub("\\.multinomial\\.internal\\.txt$", "", basename(f))
+      count_multinomial(multinomial_file = f, countmat = read_counts[read_counts$gene==gene_id,], sampleinfo, outdir)
+    }, error = function(e) {
+      msg <- sprintf("[%s] ERROR in %s (PID %d): %s\n",
+                     format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
+                     f, Sys.getpid(), conditionMessage(e))
+      cat(msg, file = "exoncnt.multinomial.errors.log", append = TRUE)
+      NULL
+    })
   })
-})
-stopCluster(cl)
+  stopCluster(cl)
 
-
+}
