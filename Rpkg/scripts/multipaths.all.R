@@ -43,8 +43,9 @@ results <- foreach(
 #  outdir = '/data2/han_lab/stevepark/SplicingGraphs/indir/'
 
 
-  filename = file.path(outdir, "multinomial.nocollapse", paste0(gene, ".multinomial.txt"))
-  runninglog = file.path(outdir, "multinomial.nocollapse", paste0(gene, ".running"))
+  multipathdir = file.path(outdir, "multinomial.nocollapse") 
+  filename = file.path(multipathdir, paste0(gene, ".multinomial.txt"))
+  runninglog = file.path(multipathdir, paste0(gene, ".running"))
   if (file.exists(filename) | file.exists(runninglog)) {
     message(paste("skipping existing ", filename))
     flush.console()
@@ -90,7 +91,6 @@ results <- foreach(
   # call your downstream function, fully namespaced
   cat("  calling grase::multipath_paths()\n"); flush.console()
    
-  multipathdir = file.path(outdir, "multinomial.nocollapse") 
   if(DEBUG_MODE) print("multipathdir")
   if(DEBUG_MODE) print(multipathdir)
   grase::multinomial_paths(
