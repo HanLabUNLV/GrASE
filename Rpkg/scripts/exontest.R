@@ -201,8 +201,8 @@ moderate_prec_log_scale <- function(prec_table) {
   prec_table$prec_mod <- exp(prec_table$log_prec_mod)
   
   # 5. Convert to rho
-  # Use pmax/pmin for element-wise operations (max/min collapses vector to scalar)
-  rho_mod <- prec_table$prec_mod / (1 + prec_table$prec_mod)
+  # rho = 1 / (1 + A)
+  rho_mod <- 1 / (1 + prec_table$prec_mod)
   prec_table$rho_mod <- pmax(pmin(rho_mod, 1 - 1e-6), 1e-6)
 
   return(prec_table)
@@ -381,7 +381,9 @@ test_model_vgam_EB <- function(dd) {
 # 4. Moderated VGAM Dirichlet-Multinomial EB
 test_model_multinomial_vgam_EB <- function(dd) {
     gene <- unique(dd$gene); event <- unique(dd$event)
+    log_prec_mod <- dd$log_prec_mod[1]
     rho_mod <- dd$rho_mod[1]
+
     wide_df <- dd %>% dplyr::select(sample, groups, type, count) %>% pivot_wider(names_from = type, values_from = count, values_fill = 0)
     Y <- as.matrix(wide_df[, setdiff(names(wide_df), c("sample", "groups"))])
     wide_df <- wide_df[rowSums(Y) > 0, ]
@@ -391,12 +393,11 @@ test_model_multinomial_vgam_EB <- function(dd) {
 
     # --- Fix rho using Offset and Constraints ---
     K <- ncol(Y) # Number of predictors = Number of categories (K-1 probs + 1 rho)
-    logit_rho <- qlogis(rho_mod)
-    
-    # Offset: Set the K-th predictor (rho) to logit_rho
+
+    # Offset: Set the K-th predictor (log precision) directly
     off <- matrix(0, nrow = nrow(Y), ncol = K)
-    off[, K] <- logit_rho
-    
+    off[, K] <- log_prec_mod
+        
     # Constraints: Suppress estimation of the K-th predictor
     # Create a K x (K-1) matrix (Identity with last column removed)
     cm <- diag(K)[, -K, drop = FALSE]
@@ -430,7 +431,8 @@ test_model_multinomial_vgam_EB <- function(dd) {
 test_model_multinomial_vgam_wald_EB <- function(dd, shape0, rate0, ref_option = NULL) {
     gene <- unique(dd$gene); event <- unique(dd$event)
     prec_mod <- dd$prec_mod[1]
- 
+    log_prec_mod <- dd$log_prec_mod[1]
+  
     # 1. Pivot data to wide format for multinomial modeling
     wide_df <- dd %>% 
       dplyr::select(sample, groups, type, count) %>% 
@@ -459,11 +461,10 @@ test_model_multinomial_vgam_wald_EB <- function(dd, shape0, rate0, ref_option = 
 
     # 3. Fix rho using Offset and Constraints
     K <- ncol(Y)
-    logit_rho <- qlogis(rho_mod)
     
     off <- matrix(0, nrow = nrow(Y), ncol = K)
-    off[, K] <- logit_rho
-    
+    off[, K] <- log_prec_mod
+ 
     cm <- diag(K)[, -K, drop = FALSE]
     clist_full <- list("(Intercept)" = cm, groups = cm)
 
@@ -542,37 +543,54 @@ if (!is.null(opt$model)) {
 
 
 if (file.exists(exoncnt_master)) {
-  bipartitioncnts <- read.table(exoncnt_master, header=TRUE, row.names=NULL)
-  bipartitioncnts$groups <- factor(bipartitioncnts$groups, levels = c(cond1, cond2))
+  splitcnts <- read.table(exoncnt_master, header=TRUE, row.names=NULL)
+  splitcnts$groups <- factor(splitcnts$groups, levels = c(cond1, cond2))
 }
 
-grouped_data <- group_by_event(bipartitioncnts, 'diff', 'n')
+grouped_data <- group_by_event(splitcnts, 'diff', 'n')
 #grouped_data <- grouped_data[1:10]
 
-# Global Dispersion Estimation (glmmTMB)
-if (file.exists(paste0(outdir,'/', phifile))) {
-  phi_df <- read.table(paste0(outdir,'/', phifile), header=TRUE, row.names=NULL)
- } else {
-  cl <- makeCluster(30, outfile='phi.glmmtmb.log')
-  clusterEvalQ(cl, library(glmmTMB))
-  clusterExport(cl, varlist = c("phi_estimate_glmmTMB", "grouped_data"), envir = environment())
-  phi_list <- parLapply(cl, grouped_data, function(dd) {
-    tryCatch({
-      phi_estimate_glmmTMB(dd) 
-    }, error = function(e) {
-      msg <- sprintf("[%s] ERROR in %s (PID %d): %s\n",
-                     format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
-                     dd$gene[1], Sys.getpid(), conditionMessage(e))
-      cat(msg, file = "phi.glmmtmb.errors.log", append = TRUE)
-      NULL
+# Global Precision Estimation 
+if (model == 'glmmtmb_prior' || model == 'glmmtmb_fixedEB' || model == 'VGAM_MLE_EB') {
+  if (file.exists(paste0(outdir,'/', phifile))) {
+    phi_df <- read.table(paste0(outdir,'/', phifile), header=TRUE, row.names=NULL)
+   } else {
+    cl <- makeCluster(30, outfile='phi.glmmtmb.log')
+    clusterEvalQ(cl, library(glmmTMB))
+    clusterExport(cl, varlist = c("phi_estimate_glmmTMB", "grouped_data"), envir = environment())
+    phi_list <- parLapply(cl, grouped_data, function(dd) {
+      tryCatch({
+        phi_estimate_glmmTMB(dd) 
+      }, error = function(e) {
+        msg <- sprintf("[%s] ERROR in %s (PID %d): %s\n",
+                       format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
+                       dd$gene[1], Sys.getpid(), conditionMessage(e))
+        cat(msg, file = "phi.glmmtmb.errors.log", append = TRUE)
+        NULL
+      })
     })
-  })
-  stopCluster(cl)
-  phi_df <- bind_rows(Filter(Negate(is.null), phi_list))
-  write.table(phi_df, file=paste0(outdir,'/', phifile), quote=FALSE, sep="\t", row.names = FALSE) 
+    stopCluster(cl)
+    phi_df <- bind_rows(Filter(Negate(is.null), phi_list))
+    write.table(phi_df, file=paste0(outdir,'/', phifile), quote=FALSE, sep="\t", row.names = FALSE) 
+  }
+} else if (model == 'DM_EB' || model == 'DM_Wald_EB') {
+  # DM Moderation Pipeline (NEW)
+  # group_by_event on counts instead of diff/n for DM
+  prec_file = 'prec_dm.txt'
+  if (file.exists(paste0(outdir,'/', prec_file))) {
+    prec_table <- read.table(paste0(outdir,'/', prec_file), header=TRUE, row.names=NULL)
+  } else {
+    grouped_counts <- splitcnts %>% group_by(gene, event) %>% group_split()
+    cl <- makeCluster(30); clusterEvalQ(cl, {library(VGAM); library(tidyverse)})
+    clusterExport(cl, "prec_estimate_vgam")
+    prec_list <- parLapply(cl, grouped_counts, prec_estimate_vgam)
+    stopCluster(cl)
+    prec_table <- moderate_prec_log_scale(bind_rows(Filter(Negate(is.null), prec_list)))
+    write.table(prec_table, paste0(outdir,'/', prec_file), sep="\t", quote=F, row.names = FALSE)
+  }
 }
 
-
+# Per Gene Model Estimation 
 if (model == 'glmmtmb_prior') {
   phi_trimmed <- phi_df[phi_df$phi < 1e+10 & phi_df$phi > 0,'phi']
 
@@ -620,9 +638,9 @@ if (model == 'glmmtmb_prior') {
 
   ## Empirical Bayes hyperparameters: prior mean and variance
   phi_table <- moderate_phi_log_scale(phi_df)
-  bipartitioncnts_eb <- bipartitioncnts %>%
+  splitcnts_eb <- splitcnts %>%
     left_join(phi_table, by = c("gene", "event"))
-  grouped_data_eb <- group_by_event(bipartitioncnts_eb, 'diff', 'n')
+  grouped_data_eb <- group_by_event(splitcnts_eb, 'diff', 'n')
   #grouped_data_eb <- grouped_data_eb[1:10]
 
   # Moderated glmmTMB with EB
@@ -650,9 +668,9 @@ if (model == 'glmmtmb_prior') {
 
   ## Empirical Bayes hyperparameters: prior mean and variance
   phi_table <- moderate_phi_log_scale(phi_df)
-  bipartitioncnts_eb <- bipartitioncnts %>%
+  splitcnts_eb <- splitcnts %>%
     left_join(phi_table, by = c("gene", "event"))
-  grouped_data_eb <- group_by_event(bipartitioncnts_eb, 'diff', 'n')
+  grouped_data_eb <- group_by_event(splitcnts_eb, 'diff', 'n')
   #grouped_data_eb <- grouped_data_eb[1:10]
 
 
@@ -678,25 +696,10 @@ if (model == 'glmmtmb_prior') {
 
 } else if (model == 'DM_EB') {
 
-  # DM Moderation Pipeline (NEW)
-  # group_by_event on counts instead of diff/n for DM
-  prec_file = 'prec_dm.txt'
-  if (file.exists(paste0(outdir,'/', prec_file))) {
-    prec_table <- read.table(paste0(outdir,'/', prec_file), header=TRUE, row.names=NULL)
-  } else {
-    grouped_counts <- bipartitioncnts %>% group_by(gene, event) %>% group_split()
-    cl <- makeCluster(30); clusterEvalQ(cl, {library(VGAM); library(tidyverse)})
-    clusterExport(cl, "prec_estimate_vgam")
-    prec_list <- parLapply(cl, grouped_counts, prec_estimate_vgam)
-    stopCluster(cl)
-    prec_table <- moderate_prec_log_scale(bind_rows(Filter(Negate(is.null), prec_list)))
-    write.table(prec_table, paste0(outdir,'/', prec_file), sep="\t", quote=F, row.names = FALSE)
-  }
-
-  bipartitioncnts_eb <- bipartitioncnts %>%
+  splitcnts_eb <- splitcnts %>%
     left_join(prec_table, by = c("gene", "event"))
-  grouped_eb <- bipartitioncnts_eb %>% group_by(gene, event) %>% group_split()
-  #grouped_eb <- group_by_event(bipartitioncnts_eb, 'diff', 'n')
+  grouped_eb <- splitcnts_eb %>% group_by(gene, event) %>% group_split()
+  #grouped_eb <- group_by_event(splitcnts_eb, 'diff', 'n')
 
   # Run DM EB
   cl <- makeCluster(40); clusterEvalQ(cl, {library(VGAM); library(tidyverse)})
@@ -712,7 +715,7 @@ if (model == 'glmmtmb_prior') {
   if (file.exists(paste0(outdir,'/', prec_file))) {
     prec_table <- read.table(paste0(outdir,'/', prec_file), header=TRUE, row.names=NULL)
   } else {
-    grouped_counts <- bipartitioncnts %>% group_by(gene, event) %>% group_split()
+    grouped_counts <- splitcnts %>% group_by(gene, event) %>% group_split()
     cl <- makeCluster(30); clusterEvalQ(cl, {library(VGAM); library(tidyverse)})
     clusterExport(cl, "prec_estimate_vgam")
     prec_list <- parLapply(cl, grouped_counts, prec_estimate_vgam)
@@ -721,9 +724,9 @@ if (model == 'glmmtmb_prior') {
     write.table(prec_table, paste0(outdir,'/', prec_file), sep="\t", quote=F, row.names = FALSE)
   }
 
-  bipartitioncnts_eb <- bipartitioncnts %>%
+  splitcnts_eb <- splitcnts %>%
     left_join(prec_table, by = c("gene", "event"))
-  grouped_eb <- bipartitioncnts_eb %>% group_by(gene, event) %>% group_split()
+  grouped_eb <- splitcnts_eb %>% group_by(gene, event) %>% group_split()
 
   # Run DM Wald EB
   cl <- makeCluster(40); clusterEvalQ(cl, {library(VGAM); library(tidyverse)})
