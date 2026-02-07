@@ -4,7 +4,7 @@
 #
 
 print_usage(){
-    echo "Usage: bash creatingFilesByGene.sh [-r] [-m] [-s /splicing_software_directory] [-a annotation.gtf] [-d dexseq_prepare_annotation.py]  [-g /graphml_directory] [-p num_threads]"
+    echo "Usage: bash creatingFilesByGene.sh [-r] [-m] [-s /splicing_software_directory] [-a annotation.gtf] [-d dexseq_prepare_annotation.py]  [-g /graphml_directory] [-o outdir] [-p num_threads]"
 }
 
 if [[ $# -lt 8 ]]; then
@@ -15,49 +15,56 @@ fi
 rmats=0
 majiq=0
 
-while getopts "rms:d:g:a:p:" arg; do
+while getopts "rms:d:g:a:o:p:" arg; do
         case "$arg" in
                 r ) rmats=1;;
 		m ) majiq=1;;
 		s ) splicing_dir="$OPTARG";;
 		a ) gtf="$OPTARG";;
-                d ) prep_annotation="$OPTARG";;
-                g ) graphml="$OPTARG";;
+    d ) prep_annotation="$OPTARG";;
+    g ) graphml="$OPTARG";;
+    o ) outdir="$OPTARG";;
 		p ) procs="$OPTARG";;
         esac
 done
 
-rm -r grase_results
-mkdir grase_results
-mkdir -p grase_results/gene_files
-mkdir -p grase_results/tmp
-mkdir grase_results/results
-mkdir -p grase_results/results/tmp
-mkdir -p grase_results/results/SplicingEvents
-mkdir -p grase_results/results/ExonParts
+echo $outdir
+grase_results_dir=$outdir"/grase_results"
+if [ -d "$grase_results_dir" ]; then
+  echo "output folder exists! Please remove folder and re-run"
+  exit
+fi
+#rm -r $grase_results_dir
+mkdir $grase_results_dir
+mkdir -p $grase_results_dir/gene_files
+mkdir -p $grase_results_dir/tmp
+mkdir $grase_results_dir/results
+mkdir -p $grase_results_dir/results/tmp
+mkdir -p $grase_results_dir/results/SplicingEvents
+mkdir -p $grase_results_dir/results/ExonParts
 
 if [[ $rmats == 1 ]]
 then	
-	awk '{ print $2 }' $splicing_dir/fromGTF.A3SS.txt | sed -e 's/^"//' -e 's/"$//' > grase_results/tmp/all_genes.txt
-	awk '{ print $2 }' $splicing_dir/fromGTF.A5SS.txt | sed -e 's/^"//' -e 's/"$//' >> grase_results/tmp/all_genes.txt
-	awk '{ print $2 }' $splicing_dir/fromGTF.SE.txt | sed -e 's/^"//' -e 's/"$//' >> grase_results/tmp/all_genes.txt
-	awk '{ print $2 }' $splicing_dir/fromGTF.RI.txt | sed -e 's/^"//' -e 's/"$//' >> grase_results/tmp/all_genes.txt
-	sort grase_results/tmp/all_genes.txt | uniq > grase_results/tmp/tmp.txt && mv grase_results/tmp/tmp.txt grase_results/tmp/all_genes.txt
-	sed -i 's/GeneID//g' grase_results/tmp/all_genes.txt
-	sed -i '/^$/d' grase_results/tmp/all_genes.txt
+	awk '{ print $2 }' $splicing_dir/fromGTF.A3SS.txt | sed -e 's/^"//' -e 's/"$//' > $grase_results_dir/tmp/all_genes.txt
+	awk '{ print $2 }' $splicing_dir/fromGTF.A5SS.txt | sed -e 's/^"//' -e 's/"$//' >> $grase_results_dir/tmp/all_genes.txt
+	awk '{ print $2 }' $splicing_dir/fromGTF.SE.txt | sed -e 's/^"//' -e 's/"$//' >> $grase_results_dir/tmp/all_genes.txt
+	awk '{ print $2 }' $splicing_dir/fromGTF.RI.txt | sed -e 's/^"//' -e 's/"$//' >> $grase_results_dir/tmp/all_genes.txt
+	sort $grase_results_dir/tmp/all_genes.txt | uniq > $grase_results_dir/tmp/tmp.txt && mv $grase_results_dir/tmp/tmp.txt $grase_results_dir/tmp/all_genes.txt
+	sed -i 's/GeneID//g' $grase_results_dir/tmp/all_genes.txt
+	sed -i '/^$/d' $grase_results_dir/tmp/all_genes.txt
 fi
 
 if [[ $majiq = 1 ]]
 then
-	awk '{ print $1 }' $splicing_dir/majiq_delta_psi/*.deltapsi.tsv | sed -e 's/^"//' -e 's/"$//' > grase_results/tmp/all_genes.txt
-	sort grase_results/tmp/all_genes.txt | uniq > grase_results/tmp/tmp.txt && mv grase_results/tmp/tmp.txt grase_results/tmp/all_genes.txt
-        sed -i 's/Gene//g' grase_results/tmp/all_genes.txt
-        sed -i '/^$/d' grase_results/tmp/all_genes.txt
+	awk '{ print $1 }' $splicing_dir/majiq_delta_psi/*.deltapsi.tsv | sed -e 's/^"//' -e 's/"$//' > $grase_results_dir/tmp/all_genes.txt
+	sort $grase_results_dir/tmp/all_genes.txt | uniq > $grase_results_dir/tmp/tmp.txt && mv $grase_results_dir/tmp/tmp.txt $grase_results_dir/tmp/all_genes.txt
+        sed -i 's/Gene//g' $grase_results_dir/tmp/all_genes.txt
+        sed -i '/^$/d' $grase_results_dir/tmp/all_genes.txt
 fi
 
-echo -e "\nCreating grase_results directory and populating gene_files directory (inside grase_results)..."
+echo -e "\nCreating $grase_results_dir directory and populating gene_files directory (inside $grase_results_dir)..."
 
-cat grase_results/tmp/all_genes.txt | while read line; do
+cat $grase_results_dir/tmp/all_genes.txt | while read line; do
 
 	(
 
@@ -72,71 +79,71 @@ cat grase_results/tmp/all_genes.txt | while read line; do
 			do 
 				gene_part=$(echo $line | cut -d+ -f$c) 
 		
-				mkdir grase_results/gene_files/$gene_part
+				mkdir $grase_results_dir/gene_files/$gene_part
 			
 				#echo -e "A3SS events:"
-				grep -w GeneID $splicing_dir/fromGTF.A3SS.txt > grase_results/gene_files/$gene_part/fromGTF.A3SS.txt
-				grep -w $gene_part $splicing_dir/fromGTF.A3SS.txt >> grase_results/gene_files/$gene_part/fromGTF.A3SS.txt
+				grep -w GeneID $splicing_dir/fromGTF.A3SS.txt > $grase_results_dir/gene_files/$gene_part/fromGTF.A3SS.txt
+				grep -w $gene_part $splicing_dir/fromGTF.A3SS.txt >> $grase_results_dir/gene_files/$gene_part/fromGTF.A3SS.txt
 			
 				#echo -e "\nA5SS events:"
-				grep -w GeneID $splicing_dir/fromGTF.A5SS.txt > grase_results/gene_files/$gene_part/fromGTF.A5SS.txt
-				grep -w $gene_part $splicing_dir/fromGTF.A5SS.txt >> grase_results/gene_files/$gene_part/fromGTF.A5SS.txt
+				grep -w GeneID $splicing_dir/fromGTF.A5SS.txt > $grase_results_dir/gene_files/$gene_part/fromGTF.A5SS.txt
+				grep -w $gene_part $splicing_dir/fromGTF.A5SS.txt >> $grase_results_dir/gene_files/$gene_part/fromGTF.A5SS.txt
 				
 				#echo -e "\nSE events:"
-				grep -w GeneID $splicing_dir/fromGTF.SE.txt > grase_results/gene_files/$gene_part/fromGTF.SE.txt
-				grep -w $gene_part $splicing_dir/fromGTF.SE.txt >> grase_results/gene_files/$gene_part/fromGTF.SE.txt
+				grep -w GeneID $splicing_dir/fromGTF.SE.txt > $grase_results_dir/gene_files/$gene_part/fromGTF.SE.txt
+				grep -w $gene_part $splicing_dir/fromGTF.SE.txt >> $grase_results_dir/gene_files/$gene_part/fromGTF.SE.txt
 	
        		 		#echo -e "\nRI events:"
-				grep -w GeneID $splicing_dir/fromGTF.RI.txt > grase_results/gene_files/$gene_part/fromGTF.RI.txt
-				grep -w $gene_part $splicing_dir/fromGTF.RI.txt >> grase_results/gene_files/$gene_part/fromGTF.RI.txt
+				grep -w GeneID $splicing_dir/fromGTF.RI.txt > $grase_results_dir/gene_files/$gene_part/fromGTF.RI.txt
+				grep -w $gene_part $splicing_dir/fromGTF.RI.txt >> $grase_results_dir/gene_files/$gene_part/fromGTF.RI.txt
 			done 
 		else
 	
-		mkdir grase_results/gene_files/$line
+		mkdir $grase_results_dir/gene_files/$line
 	
 		#echo -e "A3SS events:" 
-		grep -w GeneID $splicing_dir/fromGTF.A3SS.txt > grase_results/gene_files/$line/fromGTF.A3SS.txt
-		grep -w $line $splicing_dir/fromGTF.A3SS.txt >> grase_results/gene_files/$line/fromGTF.A3SS.txt
+		grep -w GeneID $splicing_dir/fromGTF.A3SS.txt > $grase_results_dir/gene_files/$line/fromGTF.A3SS.txt
+		grep -w $line $splicing_dir/fromGTF.A3SS.txt >> $grase_results_dir/gene_files/$line/fromGTF.A3SS.txt
 		
 		#echo -e "\nA5SS events:" 
-		grep -w GeneID $splicing_dir/fromGTF.A5SS.txt > grase_results/gene_files/$line/fromGTF.A5SS.txt
-		grep -w $line $splicing_dir/fromGTF.A5SS.txt >> grase_results/gene_files/$line/fromGTF.A5SS.txt
+		grep -w GeneID $splicing_dir/fromGTF.A5SS.txt > $grase_results_dir/gene_files/$line/fromGTF.A5SS.txt
+		grep -w $line $splicing_dir/fromGTF.A5SS.txt >> $grase_results_dir/gene_files/$line/fromGTF.A5SS.txt
 	
 		#echo -e "\nSE events:"
-		grep -w GeneID $splicing_dir/fromGTF.SE.txt > grase_results/gene_files/$line/fromGTF.SE.txt	
-		grep -w $line $splicing_dir/fromGTF.SE.txt >> grase_results/gene_files/$line/fromGTF.SE.txt
+		grep -w GeneID $splicing_dir/fromGTF.SE.txt > $grase_results_dir/gene_files/$line/fromGTF.SE.txt	
+		grep -w $line $splicing_dir/fromGTF.SE.txt >> $grase_results_dir/gene_files/$line/fromGTF.SE.txt
 
 		#echo -e "\nRI events:"
-		grep -w GeneID $splicing_dir/fromGTF.RI.txt > grase_results/gene_files/$line/fromGTF.RI.txt
-        	grep -w $line $splicing_dir/fromGTF.RI.txt >> grase_results/gene_files/$line/fromGTF.RI.txt
+		grep -w GeneID $splicing_dir/fromGTF.RI.txt > $grase_results_dir/gene_files/$line/fromGTF.RI.txt
+        	grep -w $line $splicing_dir/fromGTF.RI.txt >> $grase_results_dir/gene_files/$line/fromGTF.RI.txt
 
 		fi
 	fi
 
 	if [[ $majiq = 1 ]]
 	then
-		mkdir grase_results/gene_files/$line
-		grep -w 'Gene ID' $splicing_dir/majiq_delta_psi/*.deltapsi.tsv > grase_results/gene_files/$line/$line.deltapsi.tsv
-		grep -w $line $splicing_dir/majiq_delta_psi/*.deltapsi.tsv >> grase_results/gene_files/$line/$line.deltapsi.tsv
-		awk '{if (($9 == "True" && $10 == "False" && $11 == "False" && $3 !~ /i/) || ($9 == "False" && $10 == "True" && $11 == "False" && $3 !~ /i/) || ($9 == "False" && $10 == "False" && $11 == "True" && $3 !~ /i/) || ($9 == "False" && $10 == "False" && $11 == "False") || ($1 == "Gene")) print }' grase_results/gene_files/$line/$line.deltapsi.tsv > grase_results/gene_files/$line/tmp.txt && mv grase_results/gene_files/$line/tmp.txt grase_results/gene_files/$line/$line.deltapsi.tsv
-		awk -F\| 'NF < 4 || NR == 1 {print}' grase_results/gene_files/$line/$line.deltapsi.tsv > grase_results/gene_files/$line/tmp.txt && mv grase_results/gene_files/$line/tmp.txt grase_results/gene_files/$line/$line.deltapsi.tsv
+		mkdir $grase_results_dir/gene_files/$line
+		grep -w 'Gene ID' $splicing_dir/majiq_delta_psi/*.deltapsi.tsv > $grase_results_dir/gene_files/$line/$line.deltapsi.tsv
+		grep -w $line $splicing_dir/majiq_delta_psi/*.deltapsi.tsv >> $grase_results_dir/gene_files/$line/$line.deltapsi.tsv
+		awk '{if (($9 == "True" && $10 == "False" && $11 == "False" && $3 !~ /i/) || ($9 == "False" && $10 == "True" && $11 == "False" && $3 !~ /i/) || ($9 == "False" && $10 == "False" && $11 == "True" && $3 !~ /i/) || ($9 == "False" && $10 == "False" && $11 == "False") || ($1 == "Gene")) print }' $grase_results_dir/gene_files/$line/$line.deltapsi.tsv > $grase_results_dir/gene_files/$line/tmp.txt && mv $grase_results_dir/gene_files/$line/tmp.txt $grase_results_dir/gene_files/$line/$line.deltapsi.tsv
+		awk -F\| 'NF < 4 || NR == 1 {print}' $grase_results_dir/gene_files/$line/$line.deltapsi.tsv > $grase_results_dir/gene_files/$line/tmp.txt && mv $grase_results_dir/gene_files/$line/tmp.txt $grase_results_dir/gene_files/$line/$line.deltapsi.tsv
 		
-		delta_psi="grase_results/gene_files/$line/$line.deltapsi.tsv"	
+		delta_psi="$grase_results_dir/gene_files/$line/$line.deltapsi.tsv"	
 		num_lines=$(wc -l < "$delta_psi")
 		if [[ $num_lines -lt 2 ]] ; then
   			#echo -e "$line does not have any binary events"
-			rm -r grase_results/gene_files/$line
+			rm -r $grase_results_dir/gene_files/$line
 			exit 0
 		fi
 	fi
 
 
-	cp $graphml/$line.graphml grase_results/gene_files/$line/	
+	cp $graphml/$line.graphml $grase_results_dir/gene_files/$line/	
 	
 	#echo -e "\nDexseq Data:"
-        grep -w $line $gtf > grase_results/gene_files/$line/$line.gtf
-	python3 $prep_annotation grase_results/gene_files/$line/$line.gtf grase_results/gene_files/$line/$line.dexseq.gff
-	mkdir -p grase_results/gene_files/$line/output
+        grep -w $line $gtf > $grase_results_dir/gene_files/$line/$line.gtf
+	python3 $prep_annotation $grase_results_dir/gene_files/$line/$line.gtf $grase_results_dir/gene_files/$line/$line.dexseq.gff
+	mkdir -p $grase_results_dir/gene_files/$line/output
 	
 	) &
 
@@ -145,7 +152,7 @@ cat grase_results/tmp/all_genes.txt | while read line; do
 	fi
 done
 
-mv grase_results/tmp/all_genes.txt grase_results/
-rm -r grase_results/tmp
+mv $grase_results_dir/tmp/all_genes.txt $grase_results_dir/
+rm -r $grase_results_dir/tmp
 
 echo "Done!"

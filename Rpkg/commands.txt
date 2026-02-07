@@ -1,11 +1,22 @@
 
-bash creatingFilesByGene.sh -r -s ~/graphml.dexseq.v34/rmats_output_dice_b_vs_cd8/ -a ~/graphml.dexseq.v34/gencode.v34.annotation.gtf -d dexseq_prepare_annotation.py -g ~/graphml.dexseq.v34/graphml -p 40
+#bash creatingFilesByGene.sh -r -s ~/graphml.dexseq.v34/rmats_output_dice_b_vs_cd8/ -a ~/graphml.dexseq.v34/gencode.v34.annotation.gtf -d dexseq_prepare_annotation.py -g ~/graphml.dexseq.v34/graphml -p 40
+bash creatingFilesByGene.sh -r -s  ~/DICE/rmats_post_CD4_CD4_N_STIM/ -a ~/graphml.dexseq.v34/gencode.v34.annotation.gtf -d dexseq_prepare_annotation.py -g ~/graphml.dexseq.v34/graphml/ -o ~/DICE/ -p 40 &> creatingFiles.log
+
 ls grase_results/gene_files/ > grase_results/all_genes.txt
-Rscript scripts/adjexons.all.R &> nocollapse.out &
+Rscript scripts/bipartitions.all.R
 Rscript scripts/filterTSSTTS.R
-Rscript scripts/rmats.R
+
+Rscript scripts/map_rmats.R --dir=~/DICE/ --split='bipartitions' 
+Rscript scripts/map_rmats.R --dir=~/DICE/ --split='multinomial' 
+Rscript scripts/map_rmats.R --dir=~/DICE/ --split='n_choose_2' 
+
 Rscript scripts/integrate.R
-Rscript scripts/exoncnt.R &> dice_exoncnt.out &
-Rscript scripts/exontest.R &> dice_exontest.out &
+Rscript scripts/exoncnt.R --dir=~/DICE &> dice_exoncnt.out 
+bash concat_exoncnts.sh
+Rscript scripts/exontest.R --dir=~/DICE/split_exoncnts --file=bipartition.internal.exoncnt.txt --phi=phi.glmmtmb.txt --model=glmmTMB_prior &>  glmmTMB_prior.log &
+Rscript scripts/exontest.R --dir=~/DICE/split_exoncnts --file=bipartition.internal.exoncnt.txt --phi=phi.glmmtmb.txt --model=glmmTMB_fixedEB &>  glmmTMB_fixedEB.log &
+Rscript scripts/exontest.R --dir=~/DICE/split_exoncnts --file=bipartition.internal.exoncnt.txt --phi=phi.glmmtmb.txt --model=VGAM_MLE_EB &> VGAM_MLE_EB.log &
+
 Rscript scripts/integrate.adjexons.R
+
 

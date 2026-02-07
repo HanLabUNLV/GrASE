@@ -75,6 +75,17 @@ get_results_files <- function(grase_directory, results_dir, rmats_directory, dex
 
   # Load DEXSeq results
   results$dexseqResults <- read.table(dexseq_results, sep="\t", header=TRUE)
+  # split column ids to groupID featureID if they don't exist (results from Saturn)
+  if(!"pvalue" %in% colnames(df)) {
+    results$dexseqResults <- results$dexseqResults %>%
+      separate_wider_delim(
+        cols = ids,           # The column you want to split
+        delim = ":",         # The character to split by
+        names = c("groupID", "featureID") # The new column names
+      )
+    results$dexseqResults$pvalue <- results$dexseqResults$empirical_pval
+    results$dexseqResults$padj <- results$dexseqResults$empirical_FDR
+  }
     
   return(results)
 }
@@ -369,13 +380,12 @@ integrate_rMATS_DEXSeq_results <- function(grase_directory, results_dir, rmats_d
 }
 
 #
-nthread = 1 
-rmats_directory = "~/graphml.dexseq.v34/rmats_output_dice_b_vs_cd8"
-dexseq_results = "~/graphml.dexseq.v34/dexseq_output_dice_b_vs_cd8/DEXSeq_DICE_B_vs_CD8_results_new.txt"
-grase_directory = "~/graphml.dexseq.v34/grase_results/"
+rmats_directory = "~/DICE/rmats_post_CD4_CD4_N_STIM"
+dexseq_results = "~/DICE/saturn_CD4_CD4_N_STIM/all.CD4_CD4_N_STIM.sumExp_filteredbyCountMultiExon.txt"
+grase_directory = "~/DICE/grase_results/"
 
 results_directory = "results.bipartitions"
 integrate_rMATS_DEXSeq_results(grase_directory, results_directory, rmats_directory, dexseq_results)
 
-results_directory = "results.n_choose_2"
-integrate_rMATS_DEXSeq_results(grase_directory, results_directory, rmats_directory, dexseq_results)
+#results_directory = "results.n_choose_2"
+#integrate_rMATS_DEXSeq_results(grase_directory, results_directory, rmats_directory, dexseq_results)

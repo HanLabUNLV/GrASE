@@ -3,7 +3,7 @@ library(dplyr)
 library(grase)
 library(doParallel)
 library(foreach)
-
+library(optparse)
 
 # Helper function to detect available analysis types for a gene
 detect_available_analysis_types <- function(gene, types_to_process, base_dir) {
@@ -20,30 +20,60 @@ detect_available_analysis_types <- function(gene, types_to_process, base_dir) {
 }
 
 
+# --- Main Execution Script ---
+
 # Configuration: Which analysis types to process
 ANALYSIS_TYPES_TO_PROCESS <-  list(bipartitions="bipartitions.filtered", multinomial="multinomial.filtered", n_choose_2="n_choose_2.filtered")
 
-#/RAID10/mirahan/graphml.dexseq.v34/
-# Try to find gene list from any available analysis type
-genelist_file =   '~/graphml.dexseq.v34/grase_results/all_genes.txt'
-genes <- read.table(genelist_file, header=FALSE, sep="\t")
 
-indir = '~/graphml.dexseq.v34/'
-outdir = '~/graphml.dexseq.v34/'
+args = commandArgs(trailingOnly=TRUE)
+
+option_list = list(
+  make_option(c("-d", "--dir"), type="character", 
+              help="input/output dir name", metavar="character"),
+  make_option(c("-s", "--split"), type="character", 
+              help="split type", metavar="character")
+); 
+ 
+opt_parser = OptionParser(option_list=option_list);
+opt = parse_args(opt_parser);
+print(opt)
+if (!is.null(opt$dir)) {
+  outdir = opt$dir
+}
+
+
+# Try to find gene list from any available analysis type
+genelist_file =   paste0(outdir,'/grase_results/all_genes.txt')
+genes <- read.table(genelist_file, header=FALSE, sep="\t")
+cat("Found", nrow(genes), "genes to process from", genelist_file, "\n")
+
+indir = outdir
 eventTypes =  c('A3SS', 'A5SS', 'SE', 'RI')
 
-cat("Found", nrow(genes), "genes to process from", genelist_file, "\n")
 types_to_process <- c()
-for (type in names(ANALYSIS_TYPES_TO_PROCESS)) {
+print(opt$split)
+if (is.null(opt$split)) {
+  for (type in names(ANALYSIS_TYPES_TO_PROCESS)) {
+    type_path <- file.path(outdir, ANALYSIS_TYPES_TO_PROCESS[[type]])
+    print(type_path)
+    if (file.exists(type_path)) {
+      types_to_process[[type]] <- ANALYSIS_TYPES_TO_PROCESS[[type]]
+    }
+  }
+  cat("Processing specified analysis types:", paste(names(types_to_process), collapse = ", "), "\n")
+} else {
+  type <- opt$split
   type_path <- file.path(outdir, ANALYSIS_TYPES_TO_PROCESS[[type]])
+  print(type_path)
   if (file.exists(type_path)) {
     types_to_process[[type]] <- ANALYSIS_TYPES_TO_PROCESS[[type]]
   }
 }
 if (length(types_to_process) < 1) {
-  cat("None of the specified analysis types are available:", paste(names(ANALYSIS_TYPES_TO_PROCESS), collapse = ", "), "\n")
+  cat("None of the specified analysis types are available\n")
+  stop("No analysis types to process. Exiting.")
 }
-cat("Processing specified analysis types:", paste(names(types_to_process), collapse = ", "), "\n")
 
 # Initialize output files for each analysis type
 for (analysis_type in names(types_to_process)) {
@@ -82,7 +112,7 @@ results <- foreach(
   .packages = c("grase", "dplyr", "igraph"),      # any packages you call inside
   .combine  = 'c',                     # or 'rbind', 'list', etc.
   .errorhandling = "pass"
-#  .verbose  = TRUE
+  #.verbose  = TRUE
 ) %dopar% {
 
 #for (gene in genes[,1]) {
