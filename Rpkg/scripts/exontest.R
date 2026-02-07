@@ -7,6 +7,13 @@ library(tidyverse)
 library(grase)
 library(optparse)
 
+# Source pvalue adjustment function
+if (file.exists("R/pvalueAdjustment.R")) {
+  source("R/pvalueAdjustment.R")
+} else if (file.exists("../R/pvalueAdjustment.R")) {
+  source("../R/pvalueAdjustment.R")
+}
+
 # --- Data Preparation Functions ---
 
 group_by_event <- function(dat, col_y, col_n) {
@@ -729,6 +736,13 @@ if (model == 'glmmTMB_prior') {
   #stopCluster(cl)
 
   results <- bind_rows(Filter(Negate(is.null), result_list))
+  
+  if (exists("pvalueAdjustment") && nrow(results) > 0) {
+      results$pvalue <- results$p.value
+      results <- pvalueAdjustment(results, independentFiltering=FALSE, theta=NULL, alpha=0.05, pAdjustMethod="BH")
+      results$pvalue <- NULL
+  }
+  
   write.table(results, file=paste0(outdir,'/test_glmmTMB_MAP_prior.txt'), quote=FALSE, sep="\t", row.names = FALSE)
 
 } else if (model == 'glmmTMB_fixedEB') {
@@ -761,6 +775,13 @@ if (model == 'glmmTMB_prior') {
   #stopCluster(cl)
 
   results <- bind_rows(Filter(Negate(is.null), result_list))
+  
+  if (exists("pvalueAdjustment") && nrow(results) > 0) {
+      results$pvalue <- results$p.value
+      results <- pvalueAdjustment(results, independentFiltering=FALSE, theta=NULL, alpha=0.05, pAdjustMethod="BH")
+      results$pvalue <- NULL
+  }
+
   write.table(results, file=paste0(outdir,'/test_glmmTMB_fixed_EB.txt'), quote=FALSE, sep="\t", row.names=FALSE)
 
 } else if (model == 'VGAM_MLE_EB') {
@@ -793,6 +814,13 @@ if (model == 'glmmTMB_prior') {
   }, mc.cores = 32)
   #stopCluster(cl)
   results <- bind_rows(Filter(Negate(is.null), result_list))
+  
+  if (exists("pvalueAdjustment") && nrow(results) > 0) {
+      results$pvalue <- results$p.value
+      results <- pvalueAdjustment(results, independentFiltering=FALSE, theta=NULL, alpha=0.05, pAdjustMethod="BH")
+      results$pvalue <- NULL
+  }
+  
   write.table(results, file=paste0(outdir,'/test_VGAM_MLE_EB.txt'), quote=FALSE, sep="\t", row.names = FALSE)
 
 } else if (model == 'DM_EB') {
@@ -812,7 +840,15 @@ if (model == 'glmmTMB_prior') {
     )
   }, mc.cores = 32)
   #stopCluster(cl)
-  write.table(bind_rows(res_dm), paste0(outdir, "/test_DM_EB.txt"), sep="\t", quote=F, row.names = FALSE)
+  results <- bind_rows(res_dm)
+  
+  if (exists("pvalueAdjustment") && nrow(results) > 0) {
+      results$pvalue <- results$p.value
+      results <- pvalueAdjustment(results, independentFiltering=FALSE, theta=NULL, alpha=0.05, pAdjustMethod="BH")
+      results$pvalue <- NULL
+  }
+
+  write.table(results, paste0(outdir, "/test_DM_EB.txt"), sep="\t", quote=F, row.names = FALSE)
 
 } else if (model == 'DM_Wald_EB') {                                                                                            
 
@@ -847,6 +883,13 @@ if (model == 'glmmTMB_prior') {
   }, mc.cores = 32)
   #stopCluster(cl)
   wald_results_df <- bind_rows(Filter(Negate(is.null), res_dm))
+  
+  if (exists("pvalueAdjustment") && nrow(wald_results_df) > 0) {
+      if (is.null(wald_results_df$pvalue)) wald_results_df$pvalue <- wald_results_df$p.value
+      wald_results_df <- pvalueAdjustment(wald_results_df, independentFiltering=FALSE, theta=NULL, alpha=0.05, pAdjustMethod="BH")
+      # wald_results_df$pvalue <- NULL # Keep if needed or remove. Wald test might have p.value or Pr(>Chi)
+  }
+
   write.table(wald_results_df, file=paste0(outdir, "/test_DM_Wald_EB.txt"), sep="\t", quote=FALSE, row.names = FALSE)
 } else if (model == 'wilcoxon') {
 
@@ -863,6 +906,13 @@ if (model == 'glmmTMB_prior') {
   }, mc.cores = 32)
 
   results <- bind_rows(Filter(Negate(is.null), result_list))
+  
+  if (exists("pvalueAdjustment") && nrow(results) > 0) {
+      results$pvalue <- results$p.value
+      results <- pvalueAdjustment(results, independentFiltering=FALSE, theta=NULL, alpha=0.05, pAdjustMethod="BH")
+      results$pvalue <- NULL
+  }
+
   write.table(results, file=paste0(outdir,'/test_wilcoxon.txt'), quote=FALSE, sep="\t", row.names = FALSE)
 
 } else {

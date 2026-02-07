@@ -17,6 +17,7 @@ Rscript scripts/exontest.R --dir=~/DICE/split_exoncnts --file=bipartition.intern
 Rscript scripts/exontest.R --dir=~/DICE/split_exoncnts --file=bipartition.internal.exoncnt.txt --phi=phi.glmmtmb.txt --model=glmmTMB_fixedEB &>  glmmTMB_fixedEB.log &
 Rscript scripts/exontest.R --dir=~/DICE/split_exoncnts --file=bipartition.internal.exoncnt.txt --phi=phi.glmmtmb.txt --model=VGAM_MLE_EB &> VGAM_MLE_EB.log &
 
+Rscript scripts/annotate_tests.R --input=~/DICE/split_exoncnts/test_glmmTMB_fixed_EB.txt
 Rscript scripts/integrate.adjexons.R
 
 
