@@ -27,6 +27,11 @@ Rscript scripts/compare_saturn_glmmTMB.R -g ~/DICE/split_exoncnts/test_glmmTMB_M
 Rscript scripts/compare_saturn_glmmTMB.R -g ~/DICE/split_exoncnts/test_glmmTMB_fixed_EB.annotated.txt -s ~/DICE/saturn_CD4_CD4_N_STIM/all.CD4_CD4_N_STIM.sumExp_filteredbyCountMultiExon.txt -o ~/DICE/saturn_glmmTMB_fixed_EB_comparison.txt
 
 
+Rscript scripts/compare_rmats_mapped.R \
+  --grase ~/DICE/split_exoncnts/test_glmmTMB_fixed_EB.annotated.txt \
+  --rmats_dir ~/DICE/rmats_post_CD4_CD4_N_STIM/ \
+  --map_dir ~/DICE/grase_results/results.bipartitions/tmp/ \
+  --output rmats_grase_comparison.txt
 
 Rscript scripts/integrate.adjexons.R
 
