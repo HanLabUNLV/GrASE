@@ -14,7 +14,12 @@ opt <- parse_args(opt_parser)
 # Note: The user specified pattern captures a subset of genes (starts with ENSG00000000...)
 bipartition_pattern <- "~/DICE/split_exoncnts/bipartition/ENSG00000000*.bipartitions.txt"
 test_file_path <- opt$input
-output_file <- "~/DICE/split_exoncnts/test_glmmTMB_fixed_EB.annotated.txt"
+# Construct output filename from input filename
+if (grepl("\\.txt$", test_file_path)) {
+  output_file <- sub("\\.txt$", ".annotated.txt", test_file_path)
+} else {
+  output_file <- paste0(test_file_path, ".annotated.txt")
+}
 bipartition_dir <- "~/DICE/split_exoncnts/bipartition"
 
 # Read test results first to get the list of genes
@@ -61,7 +66,7 @@ message("Reading bipartition files for all genes...")
 
 # Use parallel checking since reading thousands of files can be slow
 # Using 4 cores or auto-detect
-n_cores <- max(1, parallel::detectCores() - 1)
+n_cores <- 32
 message(paste("Using", n_cores, "cores for reading files."))
 
 bipartition_list <- mclapply(unique_genes, read_gene_bipartition, mc.cores = n_cores)

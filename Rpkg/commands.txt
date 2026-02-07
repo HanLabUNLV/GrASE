@@ -16,8 +16,18 @@ bash concat_exoncnts.sh
 Rscript scripts/exontest.R --dir=~/DICE/split_exoncnts --file=bipartition.internal.exoncnt.txt --phi=phi.glmmtmb.txt --model=glmmTMB_prior &>  glmmTMB_prior.log &
 Rscript scripts/exontest.R --dir=~/DICE/split_exoncnts --file=bipartition.internal.exoncnt.txt --phi=phi.glmmtmb.txt --model=glmmTMB_fixedEB &>  glmmTMB_fixedEB.log &
 Rscript scripts/exontest.R --dir=~/DICE/split_exoncnts --file=bipartition.internal.exoncnt.txt --phi=phi.glmmtmb.txt --model=VGAM_MLE_EB &> VGAM_MLE_EB.log &
+Rscript scripts/exontest.R --dir=~/DICE/split_exoncnts --file=bipartition.internal.exoncnt.txt --phi=phi.glmmtmb.txt --model=wilcoxon &> wilcoxon.log &
 
+Rscript scripts/annotate_tests.R --input=~/DICE/split_exoncnts/test_glmmTMB_MAP_prior.txt
 Rscript scripts/annotate_tests.R --input=~/DICE/split_exoncnts/test_glmmTMB_fixed_EB.txt
+Rscript scripts/annotate_tests.R --input=~/DICE/split_exoncnts/test_VGAM_MLE_EB.txt
+Rscript scripts/annotate_tests.R --input=~/DICE/split_exoncnts/test_wilcoxon.txt
+
+Rscript scripts/compare_saturn_glmmTMB.R -g ~/DICE/split_exoncnts/test_glmmTMB_MAP_prior.annotated.txt -s ~/DICE/saturn_CD4_CD4_N_STIM/all.CD4_CD4_N_STIM.sumExp_filteredbyCountMultiExon.txt -o ~/DICE/saturn_glmmTMB_MAP_prior_comparison.txt 
+Rscript scripts/compare_saturn_glmmTMB.R -g ~/DICE/split_exoncnts/test_glmmTMB_fixed_EB.annotated.txt -s ~/DICE/saturn_CD4_CD4_N_STIM/all.CD4_CD4_N_STIM.sumExp_filteredbyCountMultiExon.txt -o ~/DICE/saturn_glmmTMB_fixed_EB_comparison.txt
+
+
+
 Rscript scripts/integrate.adjexons.R
 
 
