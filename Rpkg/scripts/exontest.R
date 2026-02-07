@@ -389,6 +389,11 @@ test_model_vgam_EB <- function(dd) {
   eff_size <- cfs[grep("groups", names(cfs))][1] 
 
   LR <- 2 * (logLik(m1) - logLik(m0))
+
+  if (as.numeric(LR) == -Inf) {
+    eff_size <- NA      # remove abnormally high effect sizes when splice event is perfectly correlated with the group (e.g., Group A has 0 reads for the event in all samples, while Group B has counts). complete separation
+  }
+
   data.frame(
     gene    = gene,
     event   = event,
@@ -631,7 +636,6 @@ if (file.exists(exoncnt_master)) {
 } else {
   print('exoncnt dataset file does not exist.')
   print('please combine the exoncounts into one file and specify the filename.')
-  print('for example: cat ~/DICE/split_exoncnts/bipartition/*.bipartitions.exoncnt.txt > ~/DICE/split_exoncnts/bipartition.internal.exoncnt.txt')
   stop()
 }
 
