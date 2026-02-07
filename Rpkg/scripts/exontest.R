@@ -612,7 +612,11 @@ option_list = list(
   make_option(c("-p", "--phi"), type="character", 
               help="phi estimate filename", metavar="character"),
   make_option(c("-m", "--model"), type="character", 
-              help="model name", metavar="character")
+              help="model name", metavar="character"),
+  make_option(c("--cond1"), type="character", 
+              help="condition 1 name (Group 1 - Group 2)", metavar="character"),
+  make_option(c("--cond2"), type="character", 
+              help="condition 2 name (Reference Group)", metavar="character")
 ); 
  
 opt_parser = OptionParser(option_list=option_list);
@@ -630,6 +634,12 @@ if (!is.null(opt$phi)) {
 if (!is.null(opt$model)) {
   model = opt$model 
 }
+if (!is.null(opt$cond1)) {
+  cond1 = opt$cond1 
+}
+if (!is.null(opt$cond2)) {
+  cond2 = opt$cond2 
+}
 outdir = indir
 if (!dir.exists(outdir)) {
   dir.create(outdir, recursive = TRUE)
@@ -639,7 +649,8 @@ exoncnt_master <- paste0(indir,'/', masterfile)
 
 if (file.exists(exoncnt_master)) {
   splitcnts <- read.table(exoncnt_master, header=TRUE, row.names=NULL)
-  splitcnts$groups <- factor(splitcnts$groups, levels = c(cond1, cond2))
+  # Set levels such that cond2 is reference, so coefficient is cond1 - cond2
+  splitcnts$groups <- factor(splitcnts$groups, levels = c(cond2, cond1))
 } else {
   print('exoncnt dataset file does not exist.')
   print('please combine the exoncounts into one file and specify the filename.')
