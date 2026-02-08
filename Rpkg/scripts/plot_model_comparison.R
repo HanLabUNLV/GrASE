@@ -6,7 +6,8 @@ library(gridExtra)
 # Define paths
 f_prior <- "~/DICE/split_exoncnts/test_glmmTMB_MAP_prior.txt"
 f_fixed <- "~/DICE/split_exoncnts/test_glmmTMB_fixed_EB.txt"
-f_vgam  <- "~/DICE/split_exoncnts/test_VGAM_MLE_EB.txt"
+f_vgam  <- "~/DICE/split_exoncnts/test_VGAM_MLE_EB_Init.txt"
+
 f_wilcoxon <- "~/DICE/split_exoncnts/test_wilcoxon.txt"
 
 cat("Reading data...\n")

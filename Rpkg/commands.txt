@@ -15,24 +15,42 @@ Rscript scripts/exoncnt.R --dir=~/DICE &> dice_exoncnt.out
 bash concat_exoncnts.sh
 Rscript scripts/exontest.R --dir=~/DICE/split_exoncnts --file=bipartition.internal.exoncnt.txt --phi=phi.glmmtmb.txt --model=glmmTMB_prior &>  glmmTMB_prior.log &
 Rscript scripts/exontest.R --dir=~/DICE/split_exoncnts --file=bipartition.internal.exoncnt.txt --phi=phi.glmmtmb.txt --model=glmmTMB_fixedEB &>  glmmTMB_fixedEB.log &
-Rscript scripts/exontest.R --dir=~/DICE/split_exoncnts --file=bipartition.internal.exoncnt.txt --phi=phi.glmmtmb.txt --model=VGAM_MLE_EB &> VGAM_MLE_EB.log &
+Rscript scripts/exontest.R --dir=~/DICE/split_exoncnts --file=bipartition.internal.exoncnt.txt --phi=phi.glmmtmb.txt --model=VGAM_MLE_EB_init &> VGAM_MLE_EB_init.log &
 Rscript scripts/exontest.R --dir=~/DICE/split_exoncnts --file=bipartition.internal.exoncnt.txt --phi=phi.glmmtmb.txt --model=wilcoxon &> wilcoxon.log &
 
 Rscript scripts/annotate_tests.R --input=~/DICE/split_exoncnts/test_glmmTMB_MAP_prior.txt
 Rscript scripts/annotate_tests.R --input=~/DICE/split_exoncnts/test_glmmTMB_fixed_EB.txt
-Rscript scripts/annotate_tests.R --input=~/DICE/split_exoncnts/test_VGAM_MLE_EB.txt
+Rscript scripts/annotate_tests.R --input=~/DICE/split_exoncnts/test_VGAM_MLE_EB_init.txt
 Rscript scripts/annotate_tests.R --input=~/DICE/split_exoncnts/test_wilcoxon.txt
 
-Rscript scripts/compare_saturn_glmmTMB.R -g ~/DICE/split_exoncnts/test_glmmTMB_MAP_prior.annotated.txt -s ~/DICE/saturn_CD4_CD4_N_STIM/all.CD4_CD4_N_STIM.sumExp_filteredbyCountMultiExon.txt -o ~/DICE/saturn_glmmTMB_MAP_prior_comparison.txt 
-Rscript scripts/compare_saturn_glmmTMB.R -g ~/DICE/split_exoncnts/test_glmmTMB_fixed_EB.annotated.txt -s ~/DICE/saturn_CD4_CD4_N_STIM/all.CD4_CD4_N_STIM.sumExp_filteredbyCountMultiExon.txt -o ~/DICE/saturn_glmmTMB_fixed_EB_comparison.txt
+Rscript scripts/compare_saturn_grase.R -g ~/DICE/split_exoncnts/test_glmmTMB_MAP_prior.annotated.txt -s ~/DICE/saturn_CD4_CD4_N_STIM/all.CD4_CD4_N_STIM.sumExp_filteredbyCountMultiExon.txt -o ~/DICE/saturn_glmmTMB_MAP_prior_comparison.txt 
+Rscript scripts/compare_saturn_grase.R -g ~/DICE/split_exoncnts/test_glmmTMB_fixed_EB.annotated.txt -s ~/DICE/saturn_CD4_CD4_N_STIM/all.CD4_CD4_N_STIM.sumExp_filteredbyCountMultiExon.txt -o ~/DICE/saturn_glmmTMB_fixed_EB_comparison.txt
+Rscript scripts/compare_saturn_grase.R -g ~/DICE/split_exoncnts/test_VGAM_MLE_EB_init.annotated.txt -s ~/DICE/saturn_CD4_CD4_N_STIM/all.CD4_CD4_N_STIM.sumExp_filteredbyCountMultiExon.txt -o ~/DICE/saturn_VGAM_MLE_EB_init_comparison.txt
+Rscript scripts/compare_saturn_grase.R -g ~/DICE/split_exoncnts/test_wilcoxon.annotated.txt -s ~/DICE/saturn_CD4_CD4_N_STIM/all.CD4_CD4_N_STIM.sumExp_filteredbyCountMultiExon.txt -o ~/DICE/saturn_wilcoxon_comparison.txt
 
+Rscript scripts/compare_rmats_grase.R \
+  --grase ~/DICE/split_exoncnts/test_glmmTMB_MAP_prior.annotated.txt \
+  --rmats_dir ~/DICE/rmats_post_CD4_CD4_N_STIM/ \
+  --map_dir ~/DICE/grase_results/results.bipartitions/tmp/ \
+  --output ~/DICE/rmats_glmmTMB_MAP_prior_comparison.txt
 
-Rscript scripts/compare_rmats_mapped.R \
+Rscript scripts/compare_rmats_grase.R \
   --grase ~/DICE/split_exoncnts/test_glmmTMB_fixed_EB.annotated.txt \
   --rmats_dir ~/DICE/rmats_post_CD4_CD4_N_STIM/ \
   --map_dir ~/DICE/grase_results/results.bipartitions/tmp/ \
-  --output rmats_grase_comparison.txt
+  --output ~/DICE/rmats_glmmTMB_fixed_EB_comparison.txt
 
-Rscript scripts/integrate.adjexons.R
+Rscript scripts/compare_rmats_grase.R \
+  --grase ~/DICE/split_exoncnts/test_VGAM_MLE_EB_init.annotated.txt \
+  --rmats_dir ~/DICE/rmats_post_CD4_CD4_N_STIM/ \
+  --map_dir ~/DICE/grase_results/results.bipartitions/tmp/ \
+  --output ~/DICE/rmats_VGAM_MLE_EB_init_comparison.txt
+
+Rscript scripts/compare_rmats_grase.R \
+  --grase ~/DICE/split_exoncnts/test_wilcoxon.annotated.txt \
+  --rmats_dir ~/DICE/rmats_post_CD4_CD4_N_STIM/ \
+  --map_dir ~/DICE/grase_results/results.bipartitions/tmp/ \
+  --output ~/DICE/rmats_wilcoxon_comparison.txt
+
 
 

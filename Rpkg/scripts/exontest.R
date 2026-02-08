@@ -327,7 +327,7 @@ test_model_glmmTMB_EB <- function(dd) {
 
 
 # 3. EB-moderated VGAM beta-binomial
-test_model_vgam_EB <- function(dd) {
+test_model_vgam_EB_init <- function(dd) {
 
   ## per-gene moderated LRT in VGAM
   gene  <- unique(dd$gene)
@@ -661,7 +661,8 @@ grouped_data <- group_by_event(splitcnts, 'diff', 'n')
 #grouped_data <- grouped_data[1:10]
 
 # Global Precision Estimation 
-if (model == 'glmmTMB_prior' || model == 'glmmTMB_fixedEB' || model == 'VGAM_MLE_EB') {
+if (model == 'glmmTMB_prior' || model == 'glmmTMB_fixedEB' || model == 'VGAM_MLE_EB_init') {
+
   if (file.exists(paste0(outdir,'/', phifile))) {
     phi_df <- read.table(paste0(outdir,'/', phifile), header=TRUE, row.names=NULL)
    } else {
@@ -795,7 +796,7 @@ if (model == 'glmmTMB_prior') {
 
   write.table(results, file=paste0(outdir,'/test_glmmTMB_fixed_EB.txt'), quote=FALSE, sep="\t", row.names=FALSE)
 
-} else if (model == 'VGAM_MLE_EB') {
+} else if (model == 'VGAM_MLE_EB_init') {
 
   ## Empirical Bayes hyperparameters: prior mean and variance
   phi_table <- moderate_phi_log_scale(phi_df)
@@ -808,16 +809,16 @@ if (model == 'glmmTMB_prior') {
   # Moderated VGAM with EB
   #cl <- makeCluster(40, outfile='testVGAM_EB.log')
   #clusterEvalQ(cl, { library(glmmTMB); library(VGAM); library(tidyverse) })
-  #clusterExport(cl, varlist = c("test_model_vgam_EB"), envir = environment())
+  #clusterExport(cl, varlist = c("test_model_vgam_EB_init"), envir = environment())
 
   result_list <- mclapply(grouped_data_eb, function(dd) {
   #result_list <- parLapply(cl, grouped_data_eb, function(dd) {
     tryCatch({
-      test_model_vgam_EB(dd) 
+      test_model_vgam_EB_init(dd) 
     }, error = function(e) {
         msg <- sprintf("[%s] ERROR in %s (PID %d): %s\n",
                        format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
-                       f, Sys.getpid(), conditionMessage(e))
+                       dd$gene[1], Sys.getpid(), conditionMessage(e))
         cat(msg, file = "vgam_eb.errors.log", append = TRUE)
         NULL
     })
@@ -832,7 +833,8 @@ if (model == 'glmmTMB_prior') {
       results$pvalue <- NULL
   }
   
-  write.table(results, file=paste0(outdir,'/test_VGAM_MLE_EB.txt'), quote=FALSE, sep="\t", row.names = FALSE)
+  write.table(results, file=paste0(outdir,'/test_VGAM_MLE_EB_init.txt'), quote=FALSE, sep="\t", row.names = FALSE)
+
 
 } else if (model == 'DM_EB') {
 
@@ -928,6 +930,7 @@ if (model == 'glmmTMB_prior') {
 
 } else {
   print ("model misspecified")
-  print ("choose between glmmTMB_prior, glmmTMB_fixedEB, VGAM_MLE_EB, DM_EB, DM_Wald_EB, wilcoxon")
+  print ("choose between glmmTMB_prior, glmmTMB_fixedEB, VGAM_MLE_EB_init, DM_EB, DM_Wald_EB, wilcoxon")
+
 }
 

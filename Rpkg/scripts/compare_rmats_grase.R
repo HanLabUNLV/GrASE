@@ -240,7 +240,7 @@ discrepancies <- full_data %>%
          category) %>%
   arrange(grase_p) # Sort by GrASE significance
 
-discrep_file <- "discrepancies.txt"
+discrep_file <- sub("\\.[^.]+$", ".discrepancies.txt", output_file)
 write.table(discrepancies, discrep_file, sep = "\t", quote = FALSE, row.names = FALSE)
 message("Discrepancy list saved to: ", discrep_file)
 message("  (Contains events significant in one tool but not the other)")
