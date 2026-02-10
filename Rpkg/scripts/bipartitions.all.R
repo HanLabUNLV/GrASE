@@ -9,6 +9,8 @@ option_list <- list(
   make_option(c("-g", "--graphdir"), type="character", default=NULL,
               help="graphml directory path", metavar="character"),
   make_option(c("-o", "--outdir"), type="character", default=NULL,
+              help="output directory path", metavar="character"),
+  make_option(c("-s", "--split"), type="character", default=NULL,
               help="output directory path", metavar="character")
 )
 
@@ -19,14 +21,18 @@ if (is.null(opt$graphdir)) {
   print_help(opt_parser)
   stop("Input directory (--graphdir) must be specified.", call.=FALSE)
 }
-
 if (is.null(opt$outdir)) {
   print_help(opt_parser)
   stop("Output directory (--outdir) must be specified.", call.=FALSE)
 }
+if (is.null(opt$split)) {
+  print_help(opt_parser)
+  stop("Split method (--split) must be specified among 'bipartition', 'multinomial' or 'n_choose_2'.", call.=FALSE)
+}
 
 graphdir <- opt$graphdir
 outdir <- opt$outdir
+split <- opt$split
 if (!dir.exists(outdir)) {
   dir.create(outdir)
 }
@@ -36,11 +42,11 @@ gene_names <- sub("\\.graphml$", "", graphml_files)
 
 num_cores <- 20
 
-process_gene <- function(gene) {
+split_bipartition <- function(gene) {
   tryCatch({
     graph_path <- file.path(graphdir, paste0(gene, ".graphml"))
 
-    filename = file.path(outdir, "/", paste0(gene, ".bipartitions.txt"))
+    filename = file.path(outdir, "/", paste0(gene, ".bipartition.txt"))
     runninglog = file.path(outdir, "/", paste0(gene, ".running"))
     if (file.exists(filename) | file.exists(runninglog)) {
       message(paste("skipping existing ", filename))
@@ -53,7 +59,6 @@ process_gene <- function(gene) {
 
     g <- igraph::read_graph(graph_path, format = "graphml")
 
-    cat("  calling grase::bipartition_paths()\n"); flush.console()
     grase::bipartition_paths(
         gene     = gene,
         g        = g,
@@ -68,7 +73,89 @@ process_gene <- function(gene) {
     }, error = function(e) {
       message(paste("error in ", gene, ": ", e))
       return(paste("ERROR", gene))
-    })
-  }
+    }
+  )
+}
 
-results <- mclapply(gene_names, process_gene, mc.cores = num_cores)
+split_multinomial <- function(gene) {
+  tryCatch({
+    graph_path <- file.path(graphdir, paste0(gene, ".graphml"))
+
+    filename = file.path(outdir, "/", paste0(gene, ".multinomial.txt"))
+    runninglog = file.path(outdir, "/", paste0(gene, ".running"))
+    if (file.exists(filename) | file.exists(runninglog)) {
+      message(paste("skipping existing ", filename))
+      flush.console()
+      return(gene)
+    }
+
+    print(paste("running", filename))
+    file.create(runninglog)
+
+    g <- igraph::read_graph(graph_path, format = "graphml")
+
+    grase::multinomial_paths(
+        gene     = gene,
+        g        = g,
+        outdir   = outdir, 
+        max_path = 20,
+        collapse_bubbles = FALSE 
+    )
+    print(paste0("FINISH ", gene))
+    on.exit(unlink(runninglog))
+    return(gene)
+
+    }, error = function(e) {
+      message(paste("error in ", gene, ": ", e))
+      return(paste("ERROR", gene))
+    }
+  )
+}
+
+split_n_choose_2 <- function(gene) {
+  tryCatch({
+    graph_path <- file.path(graphdir, paste0(gene, ".graphml"))
+
+    filename = file.path(outdir, "/", paste0(gene, ".n_choose_2.txt"))
+    runninglog = file.path(outdir, "/", paste0(gene, ".running"))
+    if (file.exists(filename) | file.exists(runninglog)) {
+      message(paste("skipping existing ", filename))
+      flush.console()
+      return(gene)
+    }
+
+    print(paste("running", filename))
+    file.create(runninglog)
+
+    g <- igraph::read_graph(graph_path, format = "graphml")
+
+    grase::n_choose_2_paths(
+        gene     = gene,
+        g        = g,
+        outdir   = outdir, 
+        max_path = 20,
+        collapse_bubbles = FALSE 
+    )
+    print(paste0("FINISH ", gene))
+    on.exit(unlink(runninglog))
+    return(gene)
+
+    }, error = function(e) {
+      message(paste("error in ", gene, ": ", e))
+      return(paste("ERROR", gene))
+    }
+  )
+}
+
+
+if ( split == 'bipartition') {
+  results <- mclapply(gene_names, split_bipartition, mc.cores = num_cores)
+} else if (split == 'multinomial') {
+  results <- mclapply(gene_names, split_multinomial, mc.cores = num_cores)
+} else if (split == 'n_choose_2') {
+  results <- mclapply(gene_names, split_n_choose_2, mc.cores = num_cores)
+} else {
+  stop("Split method (--split) must be specified among 'bipartition', 'multinomial' or 'n_choose_2'.", call.=FALSE)
+}
+
+
