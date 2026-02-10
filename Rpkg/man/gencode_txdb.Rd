@@ -57,9 +57,6 @@ gencode_source_url(version = "31", genome = "hg19")
 Based on code for the \code{brainflowprobes} package at:
 \url{https://github.com/LieberInstitute/brainflowprobes/blob/master/data-raw/create_sysdata.R}
 }
-\seealso{
-\code{\link[=gencode_annotated_genes]{gencode_annotated_genes()}} \code{\link[=gencode_genomic_state]{gencode_genomic_state()}}
-}
 \author{
 Leonardo Collado-Torres
 }

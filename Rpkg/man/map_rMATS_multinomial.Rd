@@ -17,6 +17,30 @@ map_rMATS_multinomial(
   results_dir
 )
 }
+\arguments{
+\item{g}{Graph object}
+
+\item{gene}{Gene identifier}
+
+\item{gff}{GFF file path}
+
+\item{fromGTF_A3SS}{Path to rMATS A3SS fromGTF file}
+
+\item{fromGTF_A5SS}{Path to rMATS A5SS fromGTF file}
+
+\item{fromGTF_SE}{Path to rMATS SE fromGTF file}
+
+\item{fromGTF_RI}{Path to rMATS RI fromGTF file}
+
+\item{bipartitions}{Multinomial data frame with setdiff1, setdiff2, etc. columns}
+
+\item{grase_output_dir}{Output directory for GrASE results}
+
+\item{results_dir}{Results subdirectory name}
+}
+\value{
+Modified graph object with rMATS event annotations
+}
 \description{
 Map rMATS events using multinomial analysis (k-way partitions)
 }

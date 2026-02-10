@@ -508,7 +508,19 @@ map_rMATS_event_full_fragment <- function(g, fromGTF_path, eventType, gene, gff_
 
 
 
-#' Map rMATS events using bipartition bipartition analysis (original functionality)
+#' Map rMATS events using bipartition analysis (original functionality)
+#'
+#' @param g Graph object
+#' @param gene Gene identifier
+#' @param gff GFF file path
+#' @param fromGTF_A3SS Path to rMATS A3SS fromGTF file
+#' @param fromGTF_A5SS Path to rMATS A5SS fromGTF file
+#' @param fromGTF_SE Path to rMATS SE fromGTF file
+#' @param fromGTF_RI Path to rMATS RI fromGTF file
+#' @param bipartitions Bipartition data frame with columns: setdiff1, setdiff2, ref_ex_part, path1, path2
+#' @param grase_output_dir Output directory for GrASE results
+#' @param results_dir Results subdirectory name
+#' @return Modified graph object with rMATS event annotations
 #' @export
 map_rMATS_bipartition <- function(g, gene, gff, fromGTF_A3SS, fromGTF_A5SS, fromGTF_SE, fromGTF_RI, bipartitions, grase_output_dir, results_dir) {
   # Ensure we have the expected bipartition structure
@@ -541,6 +553,18 @@ map_rMATS_bipartition <- function(g, gene, gff, fromGTF_A3SS, fromGTF_A5SS, from
 }
 
 #' Map rMATS events using multinomial analysis (k-way partitions)
+#'
+#' @param g Graph object
+#' @param gene Gene identifier
+#' @param gff GFF file path
+#' @param fromGTF_A3SS Path to rMATS A3SS fromGTF file
+#' @param fromGTF_A5SS Path to rMATS A5SS fromGTF file
+#' @param fromGTF_SE Path to rMATS SE fromGTF file
+#' @param fromGTF_RI Path to rMATS RI fromGTF file
+#' @param bipartitions Multinomial data frame with setdiff1, setdiff2, etc. columns
+#' @param grase_output_dir Output directory for GrASE results
+#' @param results_dir Results subdirectory name
+#' @return Modified graph object with rMATS event annotations
 #' @export
 map_rMATS_multinomial <- function(g, gene, gff, fromGTF_A3SS, fromGTF_A5SS, fromGTF_SE, fromGTF_RI, bipartitions, grase_output_dir, results_dir) {
   # Convert multinomial to bipartition format for rMATS compatibility
@@ -598,8 +622,19 @@ map_rMATS_multinomial <- function(g, gene, gff, fromGTF_A3SS, fromGTF_A5SS, from
 }
 
 
-
-#' @param analysis_type Optional string specifying analysis type ("bipartition", "multinomial", "n_choose_2"). 
+#' Map rMATS events to graph
+#'
+#' @param g Graph object
+#' @param gene Gene identifier
+#' @param gff GFF file path
+#' @param fromGTF_A3SS Path to rMATS A3SS fromGTF file
+#' @param fromGTF_A5SS Path to rMATS A5SS fromGTF file
+#' @param fromGTF_SE Path to rMATS SE fromGTF file
+#' @param fromGTF_RI Path to rMATS RI fromGTF file
+#' @param splits Bipartition or multinomial splits data
+#' @param grase_output_dir Output directory for GrASE results
+#' @param analysis_type Optional string specifying analysis type ("bipartition", "multinomial", "n_choose_2").
+#' @return Modified graph object with rMATS event annotations
 #' @export
 map_rMATS <- function(g, gene, gff, fromGTF_A3SS, fromGTF_A5SS, fromGTF_SE, fromGTF_RI, splits, grase_output_dir, analysis_type = NULL) {
   # Validate user-provided analysis type
@@ -618,6 +653,17 @@ map_rMATS <- function(g, gene, gff, fromGTF_A3SS, fromGTF_A5SS, fromGTF_SE, from
 }
 
 #' Original map_rMATS function preserved for backward compatibility
+#'
+#' @param g Graph object
+#' @param gene Gene identifier
+#' @param gff GFF file path
+#' @param fromGTF_A3SS Path to rMATS A3SS fromGTF file
+#' @param fromGTF_A5SS Path to rMATS A5SS fromGTF file
+#' @param fromGTF_SE Path to rMATS SE fromGTF file
+#' @param fromGTF_RI Path to rMATS RI fromGTF file
+#' @param bipartitions Bipartition data
+#' @param grase_output_dir Output directory for GrASE results
+#' @return Modified graph object with rMATS event annotations
 #' @export  
 map_rMATS_original <- function(g, gene, gff, fromGTF_A3SS, fromGTF_A5SS, fromGTF_SE, fromGTF_RI, bipartitions, grase_output_dir) {
   # Initialize edge attributes

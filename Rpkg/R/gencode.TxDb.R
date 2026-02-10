@@ -17,8 +17,6 @@
 #' @references Based on code for the `brainflowprobes` package at:
 #' <https://github.com/LieberInstitute/brainflowprobes/blob/master/data-raw/create_sysdata.R>
 #'
-#' @seealso [gencode_annotated_genes()] [gencode_genomic_state()]
-#'
 #' @examples
 #'
 #' ## Start from scratch if you want:

@@ -2,7 +2,7 @@
 % Please edit documentation in R/rMATS.R
 \name{map_rMATS_bipartition}
 \alias{map_rMATS_bipartition}
-\title{Map rMATS events using bipartition bipartition analysis (original functionality)}
+\title{Map rMATS events using bipartition analysis (original functionality)}
 \usage{
 map_rMATS_bipartition(
   g,
@@ -17,6 +17,30 @@ map_rMATS_bipartition(
   results_dir
 )
 }
+\arguments{
+\item{g}{Graph object}
+
+\item{gene}{Gene identifier}
+
+\item{gff}{GFF file path}
+
+\item{fromGTF_A3SS}{Path to rMATS A3SS fromGTF file}
+
+\item{fromGTF_A5SS}{Path to rMATS A5SS fromGTF file}
+
+\item{fromGTF_SE}{Path to rMATS SE fromGTF file}
+
+\item{fromGTF_RI}{Path to rMATS RI fromGTF file}
+
+\item{bipartitions}{Bipartition data frame with columns: setdiff1, setdiff2, ref_ex_part, path1, path2}
+
+\item{grase_output_dir}{Output directory for GrASE results}
+
+\item{results_dir}{Results subdirectory name}
+}
+\value{
+Modified graph object with rMATS event annotations
+}
 \description{
-Map rMATS events using bipartition bipartition analysis (original functionality)
+Map rMATS events using bipartition analysis (original functionality)
 }
