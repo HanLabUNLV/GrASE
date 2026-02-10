@@ -1,117 +1,74 @@
-#devtools::document()
-#devtools::install()
-
-#.libPaths('/home/mhan/R/singularity-library/4.4.2/Bioc')
 library(dplyr)
-library(doParallel)
-library(foreach)
+library(parallel)
 library(grase)
 library(SplicingGraphs)
+library(optparse)
 
-DEBUG_MODE = TRUE
+# Parse command line arguments
+option_list <- list(
+  make_option(c("-g", "--graphdir"), type="character", default=NULL,
+              help="graphml directory path", metavar="character"),
+  make_option(c("-o", "--outdir"), type="character", default=NULL,
+              help="output directory path", metavar="character")
+)
 
-indir = '/mnt/storage/jaquino/scRNAseq_sim_pt2/grase/graphml.dexseq.v34/'
-outdir = '/mnt/storage/jaquino/scRNAseq_sim_pt2/grase/graphml.dexseq.v34/'
-#indir = '/data2/han_lab/stevepark/SplicingGraphs/indir/'
-#outdir = '/data2/han_lab/stevepark/SplicingGraphs/indir/'
+opt_parser <- OptionParser(option_list=option_list)
+opt <- parse_args(opt_parser)
 
+if (is.null(opt$graphdir)) {
+  print_help(opt_parser)
+  stop("Input directory (--graphdir) must be specified.", call.=FALSE)
+}
 
-#sim_deds <- read.table("simulation_deds.cell150.txt", header=TRUE, sep="\t")
-sim_deds <- read.table(paste0(indir,"genelist"), header=TRUE, sep="\t")
-gene_summary = sim_deds %>% group_by(geneID)
-genes =  unique(gene_summary$geneID)
+if (is.null(opt$outdir)) {
+  print_help(opt_parser)
+  stop("Output directory (--outdir) must be specified.", call.=FALSE)
+}
+
+graphdir <- opt$graphdir
+outdir <- opt$outdir
+if (!dir.exists(outdir)) {
+  dir.create(outdir)
+}
+# Get gene list from graphml files
+graphml_files <- list.files(graphdir, pattern = "\\.graphml$", full.names = FALSE)
+gene_names <- sub("\\.graphml$", "", graphml_files)
 
 num_cores <- 20
-cl <- makeCluster(num_cores, outfile = "bipartitions.log")
-registerDoParallel(cl)
 
-results <- foreach(
-  gene        = genes,                  # iterates over your gene vector
-  .packages = c("grase", "rtracklayer", "SplicingGraphs", "txdbmaker", "igraph"),      # any packages you call inside
-  .combine  = 'c',                     # or 'rbind', 'list', etc.
-  .errorhandling = "pass"
-#  .verbose  = TRUE
-) %dopar% {
-
-#for (gene in genes) {
+process_gene <- function(gene) {
   tryCatch({
-  if(DEBUG_MODE) print(paste0("START ", gene))
-  flush.console()
-  indir = '/mnt/storage/jaquino/scRNAseq_sim_pt2/grase/graphml.dexseq.v34/'
-  outdir = '/mnt/storage/jaquino/scRNAseq_sim_pt2/grase/graphml.dexseq.v34/'
-#  indir = '/data2/han_lab/stevepark/SplicingGraphs/indir/'
-#  outdir = '/data2/han_lab/stevepark/SplicingGraphs/indir/'
+    graph_path <- file.path(graphdir, paste0(gene, ".graphml"))
 
+    filename = file.path(outdir, "/", paste0(gene, ".bipartitions.txt"))
+    runninglog = file.path(outdir, "/", paste0(gene, ".running"))
+    if (file.exists(filename) | file.exists(runninglog)) {
+      message(paste("skipping existing ", filename))
+      flush.console()
+      return(gene)
+    }
 
-  filename = file.path(outdir, "bipartitions.nocollapse", paste0(gene, ".bipartitions.txt"))
-  runninglog = file.path(outdir, "bipartitions.nocollapse", paste0(gene, ".running"))
-  if (file.exists(filename) | file.exists(runninglog)) {
-    message(paste("skipping existing ", filename))
-    flush.console()
+    print(paste("running", filename))
+    file.create(runninglog)
+
+    g <- igraph::read_graph(graph_path, format = "graphml")
+
+    cat("  calling grase::bipartition_paths()\n"); flush.console()
+    grase::bipartition_paths(
+        gene     = gene,
+        g        = g,
+        outdir   = outdir, 
+        max_path = 20,
+        collapse_bubbles = FALSE 
+    )
+    print(paste0("FINISH ", gene))
+    on.exit(unlink(runninglog))
     return(gene)
-    #next
+
+    }, error = function(e) {
+      message(paste("error in ", gene, ": ", e))
+      return(paste("ERROR", gene))
+    })
   }
 
-  gtf_path <- file.path(indir, "gtf", paste0(gene, ".gtf"))
-  gff_path <- file.path(indir, "dexseq.gff", paste0(gene, ".dexseq.gff"))
-  graph_path <- file.path(indir, "graphml", paste0(gene, ".graphml"))
-
-  gr <- rtracklayer::import(gtf_path)
-  if (length(unique(gr$transcript_id[!is.na(gr$transcript_id)])) < 2) {
-    message(paste("skipping single isoform ", filename))
-    flush.console()
-    return(gene)
-    #next
-  }
-  if(DEBUG_MODE) print(paste("running", filename))
-  file.create(runninglog)
-  gr <- gr[!(rtracklayer::mcols(gr)$type %in% c("start_codon", "stop_codon"))]
-  txdb <- txdbmaker::makeTxDbFromGRanges(gr)
-
-  sg <- SplicingGraphs::SplicingGraphs(txdb, min.ntx = 1)
-  #pdf(file.path(indir, 'sgplot', paste0(gene, ".sg.pdf")))
-  #plot(SplicingGraphs::sgraph(sg))
-  #dev.off()
-
-
-  edges_by_gene <- SplicingGraphs::sgedgesByGene(sg)
-  gene_sg = sg[gene]
-  gene_graph = edges_by_gene[[gene]]
-  sgigraph = grase::SG2igraph(gene, gene_sg, gene_graph)
-  
-  # now add dexseq edges 
-  gff <- readLines(gff_path)
-  sgigraph = grase::map_DEXSeq_from_gff(sgigraph, gff)
-  igraph::write_graph(sgigraph, graph_path, "graphml")
-
-
-  g <- igraph::read_graph(graph_path, format = "graphml")
-
-  # call your downstream function, fully namespaced
-  cat("  calling grase::bipartition_paths()\n"); flush.console()
-   
-  bipartitiondir = file.path(outdir, "bipartitions.nocollapse") 
-  if(DEBUG_MODE) print("bipartitiondir")
-  if(DEBUG_MODE) print(bipartitiondir)
-  grase::bipartition_paths(
-      gene     = gene,
-      g        = g,
-      sg       = sg,
-      outdir   = bipartitiondir, 
-      max_path = 20,
-      collapse_bubbles = FALSE 
-  )
-  if(DEBUG_MODE) print(paste0("FINISH ", gene))
-  on.exit(unlink(runninglog))
-  flush.console()
-  }, error = function(e) {
-    message("ERROR in gene ", gene, ": ", e$message)
-    return(NULL)
-  })
-
-#  return (gene)
-
-}
-stopCluster(cl)
-
-
+results <- mclapply(gene_names, process_gene, mc.cores = num_cores)

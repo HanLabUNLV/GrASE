@@ -133,7 +133,7 @@ find_diff_and_ref_exparts_for_split <- function(g, source, sink, split, parsed_p
 
 #' Compute diff exons from graph and splicing structure for specific transcripts
 #' @export
-diff_exons_between_tx <- function(gene, g, sg, tx_ids, outdir) {
+diff_exons_between_tx <- function(gene, g, tx_ids, outdir) {
 
   bipartitions_df <- data.frame()
   g <- grase::set_edge_names(g)
@@ -199,7 +199,7 @@ diff_exons_between_tx <- function(gene, g, sg, tx_ids, outdir) {
 
 #' Compute diff exons with one-vs-rest approach for each partition
 #' @export
-diff_exons_gene_ovr <- function(gene, g, sg, outdir) {
+diff_exons_gene_ovr <- function(gene, g, outdir) {
 
   bipartitions_df <- data.frame()
   g <- grase::set_edge_names(g)
@@ -253,7 +253,7 @@ diff_exons_gene_ovr <- function(gene, g, sg, outdir) {
 
 #' Compute diff exons from graph using binary partitions
 #' @export
-bipartition_paths <- function(gene, g, sg, outdir, max_path = 20, collapse_bubbles=FALSE) {
+bipartition_paths <- function(gene, g, outdir, max_path = 20, collapse_bubbles=FALSE) {
 
   bipartitions_df <- data.frame()
   g <- grase::set_edge_names(g)
@@ -307,7 +307,7 @@ bipartition_paths <- function(gene, g, sg, outdir, max_path = 20, collapse_bubbl
     contain_dag <- grase::path_subset_relation(ex_part_paths) 
     log_debug(paste("contain_dag len:", length(igraph::E(contain_dag))))
     if (length(ex_part_paths) > max_path) {
-        message(paste("bubble with more than 30 alternative paths: skipping ", gene, source, sink))
+        message(paste("bubble with more than", max_path, "alternative paths: skipping ", gene, source, sink))
         next;
     }
 
@@ -379,17 +379,25 @@ bipartition_paths <- function(gene, g, sg, outdir, max_path = 20, collapse_bubbl
     }
   }
 
+  #logfile <- file.path(outdir, paste0(gene, ".bipartitions.log"))
+  #write(paste(Sys.time(), "Starting filtering for gene:", gene), file=logfile, append=FALSE)
+  #write(paste("bipartitions_df has", nrow(bipartitions_df), "rows"), file=logfile, append=TRUE)
+  
   if (nrow(bipartitions_df) > 0) {
-    bipartitions_df <- bipartitions_df %>% dplyr::rowwise() %>% dplyr::mutate(ref_part_cnt = count_items(ref_ex_part)) %>% dplyr::ungroup()
+    bipartitions_df <- bipartitions_df %>% dplyr::mutate(ref_part_cnt = sapply(ref_ex_part, count_items))
+    #write(paste("After adding ref_part_cnt:", nrow(bipartitions_df), "rows"), file=logfile, append=TRUE)
     # remove rows where no setdiff1 or setdiff2 are found
     bipartitions_filtered <- bipartitions_df[!((bipartitions_df$setdiff1=="") & (bipartitions_df$setdiff2=="")),]
+    #write(paste("After removing empty setdiffs:", nrow(bipartitions_filtered), "rows"), file=logfile, append=TRUE)
     # for all rows with same setdiff1 and setdiff2, only retain the row with minimum number of ref_ex_part 
     bipartitions_filtered <- bipartitions_filtered %>%
       dplyr::group_by(setdiff1, setdiff2) %>%
       dplyr::filter(ref_part_cnt == min(ref_part_cnt)) %>%
       dplyr::ungroup() %>%
       dplyr::select(-ref_part_cnt)
+    #write(paste("After grouped filter:", nrow(bipartitions_filtered), "rows"), file=logfile, append=TRUE)
   } else {
+    #write("bipartitions_df was empty, skipping filtering", file=logfile, append=TRUE)
     bipartitions_filtered <- bipartitions_df
   }
 

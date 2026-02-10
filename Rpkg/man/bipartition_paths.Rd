@@ -4,7 +4,7 @@
 \alias{bipartition_paths}
 \title{Compute diff exons from graph using binary partitions}
 \usage{
-bipartition_paths(gene, g, sg, outdir, max_path = 20, collapse_bubbles = FALSE)
+bipartition_paths(gene, g, outdir, max_path = 20, collapse_bubbles = FALSE)
 }
 \description{
 Compute diff exons from graph using binary partitions

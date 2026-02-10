@@ -38,6 +38,9 @@ SG2igraph <- function(geneID,  gene_sg, gene_graph) {
   node_coord <- format(node_coord, scientific = FALSE, trim = TRUE)
   node_coord = rbind.data.frame(c("R","R"), node_coord)
   node_coord = rbind.data.frame(node_coord, c("L","L"))
+  # Ensure columns are character not factor
+  node_coord$sgid <- as.character(node_coord$sgid)
+  node_coord$coord <- as.character(node_coord$coord)
   rownames(node_coord) = node_coord$sgid
   #g1.df$from_sgid = g1.df$from
   #g1.df$to_sgid = g1.df$to
@@ -74,11 +77,19 @@ SG2igraph <- function(geneID,  gene_sg, gene_graph) {
       node_coord = node_coord[node_coord$sgid != dup_replace,]
     }
   }
-  nodes.df = data.frame( ID=node_coord$sgid)
+  nodes.df = data.frame(ID = as.character(node_coord$sgid), stringsAsFactors = FALSE)
   #write.table(nodes.df, paste0(geneID, ".vertices.txt"),  row.names=FALSE, sep="\t", quote=FALSE, col.names = TRUE)
 
   drops <- c("seqnames","strand", "tx_id")
   g1.df = g1.df[ , !(names(g1.df) %in% drops)]
+  
+  # Convert factors to character to prevent integer encoding in graphml
+  g1.df$ex_or_in <- as.character(g1.df$ex_or_in)
+  g1.df$from <- as.character(g1.df$from)
+  g1.df$to <- as.character(g1.df$to)
+  g1.df$from_pos <- as.character(g1.df$from_pos)
+  g1.df$to_pos <- as.character(g1.df$to_pos)
+  
   g <- igraph::graph_from_data_frame(g1.df, directed=TRUE, vertices=nodes.df)
   igraph::vertex_attr(g)$position = node_coord[igraph::vertex_attr(g)$name, 'coord']
 

@@ -1,6 +1,8 @@
 # GrASE
 Graph of Alternative Splice junctions and Exonic parts
 
+> **Note:** If you are looking for the source code for the paper [GrASE: Graph of Alternative Splice junctions and Exonic parts](https://academic.oup.com/bib/article/26/3/bbaf204/8127326), please check the [`archive/v1-archive` branch](https://github.com/HanLabUNLV/GrASE/tree/archive/v1-archive) or the [`v1.0` tag](https://github.com/HanLabUNLV/GrASE/releases/tag/v1.0).
+
 ## About
 GrASE is a tool that bridges the gap between the splice-junction approach of software like [rMATS](https://rnaseq-mats.sourceforge.io/index.html) or [MAJIQ](https://majiq.biociphers.org/) and the exon-fragment approach of software like [DEXSeq](https://bioconductor.org/packages/release/bioc/vignettes/DEXSeq/inst/doc/DEXSeq.html). Specifically, this tool uses either rMATS and DEXSeq or MAJIQ and DEXSeq in order to map splicing events to the exons they encompass and vice versa. Before using GrASE, you must run rMATS / MAJIQ on your data in order to get an rmats_output / majiq_output directory, respectively. In addition, you must also run DEXSeq on your data, and then output the results into a txt file. GrASE will use the output of both approach's representative software in order to do its job. 
 

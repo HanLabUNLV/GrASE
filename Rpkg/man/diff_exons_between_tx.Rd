@@ -4,7 +4,7 @@
 \alias{diff_exons_between_tx}
 \title{Compute diff exons from graph and splicing structure for specific transcripts}
 \usage{
-diff_exons_between_tx(gene, g, sg, tx_ids, outdir)
+diff_exons_between_tx(gene, g, tx_ids, outdir)
 }
 \description{
 Compute diff exons from graph and splicing structure for specific transcripts

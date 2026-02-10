@@ -98,7 +98,6 @@ for (gene in genes) {
   bipartitions <- grase::bipartition_paths(
       gene     = gene,
       g        = g,
-      sg       = sg,
       outdir   = bipartitiondir, 
       max_path = 20,
       collapse_bubbles = FALSE 

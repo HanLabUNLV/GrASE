@@ -4,7 +4,7 @@
 \alias{diff_exons_gene_ovr}
 \title{Compute diff exons with one-vs-rest approach for each partition}
 \usage{
-diff_exons_gene_ovr(gene, g, sg, outdir)
+diff_exons_gene_ovr(gene, g, outdir)
 }
 \description{
 Compute diff exons with one-vs-rest approach for each partition
