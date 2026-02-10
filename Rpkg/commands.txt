@@ -2,8 +2,14 @@
 #bash creatingFilesByGene.sh -r -s ~/graphml.dexseq.v34/rmats_output_dice_b_vs_cd8/ -a ~/graphml.dexseq.v34/gencode.v34.annotation.gtf -d dexseq_prepare_annotation.py -g ~/graphml.dexseq.v34/graphml -p 40
 bash creatingFilesByGene.sh -r -s  ~/DICE/rmats_post_CD4_CD4_N_STIM/ -a ~/graphml.dexseq.v34/gencode.v34.annotation.gtf -d dexseq_prepare_annotation.py -g ~/graphml.dexseq.v34/graphml/ -o ~/DICE/ -p 40 &> creatingFiles.log
 
-ls grase_results/gene_files/ > grase_results/all_genes.txt
-Rscript scripts/bipartitions.all.R
+
+# GrASE split 
+Rscript bipartitions.all.R --graphdir=~/GrASE_simulation/graphml --outdir=~/GrASE_simulation/bipartition2 --split=bipartition
+Rscript bipartitions.all.R --graphdir=~/GrASE_simulation/graphml --outdir=~/GrASE_simulation/multinomial --split=multinomial
+
+#ls grase_results/gene_files/ > grase_results/all_genes.txt
+#Rscript scripts/bipartitions.all.R
+
 Rscript scripts/filterTSSTTS.R
 
 Rscript scripts/map_rmats.R --dir=~/DICE/ --split='bipartitions' 

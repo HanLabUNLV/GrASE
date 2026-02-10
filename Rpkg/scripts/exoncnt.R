@@ -1,241 +1,15 @@
 library(parallel)
-#library(MASS)
-#library(matrixStats)
 library(tidyverse)
 library(grase)
 library(optparse)
 
-# Function to sum counts across columns for matching gene:exon keys
-# Function to compute column-wise sum for a gene's exons
-sum_exon_counts <- function(count_col, counts_df) {
-  if (is.na(count_col) || count_col == "" || count_col == "NA") return(rep(NA_real_, (ncol(counts_df)-2)))
-
-  # Split the exon list
-  exon_list <- unlist(strsplit(count_col, ","))
-  exon_list <- gsub("^E", "", exon_list)
-
-  rownames(counts_df) = counts_df$exon
-  matched_rows <- counts_df[exon_list,1:(ncol(counts_df)-2)]
-  # Sum across rows for each column (column-wise sum)
-  return_row = matrix(data=NA, ncol=ncol(matched_rows), dimnames=list(c(), colnames(matched_rows)))
-  if (nrow(matched_rows) > 0) {
-    return_row[1,] = colSums(matched_rows, na.rm = TRUE)
-  } 
-  return (return_row)
-}
-
-
-write_exoncnt_long <- function(ref_counts_df, diff_counts_df, events, gene_name, sampleinfo, outfilesuffix) {
-
-  ref_long <- ref_counts_df[ref_counts_df$event %in% events,] %>% 
-      pivot_longer(
-      cols = starts_with("SRR"),
-      names_to = "sample",
-      values_to = "ref")
-  diff_long <- diff_counts_df[diff_counts_df$event %in% events,] %>% 
-      pivot_longer(
-      cols = starts_with("SRR"),
-      names_to = "sample",
-      values_to = "diff")
-  
-  exoncnts <- cbind.data.frame(ref_long, diff = diff_long$diff)  
-  exoncnts <- exoncnts %>%
-      mutate(groups = sampleinfo[sample])
-  exoncnts$ref <- as.numeric(exoncnts$ref)
-  exoncnts$diff <- as.numeric(exoncnts$diff)
-  exoncnts$n <- exoncnts$ref + exoncnts$diff
-#  exoncnts <- exoncnts[!is.na(exoncnts$diff),]
-#  exoncnts <- exoncnts[exoncnts$n > 10,]
-  if (nrow(exoncnts) > 1) {
-    write.table(exoncnts, file=paste0(outdir,'/', gene_name, '.', outfilesuffix, '.exoncnt.txt'), quote=FALSE, sep="\t")
-  }
-
-}
-
-count_bipartitions <- function(bipartition_file, countmat, sampleinfo, outdir, outfilesuffix) {
-  bipartitions <- as.data.frame(read_tsv(bipartition_file, col_types = cols(.default = "c")))  # Reads columns as characters
-  bipartitions$event = rownames(bipartitions)
-  bipartitions <- bipartitions[!(is.na(bipartitions$setdiff1) & is.na(bipartitions$setdiff2)),]
-  if (length(bipartitions) == 0) { return (0) }
-  gene <- bipartitions$gene
-  n_samples = ncol(countmat)-2
-
-  bipartitions$ref_ex_part[is.na(bipartitions$ref_ex_part)] <- 'NA'
-  bipartitions$setdiff1[is.na(bipartitions$setdiff1)] <- 'NA'
-  bipartitions$setdiff2[is.na(bipartitions$setdiff2)] <- 'NA'
-  ref_counts_dict <- t(sapply(unique(bipartitions$ref_ex_part), sum_exon_counts, counts_df=countmat))
-  diff1_counts_dict <- t(sapply(unique(bipartitions$setdiff1), sum_exon_counts, counts_df=countmat))
-  diff2_counts_dict <- t(sapply(unique(bipartitions$setdiff2), sum_exon_counts, counts_df=countmat))
-
-  ref_counts_df = matrix(0, nrow(bipartitions), n_samples)
-  diff1_counts_df = matrix(0, nrow(bipartitions), n_samples)
-  diff2_counts_df = matrix(0, nrow(bipartitions), n_samples)
-  if (sum(!is.na(bipartitions$ref_ex_part)) > 0) ref_counts_df = as.data.frame(matrix(ref_counts_dict[bipartitions$ref_ex_part,], nrow = nrow(bipartitions), ncol=n_samples))
-  if (sum(!is.na(bipartitions$setdiff1)) > 0) diff1_counts_df = as.data.frame(matrix(diff1_counts_dict[bipartitions$setdiff1,], nrow = nrow(bipartitions), ncol=n_samples))
-  if (sum(!is.na(bipartitions$setdiff2)) > 0) diff2_counts_df = as.data.frame(matrix(diff2_counts_dict[bipartitions$setdiff2,], nrow = nrow(bipartitions), ncol=n_samples))
-
-  rownames(ref_counts_df) = rownames(bipartitions) 
-  rownames(diff1_counts_df) = rownames(bipartitions) 
-  rownames(diff2_counts_df) = rownames(bipartitions) 
- 
-  colnames(ref_counts_df) = colnames(countmat[,1:n_samples]) 
-  colnames(diff1_counts_df) = colnames(countmat[,1:n_samples]) 
-  colnames(diff2_counts_df) = colnames(countmat[,1:n_samples]) 
-
-  bipartitions$ref_mean = rowMeans(ref_counts_df)
-  bipartitions$diff1_mean = rowMeans(diff1_counts_df)
-  bipartitions$diff2_mean = rowMeans(diff2_counts_df)
-
-  ref_counts_df$event = bipartitions$event
-  diff1_counts_df$event = bipartitions$event
-  diff2_counts_df$event = bipartitions$event
-
-
-  bipartitions$diff_mean = do.call(pmax, c(bipartitions[, c("diff1_mean", "diff2_mean")], na.rm = TRUE))
-  bipartitions <- bipartitions %>%
-    mutate(
-      which   = case_when(
-        is.na(diff1_mean) & is.na(diff2_mean) ~ NA_character_,
-        is.na(diff1_mean)                     ~ "diff2",
-        is.na(diff2_mean)                     ~ "diff1",
-        diff1_mean > diff2_mean               ~ "diff1",
-        TRUE                                  ~ "diff2"
-      ),
-      setdiff = if_else(which == "diff1", setdiff1, setdiff2)
-    ) %>%
-    filter(!is.na(setdiff))
-
-  ref_counts_df <- inner_join(bipartitions[,c('gene', 'event', 'source', 'sink', 'ref_ex_part', 'setdiff')], ref_counts_df, by = "event")
-
-  diff1_counts_df <- inner_join(bipartitions[bipartitions$which=='diff1',c('gene', 'event', 'source', 'sink', 'ref_ex_part', 'setdiff')], diff1_counts_df, by = "event")
-
-  diff2_counts_df <- inner_join(bipartitions[bipartitions$which=='diff2',c('gene', 'event', 'source', 'sink', 'ref_ex_part', 'setdiff')], diff2_counts_df, by = "event")
-
-  diff_counts_df <- bind_rows(diff1_counts_df, diff2_counts_df) %>%
-       arrange(as.numeric(event))
-
-
-  if (nrow(bipartitions[bipartitions$diff_mean > 0,])) {
-    write.table(bipartitions, file=paste0(outdir,'/', gene[1], '.', outfilesuffix, '.txt'), quote=FALSE, sep="\t")
-    write_exoncnt_long(ref_counts_df, diff_counts_df, events=bipartitions$event, gene_name = gene[1], sampleinfo, outfilesuffix) 
-  }
- 
-  return (0)
-}
-
-
-count_multinomial <- function(multinomial_file, countmat, sampleinfo, outdir) {
-  # 1. Load the definitions file
-  multi_df <- as.data.frame(read_tsv(multinomial_file, col_types = cols(.default = "c")))
-  if (nrow(multi_df) == 0) return(0)
-  
-  # Ensure events are uniquely identified by their row names/indices
-  multi_df$event <- rownames(multi_df)
-  gene_id <- multi_df$gene[1]
-  n_samples <- ncol(countmat) - 2
-  
-  # Identify all potential alternative option columns (setdiff1, setdiff2, etc.)
-  setdiff_cols <- grep("^setdiff[0-9]+$", colnames(multi_df), value = TRUE)
-  
-  # 2. Robust Helper to retrieve counts for a column of exon strings
-  get_counts_df <- function(col_name) {
-    vals <- multi_df[[col_name]]
-    vals[is.na(vals)] <- 'NA' # Standardize missing values
-    unique_vals <- unique(vals)
-    
-    # Efficiency: Calculate sums only for unique combinations found in this column
-    counts_dict <- t(sapply(unique_vals, sum_exon_counts, counts_df=countmat))
-    
-    # Handle edge case where sapply doesn't return a matrix (single unique value)
-    if (length(unique_vals) == 1) {
-       counts_dict <- matrix(counts_dict, nrow=1)
-       rownames(counts_dict) <- unique_vals
-    }
-    
-    # Map counts back to every event in the gene and force into a data frame
-    # This ensures mutate() and pivot_longer() downstream will not error.
-    counts_out <- as.data.frame(matrix(counts_dict[vals,], nrow = nrow(multi_df), ncol=n_samples))
-    colnames(counts_out) <- colnames(countmat)[1:n_samples]
-    counts_out$exon_part <- vals
-    return(counts_out)
-  }
-  
-  long_dfs <- list()
-  
-  # 3. Process the Reference Column (The baseline for the Wald Test)
-  multi_df$ref_ex_part[is.na(multi_df$ref_ex_part)] <- 'NA'
-  ref_counts_df <- get_counts_df("ref_ex_part")
-  
-  long_dfs[["ref"]] <- ref_counts_df %>%
-    mutate(event = multi_df$event) %>%
-    pivot_longer(cols = starts_with("sample_"), names_to = "sample", values_to = "count") %>%
-    mutate(type = "ref")
-    
-  # 4. Process Setdiff Columns
-  for (col in setdiff_cols) {
-    # FIX: Skip columns that are entirely NA (like your setdiff4 example)
-    if (all(is.na(multi_df[[col]]))) {
-      next
-    }
-    
-    counts_df <- get_counts_df(col)
-    
-    # Add mean counts to the summary data frame
-    multi_df[[paste0(col, "_mean")]] <- rowMeans(counts_df[,1:n_samples], na.rm=TRUE)
-    
-    # Convert to long format and store
-    long_dfs[[col]] <- counts_df %>%
-      mutate(event = multi_df$event) %>%
-      pivot_longer(cols = starts_with("sample_"), names_to = "sample", values_to = "count") %>%
-      mutate(type = col)
-  }
-  
-  # 5. Combine everything and cleanup
-  # filter(!is.na(count)) removes rows where a specific event didn't have that setdiff option
-  all_long <- bind_rows(long_dfs) %>%
-    filter(!is.na(count)) %>% 
-    mutate(
-      gene = gene_id,
-      groups = sampleinfo[sample]
-    ) %>%
-    relocate(exon_part, .after = type) %>%
-    arrange(as.numeric(event))
-    
-  # Save the updated definitions (with means) and the long-format counts
-  write.table(multi_df, file=paste0(outdir,'/', gene_id, '.multinomial.txt'), 
-              quote=FALSE, sep="\t", row.names=FALSE)
-  
-  if (nrow(all_long) > 0) {
-    write.table(all_long, file=paste0(outdir,'/', gene_id, '.multinomial.exoncnt.txt'), 
-                quote=FALSE, sep="\t", row.names=FALSE)
-  }
-  
-  return(0)
-}
-
-
-
-
-
-  
-
-
-
-
-
-
-
-
-
-
-
-
-#exit()
+# --- Main Execution Script ---
 
 analysis_type = 'bipartition' 
-indir = '~/DICE'
-cond1 = 'CD4'
-cond2 = 'CD4_N_STIM'
+indir = '~/GrASE_simulation'
+countdir = '~/GrASE_simulation/DEXSeq/count_files'
+cond1 = 'group1'
+cond2 = 'group2'
 
 args = commandArgs(trailingOnly=TRUE)
 
@@ -258,8 +32,8 @@ if (!is.null(opt$dir)) {
 
 
 
-countFiles1 <- list.files('/mnt/data1/home/mirahan/DICE/count_files/CD4', pattern = "\\.txt$", full.names=TRUE)
-countFiles2 = list.files('/mnt/data1/home/mirahan/DICE/count_files/CD4_N_STIM', pattern = "\\.txt$", full.names=TRUE)
+countFiles1 <- list.files(paste0(countdir, '/', cond1), pattern = "\\.txt$", full.names=TRUE)
+countFiles2 <- list.files(paste0(countdir, '/', cond2), pattern = "\\.txt$", full.names=TRUE)
 countFiles = c(countFiles1, countFiles2)
 cond1_ncells = length(countFiles1)
 cond2_ncells = length(countFiles2)
@@ -267,9 +41,15 @@ total_ncells = length(countFiles)
 
 listOfFiles <- lapply(countFiles, function(x) read.table(x, header=FALSE, sep="\t", row.names = 1)) 
 read_counts <- data.frame(listOfFiles)
-srr_ids <- gsub("_counts.txt", "", basename(countFiles))
-colnames(read_counts) <- srr_ids
-read_counts <- read_counts[1:(nrow(read_counts)-5),]
+
+# samplesIDs
+samples1 <- sub("_counts\\.txt$", "", basename(countFiles1))
+samples2 <- sub("_counts\\.txt$", "", basename(countFiles2))
+sampleNames = c(paste0(cond1, '_', samples1), paste0(cond2, '_', samples2))
+conditions = c(rep(cond1,length(samples1)), rep(cond2, length(samples2)))
+
+colnames(read_counts) <- sampleNames
+#read_counts <- read_counts[1:(nrow(read_counts)-5),]
 test = unlist(strsplit(rownames(read_counts), ":"))
 gene_exon = matrix(test, ncol=2, byrow=TRUE)
 read_counts$gene = gene_exon[,1]
@@ -277,7 +57,7 @@ read_counts$exon = gene_exon[,2]
 counts_list <- split(read_counts, read_counts$gene)
 
 sampleTable = data.frame(
-  row.names = srr_ids,
+  row.names = sampleNames,
   condition = c(rep(cond1, cond1_ncells), rep(cond2, cond2_ncells)))
 sampleinfo <- as.vector(sampleTable[,"condition"])
 names(sampleinfo) <- rownames(sampleTable)
@@ -289,8 +69,8 @@ names(sampleinfo) <- rownames(sampleTable)
 if (analysis_type == 'all' || analysis_type == 'bipartition') {
 
   # input files
-  bipartition_path = paste0(indir, '/bipartitions.filtered')
-  outdir = paste0(indir,'/split_exoncnts/bipartition')
+  bipartition_path = paste0(indir, '/bipartition.filtered')
+  outdir = paste0(indir,'/bipartition.counts')
   if (!dir.exists(outdir)) {
     dir.create(outdir, recursive = TRUE)
   }
@@ -321,7 +101,7 @@ if (analysis_type == 'all' || analysis_type == 'bipartition') {
 
   # input files
   n_choose_2_path = paste0(indir, '/n_choose_2.filtered')
-  outdir = paste0(indir,'/split_exoncnts/n_choose_2')
+  outdir = paste0(indir,'/n_choose_2.counts')
   if (!dir.exists(outdir)) {
     dir.create(outdir, recursive = TRUE)
   }
@@ -353,7 +133,7 @@ if (analysis_type == 'all' || analysis_type == 'bipartition') {
 
   # input files
   multinomial_path = paste0(indir, '/multinomial.filtered')
-  outdir = paste0(indir,'/split_exoncnts/multinomial')
+  outdir = paste0(indir,'/multinomial.counts')
   if (!dir.exists(outdir)) {
     dir.create(outdir, recursive = TRUE)
   }
@@ -381,3 +161,62 @@ if (analysis_type == 'all' || analysis_type == 'bipartition') {
   }, mc.cores = 32)
 
 }
+
+
+# --- Concatenate exon count files ---
+cat("\nCombining exon count files...\n")
+
+# Helper function to concatenate files
+concat_exoncnt_files <- function(input_dir, pattern, output_file, label) {
+  files <- list.files(path = input_dir, pattern = pattern, full.names = TRUE)
+  
+  if (length(files) == 0) {
+    cat(label, ": No files found\n")
+    return(invisible(NULL))
+  }
+  
+  # Copy first file with header
+  file.copy(files[1], output_file, overwrite = TRUE)
+  
+  # Append remaining files without headers
+  if (length(files) > 1) {
+    for (i in 2:length(files)) {
+      lines <- readLines(files[i])
+      if (length(lines) > 1) {
+        write(lines[-1], file = output_file, append = TRUE)
+      }
+    }
+  }
+  
+  cat(label, ": Combined", length(files), "files into", output_file, "\n")
+}
+
+# Run concatenation for each analysis type
+if (analysis_type == 'all' || analysis_type == 'bipartition') {
+  concat_exoncnt_files(
+    input_dir = paste0(indir, '/bipartition.counts'),
+    pattern = "\\.bipartitions\\.exoncnt\\.txt$",
+    output_file = paste0(indir, '/bipartition.exoncnt.combined.txt'),
+    label = "Bipartition"
+  )
+}
+
+if (analysis_type == 'all' || analysis_type == 'n_choose_2') {
+  concat_exoncnt_files(
+    input_dir = paste0(indir, '/n_choose_2.counts'),
+    pattern = "\\.n_choose_2\\.exoncnt\\.txt$",
+    output_file = paste0(indir, '/n_choose_2.exoncnt.combined.txt'),
+    label = "N_choose_2"
+  )
+}
+
+if (analysis_type == 'all' || analysis_type == 'multinomial') {
+  concat_exoncnt_files(
+    input_dir = paste0(indir, '/multinomial.counts'),
+    pattern = "\\.multinomial\\.exoncnt\\.txt$",
+    output_file = paste0(indir, '/multinomial.exoncnt.combined.txt'),
+    label = "Multinomial"
+  )
+}
+
+cat("Done!\n")

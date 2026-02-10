@@ -401,8 +401,8 @@ bipartition_paths <- function(gene, g, outdir, max_path = 20, collapse_bubbles=F
     bipartitions_filtered <- bipartitions_df
   }
 
-  filename_all = file.path(outdir, paste0(gene, ".bipartitions.all.txt"))
-  filename = file.path(outdir, paste0(gene, ".bipartitions.txt"))
+  filename_all = file.path(outdir, paste0(gene, ".bipartition.all.txt"))
+  filename = file.path(outdir, paste0(gene, ".bipartition.txt"))
   log_debug(paste0("filename :", filename))
 
   write.table(bipartitions_df, filename_all , sep = "\t", quote = FALSE, row.names = FALSE)

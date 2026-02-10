@@ -71,8 +71,11 @@ split_bipartition <- function(gene) {
     return(gene)
 
     }, error = function(e) {
-      message(paste("error in ", gene, ": ", e))
-      return(paste("ERROR", gene))
+      msg <- sprintf("[%s] ERROR in %s (PID %d): %s\n",
+                     format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
+                     f, Sys.getpid(), conditionMessage(e))
+      cat(msg, file = "split_bipartition.errors.log", append = TRUE)
+      NULL
     }
   )
 }
@@ -106,8 +109,11 @@ split_multinomial <- function(gene) {
     return(gene)
 
     }, error = function(e) {
-      message(paste("error in ", gene, ": ", e))
-      return(paste("ERROR", gene))
+      msg <- sprintf("[%s] ERROR in %s (PID %d): %s\n",
+                     format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
+                     f, Sys.getpid(), conditionMessage(e))
+      cat(msg, file = "split_multinomial.errors.log", append = TRUE)
+      NULL
     }
   )
 }
@@ -141,8 +147,11 @@ split_n_choose_2 <- function(gene) {
     return(gene)
 
     }, error = function(e) {
-      message(paste("error in ", gene, ": ", e))
-      return(paste("ERROR", gene))
+      msg <- sprintf("[%s] ERROR in %s (PID %d): %s\n",
+                     format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
+                     f, Sys.getpid(), conditionMessage(e))
+      cat(msg, file = "split_n_choose_2.errors.log", append = TRUE)
+      NULL
     }
   )
 }

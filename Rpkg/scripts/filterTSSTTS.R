@@ -1,14 +1,45 @@
+library(optparse)
+
+bipartitions_dir = "~/GrASE_simulation/bipartition"
+outdir = "~/GrASE_simulation/bipartition.filtered"
+
+# Parse command line arguments
+option_list <- list(
+  make_option(c("-g", "--bipartitions_dir"), type="character", default=NULL,
+              help="graphml directory path", metavar="character"),
+  make_option(c("-o", "--outdir"), type="character", default=NULL,
+              help="output directory path", metavar="character"),
+  make_option(c("-s", "--split"), type="character", default=NULL,
+              help="output directory path", metavar="character")
+)
+
+opt_parser <- OptionParser(option_list=option_list)
+opt <- parse_args(opt_parser)
+
+if (is.null(opt$bipartitions_dir)) {
+  print_help(opt_parser)
+  stop("Input directory (--bipartitions_dir) must be specified.", call.=FALSE)
+}
+if (is.null(opt$outdir)) {
+  print_help(opt_parser)
+  stop("Output directory (--outdir) must be specified.", call.=FALSE)
+}
+if (is.null(opt$split)) {
+  print_help(opt_parser)
+  stop("Split method (--split) must be specified among 'bipartition', 'multinomial' or 'n_choose_2'.", call.=FALSE)
+}
+
+bipartitions_dir <- opt$bipartitions_dir
+outdir <- opt$outdir
+split <- opt$split
+if (!dir.exists(outdir)) {
+  dir.create(outdir)
+}
 
 
-#bipartitions_path = '~/graphml.dexseq.v34/bipartitions.nocollapse'
-#outdir = '~/graphml.dexseq.v34/bipartitions.filtered'
-bipartitions_path = '~/graphml.dexseq.v34/multinomial.nocollapse'
-outdir = '~/graphml.dexseq.v34/multinomial.filtered'
-#bipartitions_path = '~/graphml.dexseq.v34/n_choose_2.nocollapse'
-#outdir = '~/graphml.dexseq.v34/n_choose_2.filtered'
 
-bipartitions_files <- list.files(path = bipartitions_path,
-                                 pattern = "multinomial.txt$", full.names=TRUE)
+bipartitions_files <- list.files(path = bipartitions_dir,
+                                 pattern = "bipartitions.txt$", full.names=TRUE)
 for (f in bipartitions_files) {
    
   print(paste0("infile :", f))
