@@ -4,8 +4,8 @@ bash creatingFilesByGene.sh -r -s  ~/DICE/rmats_post_CD4_CD4_N_STIM/ -a ~/graphm
 
 
 # GrASE split 
-Rscript bipartitions.all.R --graphdir=~/GrASE_simulation/graphml --outdir=~/GrASE_simulation/bipartition2 --split=bipartition
-Rscript bipartitions.all.R --graphdir=~/GrASE_simulation/graphml --outdir=~/GrASE_simulation/multinomial --split=multinomial
+Rscript bubble_path_split.R --graphdir=~/GrASE_simulation/graphml --outdir=~/GrASE_simulation/bipartition2 --split=bipartition
+Rscript bubble_path_split.R --graphdir=~/GrASE_simulation/graphml --outdir=~/GrASE_simulation/multinomial --split=multinomial
 
 #ls grase_results/gene_files/ > grase_results/all_genes.txt
 #Rscript scripts/bipartitions.all.R

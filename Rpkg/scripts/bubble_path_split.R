@@ -11,7 +11,9 @@ option_list <- list(
   make_option(c("-o", "--outdir"), type="character", default=NULL,
               help="output directory path", metavar="character"),
   make_option(c("-s", "--split"), type="character", default=NULL,
-              help="output directory path", metavar="character")
+              help="output directory path", metavar="character"),
+  make_option(c("-n", "--genename"), type="character", default=NULL,
+              help="single gene name to process (optional)", metavar="character")
 )
 
 opt_parser <- OptionParser(option_list=option_list)
@@ -36,9 +38,15 @@ split <- opt$split
 if (!dir.exists(outdir)) {
   dir.create(outdir)
 }
-# Get gene list from graphml files
-graphml_files <- list.files(graphdir, pattern = "\\.graphml$", full.names = FALSE)
-gene_names <- sub("\\.graphml$", "", graphml_files)
+# Get gene list from graphml files or use single gene if specified
+if (!is.null(opt$genename)) {
+  gene_names <- opt$genename
+  message(paste("Processing single gene:", gene_names))
+} else {
+  graphml_files <- list.files(graphdir, pattern = "\\.graphml$", full.names = FALSE)
+  gene_names <- sub("\\.graphml$", "", graphml_files)
+  message(paste("Processing", length(gene_names), "genes from directory"))
+}
 
 num_cores <- 20
 
@@ -158,11 +166,23 @@ split_n_choose_2 <- function(gene) {
 
 
 if ( split == 'bipartition') {
-  results <- mclapply(gene_names, split_bipartition, mc.cores = num_cores)
+  if (length(gene_names) == 1) {
+    results <- split_bipartition(gene_names)
+  } else {
+    results <- mclapply(gene_names, split_bipartition, mc.cores = num_cores)
+  }
 } else if (split == 'multinomial') {
-  results <- mclapply(gene_names, split_multinomial, mc.cores = num_cores)
+  if (length(gene_names) == 1) {
+    results <- split_multinomial(gene_names)
+  } else {
+    results <- mclapply(gene_names, split_multinomial, mc.cores = num_cores)
+  }
 } else if (split == 'n_choose_2') {
-  results <- mclapply(gene_names, split_n_choose_2, mc.cores = num_cores)
+  if (length(gene_names) == 1) {
+    results <- split_n_choose_2(gene_names)
+  } else {
+    results <- mclapply(gene_names, split_n_choose_2, mc.cores = num_cores)
+  }
 } else {
   stop("Split method (--split) must be specified among 'bipartition', 'multinomial' or 'n_choose_2'.", call.=FALSE)
 }
