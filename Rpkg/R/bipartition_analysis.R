@@ -49,7 +49,8 @@ find_reference_exonic_part <- function(source, sink, ex_part1_set, ex_part2_set,
 
 #' Find differential and reference exonic parts for binary splits
 #' @export
-find_diff_and_ref_exparts_for_split <- function(g, source, sink, split, parsed_partitions, parsed_paths, tx_ex_parts, bipartitions_df, gene=gene) {
+find_diff_and_ref_exparts_for_split <- function(g, source, sink, split, parsed_partitions, parsed_paths, tx_ex_parts, bipartitions_df, gene=gene,
+                                                  g_exon=NULL, g_expart=NULL, ex_or_in_gexpart=NULL, dexseq_frag=NULL) {
 
       group1 = as.numeric(split$group1)
       group2 = as.numeric(split$group2)
@@ -58,15 +59,20 @@ find_diff_and_ref_exparts_for_split <- function(g, source, sink, split, parsed_p
       log_debug(tx1)
       log_debug(tx2)
 
-      ex_or_in_vec <- igraph::edge_attr(g, "ex_or_in")
-      g_exon <- igraph::delete_edges(g, igraph::E(g)[ex_or_in_vec == 'ex_part']) # have to delete all edges in one command
-      g_expart <- igraph::delete_edges(g, igraph::E(g)[ex_or_in_vec == 'ex']) # have to delete all edges in one command
-      ex_or_in_gexon <- igraph::edge_attr(g_exon, "ex_or_in")
-      names(ex_or_in_gexon) <- igraph::edge_attr(g_exon, "name")
-      ex_or_in_gexpart <- igraph::edge_attr(g_expart, "ex_or_in")
-      names(ex_or_in_gexpart) <- igraph::edge_attr(g_expart, "name")
-      dexseq_frag <- igraph::edge_attr(g_expart, "dexseq_fragment")
-      names(dexseq_frag) <- igraph::edge_attr(g_expart, "name")
+      # Use precomputed graph derivatives if provided, otherwise compute them
+      if (is.null(g_exon) || is.null(g_expart)) {
+        ex_or_in_vec <- igraph::edge_attr(g, "ex_or_in")
+        g_exon <- igraph::delete_edges(g, igraph::E(g)[ex_or_in_vec == 'ex_part'])
+        g_expart <- igraph::delete_edges(g, igraph::E(g)[ex_or_in_vec == 'ex'])
+      }
+      if (is.null(ex_or_in_gexpart)) {
+        ex_or_in_gexpart <- igraph::edge_attr(g_expart, "ex_or_in")
+        names(ex_or_in_gexpart) <- igraph::edge_attr(g_expart, "name")
+      }
+      if (is.null(dexseq_frag)) {
+        dexseq_frag <- igraph::edge_attr(g_expart, "dexseq_fragment")
+        names(dexseq_frag) <- igraph::edge_attr(g_expart, "name")
+      }
 
       vpath1 = lapply(parsed_paths[group1], function(vec) c(source, vec, sink)) 
       vpath2 = lapply(parsed_paths[group2], function(vec) c(source, vec, sink)) 
@@ -128,7 +134,7 @@ find_diff_and_ref_exparts_for_split <- function(g, source, sink, split, parsed_p
       )
       log_debug(new_row)
       bipartitions_df <- rbind(bipartitions_df, new_row)
-  return(list(bipartitions_df = bipartitions_df))
+  return(list(bipartitions_df = bipartitions_df, new_row = new_row))
 }
 
 #' Compute diff exons from graph and splicing structure for specific transcripts
@@ -270,14 +276,30 @@ bipartition_paths <- function(gene, g, outdir, max_path = 20, collapse_bubbles=F
   bubbles_orig = bubbles_ordered
   bubbles_ordered = bubbles_ordered[,1:ncol(bubbles_df)]
 
-  for (bubble_idx in 1:nrow(bubbles_ordered)) {
-  
+  # Precompute graph derivatives (invariant when collapse_bubbles=FALSE)
+  .recompute_graph_derivs <- function(g) {
     ex_or_in_vec <- igraph::edge_attr(g, "ex_or_in")
-    g_exon <- igraph::delete_edges(g, igraph::E(g)[ex_or_in_vec == 'ex_part']) # have to delete all edges in one command
-    g_expart <- igraph::delete_edges(g, igraph::E(g)[ex_or_in_vec == 'ex']) # have to delete all edges in one command
-
+    g_exon <- igraph::delete_edges(g, igraph::E(g)[ex_or_in_vec == 'ex_part'])
+    g_expart <- igraph::delete_edges(g, igraph::E(g)[ex_or_in_vec == 'ex'])
     ex_or_in_gexpart <- igraph::edge_attr(g_expart, "ex_or_in")
     names(ex_or_in_gexpart) <- igraph::edge_attr(g_expart, "name")
+    dexseq_frag <- igraph::edge_attr(g_expart, "dexseq_fragment")
+    names(dexseq_frag) <- igraph::edge_attr(g_expart, "name")
+    txpaths <- grase::txpath_from_edgeattr(g)
+    tx_exonpaths <- lapply(txpaths, grase::from_vpath_to_exon_path_simple, g=g_exon)
+    tx_ex_parts <- lapply(tx_exonpaths, grase::from_epath_to_expart_path_simple, g=g_expart)
+    list(g_exon=g_exon, g_expart=g_expart, ex_or_in_gexpart=ex_or_in_gexpart,
+         dexseq_frag=dexseq_frag, txpaths=txpaths, tx_exonpaths=tx_exonpaths, tx_ex_parts=tx_ex_parts)
+  }
+  gd <- .recompute_graph_derivs(g)
+
+  n_bubbles <- nrow(bubbles_ordered)
+  message(sprintf("[%s] %s: processing %d bubbles", format(Sys.time(), "%H:%M:%S"), gene, n_bubbles))
+  pb <- utils::txtProgressBar(min = 0, max = n_bubbles, style = 3)
+
+  for (bubble_idx in 1:nrow(bubbles_ordered)) {
+
+    utils::setTxtProgressBar(pb, bubble_idx)
 
     if (bubble_idx > nrow(bubbles_ordered)) {
         log_debug("collapsed all bubbles. exiting the loop 1")
@@ -288,18 +310,14 @@ bipartition_paths <- function(gene, g, outdir, max_path = 20, collapse_bubbles=F
     if (source == "R" && sink == "L") next
     log_debug(paste("source: ", source, " sink: ", sink))
 
-    txpaths <- grase::txpath_from_edgeattr(g)
-    tx_exonpaths = lapply(txpaths, grase::from_vpath_to_exon_path_simple, g=g_exon)         # high_mem
-    tx_ex_parts = lapply(tx_exonpaths, grase::from_epath_to_expart_path_simple, g=g_expart) #high_mem
-
     parsed_paths <- lapply(bubbles_ordered$paths[[bubble_idx]], function(x) strsplit(gsub("[{}]", "", x), ",")[[1]])
     parsed_partitions <- lapply(bubbles_ordered$partitions[[bubble_idx]], function(x) strsplit(gsub("[{}]", "", x), ",")[[1]])
 
     vpaths = lapply(parsed_paths, function(vec) c(source, vec, sink))
-    epaths = lapply(vpaths, grase::from_vpath_to_exon_path_simple, g=g_exon) 
+    epaths = lapply(vpaths, grase::from_vpath_to_exon_path_simple, g=gd$g_exon) 
 
-    ex_part_paths <- lapply(epaths, grase::from_epath_to_expart_path_simple, g=g_expart)
-    ex_part_paths <- lapply(ex_part_paths, function(x) {return (x[ex_or_in_gexpart[x] == 'ex_part'])})
+    ex_part_paths <- lapply(epaths, grase::from_epath_to_expart_path_simple, g=gd$g_expart)
+    ex_part_paths <- lapply(ex_part_paths, function(x) {return (x[gd$ex_or_in_gexpart[x] == 'ex_part'])})
 
     names(ex_part_paths)  = 1:length(ex_part_paths) 
 
@@ -322,7 +340,16 @@ bipartition_paths <- function(gene, g, outdir, max_path = 20, collapse_bubbles=F
     rm(contain_dag)
     
     for (split in valid_splits) {
-      retval = grase::find_diff_and_ref_exparts_for_split(g=g, source=source, sink=sink,  split=split, parsed_partitions=parsed_partitions, parsed_paths=parsed_paths, tx_ex_parts=tx_ex_parts, bipartitions_df=bipartitions_df, gene=gene) 
+      retval = grase::find_diff_and_ref_exparts_for_split(
+        g=g, source=source, sink=sink, split=split,
+        parsed_partitions=parsed_partitions, parsed_paths=parsed_paths,
+        tx_ex_parts=gd$tx_ex_parts, bipartitions_df=bipartitions_df, gene=gene,
+        g_exon=gd$g_exon, g_expart=gd$g_expart,
+        ex_or_in_gexpart=gd$ex_or_in_gexpart, dexseq_frag=gd$dexseq_frag
+      )
+      new_row <- retval$new_row
+      # Early filter: skip if both setdiff columns are empty
+      if (new_row$setdiff1 == "" && new_row$setdiff2 == "") next
       bipartitions_df = retval$bipartitions_df
     }
 
@@ -363,8 +390,9 @@ bipartition_paths <- function(gene, g, outdir, max_path = 20, collapse_bubbles=F
       epaths_to_keep = epaths[idx_to_keep]
       g <- grase::update_txpaths_after_bubble_collapse2(g, tx_to_update, epaths_to_keep) 
 
-      # update bubbles_df
+      # update bubbles_df and recompute graph derivatives after collapse
       g <- grase::set_txpath_to_vertex_attr(g)
+      gd <- .recompute_graph_derivs(g)
       bubbles_updated <- grase::detect_bubbles_igraph(g)            # high_mem
       if (nrow(bubbles_updated) == 0) {
         log_debug("collapsed all bubbles. exiting the loop 2")
@@ -379,25 +407,19 @@ bipartition_paths <- function(gene, g, outdir, max_path = 20, collapse_bubbles=F
     }
   }
 
-  #logfile <- file.path(outdir, paste0(gene, ".bipartitions.log"))
-  #write(paste(Sys.time(), "Starting filtering for gene:", gene), file=logfile, append=FALSE)
-  #write(paste("bipartitions_df has", nrow(bipartitions_df), "rows"), file=logfile, append=TRUE)
-  
+  close(pb)
+  message(sprintf("[%s] %s: %d rows after empty-setdiff filter",
+                  format(Sys.time(), "%H:%M:%S"), gene, nrow(bipartitions_df)))
+
   if (nrow(bipartitions_df) > 0) {
     bipartitions_df <- bipartitions_df %>% dplyr::mutate(ref_part_cnt = sapply(ref_ex_part, count_items))
-    #write(paste("After adding ref_part_cnt:", nrow(bipartitions_df), "rows"), file=logfile, append=TRUE)
-    # remove rows where no setdiff1 or setdiff2 are found
-    bipartitions_filtered <- bipartitions_df[!((bipartitions_df$setdiff1=="") & (bipartitions_df$setdiff2=="")),]
-    #write(paste("After removing empty setdiffs:", nrow(bipartitions_filtered), "rows"), file=logfile, append=TRUE)
-    # for all rows with same setdiff1 and setdiff2, only retain the row with minimum number of ref_ex_part 
-    bipartitions_filtered <- bipartitions_filtered %>%
+    # for all rows with same setdiff1 and setdiff2, only retain the row with minimum number of ref_ex_part
+    bipartitions_filtered <- bipartitions_df %>%
       dplyr::group_by(setdiff1, setdiff2) %>%
       dplyr::filter(ref_part_cnt == min(ref_part_cnt)) %>%
       dplyr::ungroup() %>%
       dplyr::select(-ref_part_cnt)
-    #write(paste("After grouped filter:", nrow(bipartitions_filtered), "rows"), file=logfile, append=TRUE)
   } else {
-    #write("bipartitions_df was empty, skipping filtering", file=logfile, append=TRUE)
     bipartitions_filtered <- bipartitions_df
   }
 

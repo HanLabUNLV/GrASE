@@ -13,7 +13,11 @@ find_diff_and_ref_exparts_for_split(
   parsed_paths,
   tx_ex_parts,
   bipartitions_df,
-  gene = gene
+  gene = gene,
+  g_exon = NULL,
+  g_expart = NULL,
+  ex_or_in_gexpart = NULL,
+  dexseq_frag = NULL
 )
 }
 \description{
