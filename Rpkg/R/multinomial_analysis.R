@@ -156,7 +156,7 @@ multinomial_paths <- function(gene, g, sg, outdir, max_path = 20, collapse_bubbl
     return (NULL) 
   }
 
-  bubbles_ordered = grase::bubble_ordering3(g, bubbles_df)
+  bubbles_ordered = grase::bubble_ordering4(g, bubbles_df)
   bubbles_orig = bubbles_ordered
   bubbles_ordered = bubbles_ordered[,1:ncol(bubbles_df)]
 
@@ -268,12 +268,12 @@ multinomial_paths <- function(gene, g, sg, outdir, max_path = 20, collapse_bubbl
         log_debug("collapsed all bubbles. exiting the loop 2")
         break
       }
-      bubbles_updated_ordered = grase::bubble_ordering3(g, bubbles_updated)     
+      bubbles_updated_ordered = grase::bubble_ordering4(g, bubbles_updated)     
       finished_sources = bubbles_ordered$source[(1:bubble_idx)]
       finished_sinks = bubbles_ordered$sink[(1:bubble_idx)]
       finished_bubbles_idx = (bubbles_updated_ordered$source %in% finished_sources) & (bubbles_updated_ordered$sink %in% finished_sinks)
       bubbles_updated_ordered = bubbles_updated_ordered[!finished_bubbles_idx,]
-      bubbles_ordered = rbind.data.frame(bubbles_ordered[1:bubble_idx,1:ncol(bubbles_df)],bubbles_updated_ordered[,1:ncol(bubbles_df)])
+      bubbles_ordered = S4Vectors::rbind(bubbles_ordered[1:bubble_idx,1:ncol(bubbles_df)],bubbles_updated_ordered[,1:ncol(bubbles_df)])
     }
   }
 

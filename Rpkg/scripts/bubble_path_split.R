@@ -13,9 +13,11 @@ option_list <- list(
   make_option(c("-s", "--split"), type="character", default=NULL,
               help="output directory path", metavar="character"),
   make_option(c("-n", "--genename"), type="character", default=NULL,
-              help="single gene name to process (optional)", metavar="character")
+              help="single gene name to process (optional)", metavar="character"),
+  make_option(c("-c", "--collapse"), action="store_true", default=FALSE,
+              help="collapse bubbles after processing (default: FALSE)")
 )
-
+opt = ''
 opt_parser <- OptionParser(option_list=option_list)
 opt <- parse_args(opt_parser)
 
@@ -32,9 +34,17 @@ if (is.null(opt$split)) {
   stop("Split method (--split) must be specified among 'bipartition', 'multinomial' or 'n_choose_2'.", call.=FALSE)
 }
 
+#opt$graphdir <- "~/GrASE_simulation/graphml" 
+#opt$outdir <- "~/GrASE_simulation/collapsed" 
+#opt$split <- "bipartition"
+#opt$collapse_bubbles <- TRUE
+#opt$genename = 'ENSG00000000003.14'
+
 graphdir <- opt$graphdir
 outdir <- opt$outdir
 split <- opt$split
+collapse_bubbles <- opt$collapse
+
 if (!dir.exists(outdir)) {
   dir.create(outdir)
 }
@@ -72,7 +82,7 @@ split_bipartition <- function(gene) {
         g        = g,
         outdir   = outdir, 
         max_path = 20,
-        collapse_bubbles = FALSE 
+        collapse_bubbles = collapse_bubbles 
     )
     print(paste0("FINISH ", gene))
     on.exit(unlink(runninglog))
@@ -81,7 +91,7 @@ split_bipartition <- function(gene) {
     }, error = function(e) {
       msg <- sprintf("[%s] ERROR in %s (PID %d): %s\n",
                      format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
-                     f, Sys.getpid(), conditionMessage(e))
+                     gene, Sys.getpid(), conditionMessage(e))
       cat(msg, file = "split_bipartition.errors.log", append = TRUE)
       NULL
     }
@@ -110,7 +120,7 @@ split_multinomial <- function(gene) {
         g        = g,
         outdir   = outdir, 
         max_path = 20,
-        collapse_bubbles = FALSE 
+        collapse_bubbles = collapse_bubbles 
     )
     print(paste0("FINISH ", gene))
     on.exit(unlink(runninglog))
@@ -119,7 +129,7 @@ split_multinomial <- function(gene) {
     }, error = function(e) {
       msg <- sprintf("[%s] ERROR in %s (PID %d): %s\n",
                      format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
-                     f, Sys.getpid(), conditionMessage(e))
+                     gene, Sys.getpid(), conditionMessage(e))
       cat(msg, file = "split_multinomial.errors.log", append = TRUE)
       NULL
     }
@@ -148,7 +158,7 @@ split_n_choose_2 <- function(gene) {
         g        = g,
         outdir   = outdir, 
         max_path = 20,
-        collapse_bubbles = FALSE 
+        collapse_bubbles = collapse_bubbles 
     )
     print(paste0("FINISH ", gene))
     on.exit(unlink(runninglog))
@@ -157,7 +167,7 @@ split_n_choose_2 <- function(gene) {
     }, error = function(e) {
       msg <- sprintf("[%s] ERROR in %s (PID %d): %s\n",
                      format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
-                     f, Sys.getpid(), conditionMessage(e))
+                     gene, Sys.getpid(), conditionMessage(e))
       cat(msg, file = "split_n_choose_2.errors.log", append = TRUE)
       NULL
     }

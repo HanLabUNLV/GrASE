@@ -272,8 +272,12 @@ bipartition_paths <- function(gene, g, outdir, max_path = 20, collapse_bubbles=F
     return (NULL) 
   }
 
-  bubbles_ordered = grase::bubble_ordering3(g, bubbles_df)
-  bubbles_orig = bubbles_ordered
+  bubbles_ordered = grase::bubble_ordering4(g, bubbles_df)
+  bubbles_printable = bubbles_ordered
+  filename_bubbles = file.path(outdir, paste0(gene, ".bubbles.txt"))
+  bubbles_printable$partitions <- vapply(bubbles_printable$partitions, paste, collapse = ";", FUN.VALUE = character(1))
+  bubbles_printable$paths      <- vapply(bubbles_printable$paths, paste, collapse = ";", FUN.VALUE = character(1))
+  write.table(as.data.frame(bubbles_printable), file=filename_bubbles, sep = "\t", quote = FALSE, row.names = FALSE)
   bubbles_ordered = bubbles_ordered[,1:ncol(bubbles_df)]
 
   # Precompute graph derivatives (invariant when collapse_bubbles=FALSE)
@@ -398,12 +402,12 @@ bipartition_paths <- function(gene, g, outdir, max_path = 20, collapse_bubbles=F
         log_debug("collapsed all bubbles. exiting the loop 2")
         break
       }
-      bubbles_updated_ordered = grase::bubble_ordering3(g, bubbles_updated)     
+      bubbles_updated_ordered = grase::bubble_ordering4(g, bubbles_updated)     
       finished_sources = bubbles_ordered$source[(1:bubble_idx)]
       finished_sinks = bubbles_ordered$sink[(1:bubble_idx)]
       finished_bubbles_idx = (bubbles_updated_ordered$source %in% finished_sources) & (bubbles_updated_ordered$sink %in% finished_sinks)
       bubbles_updated_ordered = bubbles_updated_ordered[!finished_bubbles_idx,]
-      bubbles_ordered = rbind.data.frame(bubbles_ordered[1:bubble_idx,1:ncol(bubbles_df)],bubbles_updated_ordered[,1:ncol(bubbles_df)])
+      bubbles_ordered = S4Vectors::rbind(bubbles_ordered[1:bubble_idx,1:ncol(bubbles_df)],bubbles_updated_ordered[,1:ncol(bubbles_df)])
     }
   }
 

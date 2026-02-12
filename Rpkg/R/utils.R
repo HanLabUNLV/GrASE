@@ -281,10 +281,62 @@ bubble_ordering3 <- function(g, bubbles_df) {
   bubbles_df[order(-bubbles_df$span, bubbles_df$source_idx),]
 }
 
+#' Order bubbles innermost-first for correct collapsing
+#'
+#' Orders bubbles by span ascending (smallest/innermost first), then by
+#' source position ascending as tiebreaker. This ensures inner bubbles are
+#' processed and collapsed before the outer bubbles that contain them.
+#' @param g An igraph splicing graph
+#' @param bubbles_df A data frame of detected bubbles
+#' @return The reordered bubbles_df with added columns: source_idx, sink_idx, span, num_paths
+#' @export
+bubble_ordering4 <- function(g, bubbles_df) {
+  if (nrow(bubbles_df) == 0) return(bubbles_df)
+
+  topo <- igraph::topo_sort(g, mode = "out")
+  topo_idx <- setNames(seq_along(topo), topo$name)
+
+  # Calculate metrics for each bubble
+  bubbles_df$source_idx <- topo_idx[bubbles_df$source]
+  bubbles_df$sink_idx <- topo_idx[bubbles_df$sink]
+  bubbles_df$span <- bubbles_df$sink_idx - bubbles_df$source_idx
+
+  # Count number of paths per bubble
+  bubbles_df$num_paths <- sapply(bubbles_df$paths, function(paths_str) {
+    length(strsplit(paths_str, "\\},\\{"))
+  })
+
+  # Order by span ascending (innermost first), then by source position ascending
+  bubbles_df[order(bubbles_df$span, bubbles_df$source_idx),]
+}
+
 #' Check if edge is in transcript path
 #' @export
 edge_in_txpath <- function(g, trans, e){
    sapply(igraph::edge_attr(g)[trans], `[`, e)
+}
+
+#' Update transcript paths after collapsing a bubble
+#'
+#' After removing edges from a collapsed bubble, reassign the affected
+#' transcripts to the kept paths by setting edge attributes.
+#' @param g An igraph splicing graph
+#' @param tx_list List of transcript groups to update (from find_tx_with_epath)
+#' @param epath Edge paths to keep (list of edge name vectors)
+#' @return The updated igraph graph
+#' @export
+update_txpaths_after_bubble_collapse2 <- function(g, tx_list, epath) {
+  eid = as.integer(igraph::E(g))
+  names(eid) = igraph::edge_attr(g, "name")
+  for (idx in 1:length(tx_list)) {
+    tx_to_update = tx_list[[idx]][[1]]
+    for (e in epath) {
+      for (tx in tx_to_update) {
+        igraph::edge_attr(g, tx, index = eid[e]) <- TRUE
+      }
+    }
+  }
+  return (g)
 }
 
 #' Find transcripts that use given edge paths
