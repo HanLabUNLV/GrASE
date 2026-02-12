@@ -2,10 +2,21 @@
 % Please edit documentation in R/bipartition_analysis.R
 \name{bipartition_paths}
 \alias{bipartition_paths}
-\title{Compute diff exons from graph using binary partitions}
+\title{Compute diff exons from graph using binary partitions
+For each bubble, find all valid binary partitions of paths, then find diff exons for each partition.
+Optionally collapse bubbles with redundant paths.}
 \usage{
-bipartition_paths(gene, g, outdir, max_path = 20, collapse_bubbles = FALSE)
+bipartition_paths(
+  gene,
+  g,
+  outdir,
+  max_path = 20,
+  max_span = Inf,
+  collapse_bubbles = FALSE
+)
 }
 \description{
 Compute diff exons from graph using binary partitions
+For each bubble, find all valid binary partitions of paths, then find diff exons for each partition.
+Optionally collapse bubbles with redundant paths.
 }

@@ -4,7 +4,15 @@
 \alias{n_choose_2_paths}
 \title{Compute diff exons from graph using n-choose-2 pairwise analysis}
 \usage{
-n_choose_2_paths(gene, g, sg, outdir, max_path = 20, collapse_bubbles = FALSE)
+n_choose_2_paths(
+  gene,
+  g,
+  sg,
+  outdir,
+  max_path = 20,
+  max_span = Inf,
+  collapse_bubbles = FALSE
+)
 }
 \description{
 Compute diff exons from graph using n-choose-2 pairwise analysis

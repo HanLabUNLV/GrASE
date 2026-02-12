@@ -4,7 +4,15 @@
 \alias{multinomial_paths}
 \title{Compute diff exons from graph using multinomial partitions (each path as its own group)}
 \usage{
-multinomial_paths(gene, g, sg, outdir, max_path = 20, collapse_bubbles = FALSE)
+multinomial_paths(
+  gene,
+  g,
+  sg,
+  outdir,
+  max_path = 20,
+  max_span = Inf,
+  collapse_bubbles = FALSE
+)
 }
 \description{
 Compute diff exons from graph using multinomial partitions (each path as its own group)

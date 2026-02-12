@@ -258,8 +258,10 @@ diff_exons_gene_ovr <- function(gene, g, outdir) {
 }
 
 #' Compute diff exons from graph using binary partitions
+#' For each bubble, find all valid binary partitions of paths, then find diff exons for each partition. 
+#' Optionally collapse bubbles with redundant paths.
 #' @export
-bipartition_paths <- function(gene, g, outdir, max_path = 20, collapse_bubbles=FALSE) {
+bipartition_paths <- function(gene, g, outdir, max_path = 20, max_span = Inf, collapse_bubbles=FALSE) {
 
   bipartitions_df <- data.frame()
   g <- grase::set_edge_names(g)
@@ -278,7 +280,7 @@ bipartition_paths <- function(gene, g, outdir, max_path = 20, collapse_bubbles=F
   bubbles_printable$partitions <- vapply(bubbles_printable$partitions, paste, collapse = ";", FUN.VALUE = character(1))
   bubbles_printable$paths      <- vapply(bubbles_printable$paths, paste, collapse = ";", FUN.VALUE = character(1))
   write.table(as.data.frame(bubbles_printable), file=filename_bubbles, sep = "\t", quote = FALSE, row.names = FALSE)
-  bubbles_ordered = bubbles_ordered[,1:ncol(bubbles_df)]
+  #bubbles_ordered = bubbles_ordered[,1:ncol(bubbles_df)]
 
   # Precompute graph derivatives (invariant when collapse_bubbles=FALSE)
   .recompute_graph_derivs <- function(g) {
@@ -311,7 +313,13 @@ bipartition_paths <- function(gene, g, outdir, max_path = 20, collapse_bubbles=F
     }
     source <- bubbles_ordered$source[[bubble_idx]]
     sink <- bubbles_ordered$sink[[bubble_idx]]
+    num_paths <- bubbles_ordered$num_paths[[bubble_idx]]
+    span <- bubbles_ordered$span[[bubble_idx]] 
     if (source == "R" && sink == "L") next
+    if (num_paths > max_path || span > max_span) {
+        message(paste("bubble with ", num_paths, " alternative paths and span ", span, " exonic parts: skipping ", gene, source, sink))
+        next;
+    }
     log_debug(paste("source: ", source, " sink: ", sink))
 
     parsed_paths <- lapply(bubbles_ordered$paths[[bubble_idx]], function(x) strsplit(gsub("[{}]", "", x), ",")[[1]])
@@ -328,10 +336,6 @@ bipartition_paths <- function(gene, g, outdir, max_path = 20, collapse_bubbles=F
     log_debug(paste("ex_part_paths len:", length(ex_part_paths)))
     contain_dag <- grase::path_subset_relation(ex_part_paths) 
     log_debug(paste("contain_dag len:", length(igraph::E(contain_dag))))
-    if (length(ex_part_paths) > max_path) {
-        message(paste("bubble with more than", max_path, "alternative paths: skipping ", gene, source, sink))
-        next;
-    }
 
     int_splits <- grase::valid_partitions_idx(contain_dag)
     nodes <- igraph::V(contain_dag)$name
@@ -407,12 +411,12 @@ bipartition_paths <- function(gene, g, outdir, max_path = 20, collapse_bubbles=F
       finished_sinks = bubbles_ordered$sink[(1:bubble_idx)]
       finished_bubbles_idx = (bubbles_updated_ordered$source %in% finished_sources) & (bubbles_updated_ordered$sink %in% finished_sinks)
       bubbles_updated_ordered = bubbles_updated_ordered[!finished_bubbles_idx,]
-      bubbles_ordered = S4Vectors::rbind(bubbles_ordered[1:bubble_idx,1:ncol(bubbles_df)],bubbles_updated_ordered[,1:ncol(bubbles_df)])
+      bubbles_ordered = S4Vectors::rbind(bubbles_ordered[1:bubble_idx,],bubbles_updated_ordered)
     }
   }
 
   close(pb)
-  message(sprintf("[%s] %s: %d rows after empty-setdiff filter",
+  log_debug(sprintf("[%s] %s: %d rows after empty-setdiff filter",
                   format(Sys.time(), "%H:%M:%S"), gene, nrow(bipartitions_df)))
 
   if (nrow(bipartitions_df) > 0) {

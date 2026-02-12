@@ -77,11 +77,12 @@ split_bipartition <- function(gene) {
 
     g <- igraph::read_graph(graph_path, format = "graphml")
 
+    # based on the distribution of bubble sizes, we set max_paths to 23 to capture the 99% of all bubbles. 
     grase::bipartition_paths(
         gene     = gene,
         g        = g,
         outdir   = outdir, 
-        max_path = 20,
+        max_path = 23,
         collapse_bubbles = collapse_bubbles 
     )
     print(paste0("FINISH ", gene))
@@ -119,7 +120,7 @@ split_multinomial <- function(gene) {
         gene     = gene,
         g        = g,
         outdir   = outdir, 
-        max_path = 20,
+        max_path = 23,
         collapse_bubbles = collapse_bubbles 
     )
     print(paste0("FINISH ", gene))
@@ -157,7 +158,7 @@ split_n_choose_2 <- function(gene) {
         gene     = gene,
         g        = g,
         outdir   = outdir, 
-        max_path = 20,
+        max_path = 23,
         collapse_bubbles = collapse_bubbles 
     )
     print(paste0("FINISH ", gene))
@@ -172,6 +173,27 @@ split_n_choose_2 <- function(gene) {
       NULL
     }
   )
+}
+
+print_bubbles <- function(gene) {
+  
+  graph_path <- file.path(graphdir, paste0(gene, ".graphml"))
+  g <- igraph::read_graph(graph_path, format = "graphml")
+  g <- grase::set_edge_names(g)
+
+  bubbles_df <- grase::detect_bubbles_igraph(g)     # high_mem
+  if ( nrow(bubbles_df) == 0) {
+    message(paste("single transcript, no bubbles ", gene))
+    return (NULL) 
+  }
+
+  bubbles_ordered = grase::bubble_ordering4(g, bubbles_df)
+  bubbles_printable = bubbles_ordered
+  filename_bubbles = file.path(outdir, paste0(gene, ".bubbles.txt"))
+  bubbles_printable$partitions <- vapply(bubbles_printable$partitions, paste, collapse = ";", FUN.VALUE = character(1))
+  bubbles_printable$paths      <- vapply(bubbles_printable$paths, paste, collapse = ";", FUN.VALUE = character(1))
+  write.table(as.data.frame(bubbles_printable), file=filename_bubbles, sep = "\t", quote = FALSE, row.names = FALSE)
+
 }
 
 
@@ -192,6 +214,12 @@ if ( split == 'bipartition') {
     results <- split_n_choose_2(gene_names)
   } else {
     results <- mclapply(gene_names, split_n_choose_2, mc.cores = num_cores)
+  }
+} else if (split == 'bubble') {
+  if (length(gene_names) == 1) {
+    results <- print_bubbles(gene_names)
+  } else {
+    results <- mclapply(gene_names, print_bubbles, mc.cores = num_cores)
   }
 } else {
   stop("Split method (--split) must be specified among 'bipartition', 'multinomial' or 'n_choose_2'.", call.=FALSE)

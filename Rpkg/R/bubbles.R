@@ -171,7 +171,7 @@ detect_bubbles_from_mat <- function (txpathmat)
           ans_paths <- c(ans_paths, retval$ans_paths)
         }
     }
-    S4Vectors::DataFrame(source = ans_source, sink = ans_sink, d = ans_d, 
+    S4Vectors::DataFrame(source = ans_source, sink = ans_sink, n = ans_d, 
         partitions = ans_partitions, paths = ans_paths
         )
 }
@@ -501,7 +501,7 @@ detect_bubbles_igraph <- function (g)
       ans_paths <- c(ans_paths, retval$ans_paths)
     }
   }
-  S4Vectors::DataFrame(source = ans_source, sink = ans_sink, d = ans_d, 
+  S4Vectors::DataFrame(source = ans_source, sink = ans_sink, n = ans_d, 
     partitions = ans_partitions, paths = ans_paths
     )
 }

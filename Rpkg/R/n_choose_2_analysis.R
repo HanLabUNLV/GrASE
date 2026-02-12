@@ -146,7 +146,7 @@ standardize_pairwise_columns <- function(pairwise_list) {
 
 #' Compute diff exons from graph using n-choose-2 pairwise analysis
 #' @export
-n_choose_2_paths <- function(gene, g, sg, outdir, max_path = 20, collapse_bubbles=FALSE) {
+n_choose_2_paths <- function(gene, g, sg, outdir, max_path = 20, max_span = Inf, collapse_bubbles=FALSE) {
 
   pairwise_list <- list()
   g <- grase::set_edge_names(g)
@@ -161,7 +161,7 @@ n_choose_2_paths <- function(gene, g, sg, outdir, max_path = 20, collapse_bubble
 
   bubbles_ordered = grase::bubble_ordering4(g, bubbles_df)
   bubbles_orig = bubbles_ordered
-  bubbles_ordered = bubbles_ordered[,1:ncol(bubbles_df)]
+  #bubbles_ordered = bubbles_ordered[,1:ncol(bubbles_df)]
 
   for (bubble_idx in 1:nrow(bubbles_ordered)) {
   
@@ -178,7 +178,14 @@ n_choose_2_paths <- function(gene, g, sg, outdir, max_path = 20, collapse_bubble
     }
     source <- bubbles_ordered$source[[bubble_idx]]
     sink <- bubbles_ordered$sink[[bubble_idx]]
+    span <- bubbles_ordered$span[[bubble_idx]]
+    num_paths <- bubbles_ordered$num_paths[[bubble_idx]]
     if (source == "R" && sink == "L") next
+
+    if (num_paths > max_path || span > max_span) {
+        message(paste("bubble with ", num_paths, " alternative paths and span ", span, " exonic parts: skipping ", gene, source, sink))
+        next;
+    }
     log_debug(paste("source: ", source, " sink: ", sink))
 
     txpaths <- grase::txpath_from_edgeattr(g)
@@ -198,10 +205,6 @@ n_choose_2_paths <- function(gene, g, sg, outdir, max_path = 20, collapse_bubble
 
     log_debug(paste("ex_part_paths len:", length(ex_part_paths)))
     
-    if (length(ex_part_paths) > max_path) {
-        message(paste("bubble with more than", max_path, "alternative paths: skipping ", gene, source, sink))
-        next;
-    }
 
     # For n-choose-2: generate all pairwise combinations
     n_paths <- length(parsed_partitions)
@@ -274,7 +277,7 @@ n_choose_2_paths <- function(gene, g, sg, outdir, max_path = 20, collapse_bubble
       finished_sinks = bubbles_ordered$sink[(1:bubble_idx)]
       finished_bubbles_idx = (bubbles_updated_ordered$source %in% finished_sources) & (bubbles_updated_ordered$sink %in% finished_sinks)
       bubbles_updated_ordered = bubbles_updated_ordered[!finished_bubbles_idx,]
-      bubbles_ordered = S4Vectors::rbind(bubbles_ordered[1:bubble_idx,1:ncol(bubbles_df)],bubbles_updated_ordered[,1:ncol(bubbles_df)])
+      bubbles_ordered = S4Vectors::rbind(bubbles_ordered[1:bubble_idx,],bubbles_updated_ordered)
     }
   }
 
