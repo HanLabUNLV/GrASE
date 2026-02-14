@@ -112,8 +112,11 @@ count_bipartitions <- function(bipartition_file, countmat, sampleinfo, outdir, o
 
 
   if (nrow(bipartitions[bipartitions$diff_mean > 0,])) {
+    print(paste0("writing ",gene[1]))
     write.table(bipartitions, file=paste0(outdir,'/', gene[1], '.', outfilesuffix, '.txt'), quote=FALSE, sep="\t")
     write_exoncnt_long(ref_counts_df, diff_counts_df, events=bipartitions$event, gene_name = gene[1], sampleinfo, outfilesuffix, outdir) 
+  } else {
+    print(paste0("zero read counts at setdiff exons. skipping ",gene[1]))
   }
  
   return (0)

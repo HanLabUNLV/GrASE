@@ -10,14 +10,23 @@ indir = '~/GrASE_simulation'
 countdir = '~/GrASE_simulation/DEXSeq/count_files'
 cond1 = 'group1'
 cond2 = 'group2'
+alt = 'internal'
 
 args = commandArgs(trailingOnly=TRUE)
 
 option_list = list(
-  make_option(c("-d", "--dir"), type="character",  
-              help="dir", metavar="character"),
+  make_option(c("-d", "--indir"), type="character",  
+              help="indir", metavar="character"),
+  make_option(c("-c", "--countdir"), type="character", 
+              help="countdir", metavar="character"),
   make_option(c("-t", "--type"), type="character",  
-              help="partition type", metavar="character")
+              help="partition type", metavar="character"),
+  make_option(c("-1", "--cond1"), type="character",  
+              help="condition1", metavar="character"),
+  make_option(c("-2", "--cond2"), type="character",  
+              help="condition2", metavar="character"),
+  make_option(c("-a", "--alt"), type="character",  
+              help="choose between 'internal' (internal AS) or 'TSS'(alternative TSS) ", metavar="character")
 ); 
  
 opt_parser = OptionParser(option_list=option_list);
@@ -26,8 +35,26 @@ print(opt)
 if (!is.null(opt$type)) {
   analysis_type = opt$type
 } 
-if (!is.null(opt$dir)) {
-  indir = opt$dir
+if (!is.null(opt$indir)) {
+  indir = opt$indir
+} 
+if (!is.null(opt$countdir)) {
+  countdir = opt$countdir
+} 
+if (!is.null(opt$cond1)) {
+  cond1 = opt$cond1
+} 
+if (!is.null(opt$cond2)) {
+  cond2 = opt$cond2
+} 
+if (!is.null(opt$alt)) {
+  if (opt$alt == 'internal') {
+    alt = 'internal'
+  } else if (opt$alt == 'TSS') {
+    alt = 'TSSTTS'
+  } else {
+    stop ("choose between 'internal' (internal AS) or 'TSS'(alternative TSS) ") 
+  }
 } 
 
 
@@ -70,22 +97,21 @@ if (analysis_type == 'all' || analysis_type == 'bipartition') {
 
   # input files
   bipartition_path = paste0(indir, '/bipartition.filtered')
-  outdir = paste0(indir,'/bipartition.counts')
+  outdir = paste0(indir,'/bipartition.',alt,'.counts')
   if (!dir.exists(outdir)) {
     dir.create(outdir, recursive = TRUE)
   }
   bipartition_files <- list.files(path = bipartition_path,
-                                   pattern = "bipartitions.internal.txt$", full.names=TRUE)
+                                   pattern = paste0("bipartition.",alt,".txt$"), full.names=TRUE)
 
   # run the jobs
   # for (f in bipartition_files) {
   res <- mclapply(bipartition_files, function(f) {
     tryCatch({
-      gene_id <- sub("\\.bipartitions\\.internal\\.txt$", "", basename(f))
-      print(gene_id)
+      gene_id <- sub(paste0("\\.bipartition\\.",alt,"\\.txt$"), "", basename(f))
       gene_counts <- counts_list[[gene_id]]
       if (!is.null(gene_counts)) {
-        count_bipartitions(bipartition_file = f, countmat = gene_counts, sampleinfo, outdir, 'bipartitions')
+        count_bipartitions(bipartition_file = f, countmat = gene_counts, sampleinfo, outdir, 'bipartition')
       }
     }, error = function(e) {
       msg <- sprintf("[%s] ERROR in %s (PID %d): %s\n",
@@ -101,17 +127,17 @@ if (analysis_type == 'all' || analysis_type == 'bipartition') {
 
   # input files
   n_choose_2_path = paste0(indir, '/n_choose_2.filtered')
-  outdir = paste0(indir,'/n_choose_2.counts')
+  outdir = paste0(indir,'/n_choose_2.',alt,'.counts')
   if (!dir.exists(outdir)) {
     dir.create(outdir, recursive = TRUE)
   }
   n_choose_2_files <- list.files(path = n_choose_2_path,
-                                   pattern = "n_choose_2.internal.txt$", full.names=TRUE)
+                                   pattern = paste0("n_choose_2.",alt,".txt$"), full.names=TRUE)
 
   # run the jobs
   res <- mclapply(n_choose_2_files, function(f) {
     tryCatch({
-      gene_id <- sub("\\.n_choose_2\\.internal\\.txt$", "", basename(f))
+      gene_id <- sub(paste0("\\.n_choose_2\\.",alt,"\\.txt$"), "", basename(f))
       print(gene_id)
       #count_bipartitions(bipartition_file = f, countmat = read_counts[read_counts$gene==gene_id,], sampleinfo, outdir, 'n_choose_2')
       gene_counts <- counts_list[[gene_id]]
@@ -133,18 +159,18 @@ if (analysis_type == 'all' || analysis_type == 'bipartition') {
 
   # input files
   multinomial_path = paste0(indir, '/multinomial.filtered')
-  outdir = paste0(indir,'/multinomial.counts')
+  outdir = paste0(indir,'/multinomial.',alt,'.counts')
   if (!dir.exists(outdir)) {
     dir.create(outdir, recursive = TRUE)
   }
 
   multinomial_files <- list.files(path = multinomial_path,
-                                   pattern = "multinomial.internal.txt$", full.names=TRUE)
+                                   pattern = paste0("multinomial.",alt,".txt$"), full.names=TRUE)
 
   # run the jobs
   res <- mclapply(multinomial_files, function(f) {
     tryCatch({
-      gene_id <- sub("\\.multinomial\\.internal\\.txt$", "", basename(f))
+      gene_id <- sub(paste0("\\.multinomial\\.",alt,"\\.txt$"), "", basename(f))
       print(gene_id)
       #count_multinomial(multinomial_file = f, countmat = read_counts[read_counts$gene==gene_id,], sampleinfo, outdir)
       gene_counts <- counts_list[[gene_id]]
@@ -192,31 +218,12 @@ concat_exoncnt_files <- function(input_dir, pattern, output_file, label) {
 }
 
 # Run concatenation for each analysis type
-if (analysis_type == 'all' || analysis_type == 'bipartition') {
   concat_exoncnt_files(
-    input_dir = paste0(indir, '/bipartition.counts'),
-    pattern = "\\.bipartitions\\.exoncnt\\.txt$",
-    output_file = paste0(indir, '/bipartition.exoncnt.combined.txt'),
-    label = "Bipartition"
+    input_dir = paste0(indir, '/', analysis_type,'.',alt, '.counts'),
+    pattern = paste0("\\.",analysis_type, "\\.exoncnt\\.txt$"),
+    output_file = paste0(indir, '/', analysis_type,'.',alt,'.exoncnt.combined.txt'),
+    label = analysis_type
   )
-}
 
-if (analysis_type == 'all' || analysis_type == 'n_choose_2') {
-  concat_exoncnt_files(
-    input_dir = paste0(indir, '/n_choose_2.counts'),
-    pattern = "\\.n_choose_2\\.exoncnt\\.txt$",
-    output_file = paste0(indir, '/n_choose_2.exoncnt.combined.txt'),
-    label = "N_choose_2"
-  )
-}
-
-if (analysis_type == 'all' || analysis_type == 'multinomial') {
-  concat_exoncnt_files(
-    input_dir = paste0(indir, '/multinomial.counts'),
-    pattern = "\\.multinomial\\.exoncnt\\.txt$",
-    output_file = paste0(indir, '/multinomial.exoncnt.combined.txt'),
-    label = "Multinomial"
-  )
-}
 
 cat("Done!\n")

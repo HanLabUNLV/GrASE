@@ -2,25 +2,31 @@ library(tidyverse)
 library(optparse)
 library(parallel)
 
+bipartition_dir <- "~/GrASE_simulation/bipartition2"
 option_list <- list(
-  make_option(c("-i", "--input"), type="character", default="~/DICE/split_exoncnts/test_glmmTMB_fixed_EB.txt",
-              help="Input test result file name", metavar="character")
+  make_option(c("-i", "--infile"), type="character",
+              help="Input test result file name", metavar="character"),
+  make_option(c("-s", "--splitdir"), type="character",
+              help="directory containing the split partition infomration", metavar="character")
 )
 
 opt_parser <- OptionParser(option_list=option_list)
 opt <- parse_args(opt_parser)
 
 # Define input paths
-# Note: The user specified pattern captures a subset of genes (starts with ENSG00000000...)
-bipartition_pattern <- "~/DICE/split_exoncnts/bipartition/ENSG00000000*.bipartitions.txt"
-test_file_path <- opt$input
+if (!is.null(opt$infile)) {
+  test_file_path <- opt$infile
+}
+if (!is.null(opt$splitdir)) {
+  bipartition_dir <- opt$splitdir
+}
+
 # Construct output filename from input filename
 if (grepl("\\.txt$", test_file_path)) {
   output_file <- sub("\\.txt$", ".annotated.txt", test_file_path)
 } else {
   output_file <- paste0(test_file_path, ".annotated.txt")
 }
-bipartition_dir <- "~/DICE/split_exoncnts/bipartition"
 
 # Read test results first to get the list of genes
 message(paste("Reading test results from", test_file_path, "..."))
@@ -35,7 +41,7 @@ message(paste("Processing", length(unique_genes), "unique genes."))
 # Function to safely read a specific gene file
 read_gene_bipartition <- function(gene_id) {
   # Construct filename based on gene ID
-  f <- file.path(bipartition_dir, paste0(gene_id, ".bipartitions.txt"))
+  f <- file.path(bipartition_dir, paste0(gene_id, ".bipartition.txt"))
   
   if (!file.exists(f)) {
     # Try resolving tilde expansion if needed (Sys.glob might help if path has ~)
@@ -48,6 +54,8 @@ read_gene_bipartition <- function(gene_id) {
       df <- read.table(f, header = TRUE, stringsAsFactors = FALSE, sep = "\t")
       # Ensure gene column is character to match tests
       df$gene <- as.character(df$gene) 
+      if("source" %in% names(df)) df$source <- as.character(df$source)
+      if("sink" %in% names(df)) df$sink <- as.character(df$sink)
       return(as_tibble(df))
     }, error = function(e) {
       warning(paste("Failed to read", f, ":", e$message))

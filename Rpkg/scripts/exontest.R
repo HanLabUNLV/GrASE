@@ -11,7 +11,7 @@ library(optparse)
 
 indir = '~/GrASE_simulation/bipartition.test'
 model = 'glmmTMB_prior'
-masterfile = 'bipartition.exoncnt.combined.txt'
+masterfile = 'bipartition.internal.exoncnt.combined.txt'
 phifile = 'phi.glmmtmb.txt'
 cond1 = 'group1'; cond2 = 'group2'
 args = commandArgs(trailingOnly=TRUE)
@@ -57,6 +57,7 @@ if (!dir.exists(outdir)) {
   dir.create(outdir, recursive = TRUE)
 }
 exoncnt_master <- paste0(indir,'/', masterfile)
+out_prefix <- sub("^([^.]+\\.[^.]+).*", "\\1", masterfile)
 
 
 if (file.exists(exoncnt_master)) {
@@ -118,7 +119,7 @@ if (model == 'glmmTMB_prior' || model == 'glmmTMB_fixedEB' || model == 'VGAM_MLE
 
 # Per Gene Model Estimation 
 if (model == 'glmmTMB_prior') {
-  phi_trimmed <- phi_df[phi_df$phi < 1e+10 & phi_df$phi > 0,'phi']
+  phi_trimmed <- phi_df[!is.na(phi_df$phi) & phi_df$phi < 1e+10 & phi_df$phi > 0,'phi']
 
   # fit normal to log(phi)
   log_phi_vals <- log(phi_trimmed)
@@ -161,7 +162,7 @@ if (model == 'glmmTMB_prior') {
       results$pvalue <- NULL
   }
   
-  write.table(results, file=paste0(outdir,'/test_glmmTMB_MAP_prior.txt'), quote=FALSE, sep="\t", row.names = FALSE)
+  write.table(results, file=paste0(outdir,'/test_', out_prefix,'_glmmTMB_MAP_prior.txt'), quote=FALSE, sep="\t", row.names = FALSE)
 
 } else if (model == 'glmmTMB_fixedEB') {
 
@@ -200,7 +201,7 @@ if (model == 'glmmTMB_prior') {
       results$pvalue <- NULL
   }
 
-  write.table(results, file=paste0(outdir,'/test_glmmTMB_fixed_EB.txt'), quote=FALSE, sep="\t", row.names=FALSE)
+  write.table(results, file=paste0(outdir,'/test_', out_prefix,'_glmmTMB_fixed_EB.txt'), quote=FALSE, sep="\t", row.names=FALSE)
 
 } else if (model == 'VGAM_MLE_EB_init') {
 
@@ -239,7 +240,7 @@ if (model == 'glmmTMB_prior') {
       results$pvalue <- NULL
   }
   
-  write.table(results, file=paste0(outdir,'/test_VGAM_MLE_EB_init.txt'), quote=FALSE, sep="\t", row.names = FALSE)
+  write.table(results, file=paste0(outdir,'/test_', out_prefix,'_VGAM_MLE_EB_init.txt'), quote=FALSE, sep="\t", row.names = FALSE)
 
 
 } else if (model == 'DM_EB') {
@@ -267,7 +268,7 @@ if (model == 'glmmTMB_prior') {
       results$pvalue <- NULL
   }
 
-  write.table(results, paste0(outdir, "/test_DM_EB.txt"), sep="\t", quote=F, row.names = FALSE)
+  write.table(results, paste0(outdir,'/test_', out_prefix,'_DM_EB.txt'), sep="\t", quote=F, row.names = FALSE)
 
 } else if (model == 'DM_Wald_EB') {                                                                                            
 
@@ -309,7 +310,7 @@ if (model == 'glmmTMB_prior') {
       # wald_results_df$pvalue <- NULL # Keep if needed or remove. Wald test might have p.value or Pr(>Chi)
   }
 
-  write.table(wald_results_df, file=paste0(outdir, "/test_DM_Wald_EB.txt"), sep="\t", quote=FALSE, row.names = FALSE)
+  write.table(wald_results_df, file=paste0(outdir,'/test_', out_prefix,'_DM_Wald_EB.txt'), sep="\t", quote=FALSE, row.names = FALSE)
 } else if (model == 'wilcoxon') {
 
   result_list <- mclapply(grouped_data, function(dd) {
@@ -332,7 +333,7 @@ if (model == 'glmmTMB_prior') {
       results$pvalue <- NULL
   }
 
-  write.table(results, file=paste0(outdir,'/test_wilcoxon.txt'), quote=FALSE, sep="\t", row.names = FALSE)
+  write.table(results, file=paste0(outdir,'/test_', out_prefix,'_wilcoxon.txt'), quote=FALSE, sep="\t", row.names = FALSE)
 
 } else {
   print ("model misspecified")

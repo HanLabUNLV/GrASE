@@ -275,11 +275,6 @@ bipartition_paths <- function(gene, g, outdir, max_path = 20, max_span = Inf, co
   }
 
   bubbles_ordered = grase::bubble_ordering4(g, bubbles_df)
-  bubbles_printable = bubbles_ordered
-  filename_bubbles = file.path(outdir, paste0(gene, ".bubbles.txt"))
-  bubbles_printable$partitions <- vapply(bubbles_printable$partitions, paste, collapse = ";", FUN.VALUE = character(1))
-  bubbles_printable$paths      <- vapply(bubbles_printable$paths, paste, collapse = ";", FUN.VALUE = character(1))
-  write.table(as.data.frame(bubbles_printable), file=filename_bubbles, sep = "\t", quote = FALSE, row.names = FALSE)
   #bubbles_ordered = bubbles_ordered[,1:ncol(bubbles_df)]
 
   # Precompute graph derivatives (invariant when collapse_bubbles=FALSE)

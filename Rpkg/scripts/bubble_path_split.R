@@ -77,12 +77,12 @@ split_bipartition <- function(gene) {
 
     g <- igraph::read_graph(graph_path, format = "graphml")
 
-    # based on the distribution of bubble sizes, we set max_paths to 23 to capture the 99% of all bubbles. 
+    # based on the distribution of bubble sizes, we set max_paths to 20 to capture the 99% of all bubbles. 
     grase::bipartition_paths(
         gene     = gene,
         g        = g,
         outdir   = outdir, 
-        max_path = 23,
+        max_path = 20,
         collapse_bubbles = collapse_bubbles 
     )
     print(paste0("FINISH ", gene))
@@ -120,7 +120,7 @@ split_multinomial <- function(gene) {
         gene     = gene,
         g        = g,
         outdir   = outdir, 
-        max_path = 23,
+        max_path = 20,
         collapse_bubbles = collapse_bubbles 
     )
     print(paste0("FINISH ", gene))
@@ -158,7 +158,7 @@ split_n_choose_2 <- function(gene) {
         gene     = gene,
         g        = g,
         outdir   = outdir, 
-        max_path = 23,
+        max_path = 20,
         collapse_bubbles = collapse_bubbles 
     )
     print(paste0("FINISH ", gene))

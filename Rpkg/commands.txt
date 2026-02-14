@@ -1,62 +1,67 @@
 
-#bash creatingFilesByGene.sh -r -s ~/graphml.dexseq.v34/rmats_output_dice_b_vs_cd8/ -a ~/graphml.dexseq.v34/gencode.v34.annotation.gtf -d dexseq_prepare_annotation.py -g ~/graphml.dexseq.v34/graphml -p 40
-bash creatingFilesByGene.sh -r -s  ~/DICE/rmats_post_CD4_CD4_N_STIM/ -a ~/graphml.dexseq.v34/gencode.v34.annotation.gtf -d dexseq_prepare_annotation.py -g ~/graphml.dexseq.v34/graphml/ -o ~/DICE/ -p 40 &> creatingFiles.log
 
 
 # GrASE split 
 Rscript scripts/bubble_path_split.R --graphdir=~/GrASE_simulation/graphml --outdir=~/GrASE_simulation/bipartition --split=bipartition
 Rscript scripts/bubble_path_split.R --graphdir=~/GrASE_simulation/graphml --outdir=~/GrASE_simulation/multinomial --split=multinomial
 
-#ls grase_results/gene_files/ > grase_results/all_genes.txt
-#Rscript scripts/bipartitions.all.R
+Rscript scripts/filterTSSTTS.R --split_dir="~/GrASE_simulation/bipartition2" --outdir="~/GrASE_simulation/bipartition.filtered" --split_type='bipartition'
 
-Rscript scripts/filterTSSTTS.R
+Rscript scripts/exoncnt.R --indir=~/GrASE_simulation --countdir=~/GrASE_simulation/DEXSeq/count_files --type='bipartition' --cond1=group1 --cond2=group2 --alt='internal' &> exoncnt.log
+Rscript scripts/exoncnt.R --indir=~/GrASE_simulation --countdir=~/GrASE_simulation/DEXSeq/count_files --type='bipartition' --cond1=group1 --cond2=group2 --alt='TSS' &> exoncnt.log
 
-Rscript scripts/map_rmats.R --dir=~/DICE/ --split='bipartitions' 
-Rscript scripts/map_rmats.R --dir=~/DICE/ --split='multinomial' 
-Rscript scripts/map_rmats.R --dir=~/DICE/ --split='n_choose_2' 
+Rscript scripts/exontest.R --file=bipartition.internal.exoncnt.combined.txt --dir="~/GrASE_simulation/bipartition.test" --phi=phi.glmmtmb.internal.txt --model=glmmTMB_prior --cond1='group1' --cond2='group2' &> bipart.internal.glmmTMB_prior.log &
+Rscript scripts/exontest.R --file=bipartition.TSSTTS.exoncnt.combined.txt --dir="~/GrASE_simulation/bipartition.test" --phi=phi.glmmtmb.TSSTTS.txt --model=glmmTMB_prior --cond1='group1' --cond2='group2' &>  bipart.TSSTTS.glmmTMB_prior.log &
 
+Rscript scripts/exontest.R --file=bipartition.internal.exoncnt.combined.txt --dir="~/GrASE_simulation/bipartition.test" --phi=phi.glmmtmb.internal.txt --model=glmmTMB_fixedEB --cond1='group1' --cond2='group2' &>  bipart.glmmTMB_fixedEB.log &
+Rscript scripts/exontest.R --file=bipartition.internal.exoncnt.combined.txt --dir="~/GrASE_simulation/bipartition.test" --phi=phi.glmmtmb.internal.txt --model=glmmTMB_fixedEB --cond1='group1' --cond2='group2' &>  bipart.glmmTMB_fixedEB.log &
+Rscript scripts/exontest.R --file=bipartition.internal.exoncnt.combined.txt --dir="~/GrASE_simulation/bipartition.test" --phi=phi.glmmtmb.internal.txt --model=VGAM_MLE_EB_init --cond1='group1' --cond2='group2' &> bipart.VGAM_MLE_EB_init.log &
+Rscript scripts/exontest.R --file=bipartition.internal.exoncnt.combined.txt --dir="~/GrASE_simulation/bipartition.test" --phi=phi.glmmtmb.internal.txt --model=wilcoxon --cond1='group1' --cond2='group2' &> bipart.wilcoxon.log &
+
+Rscript scripts/annotate_tests.R --infile=~/GrASE_simulation/bipartition.test/test_bipartition.internal_glmmTMB_MAP_prior.txt --splitdir=~/GrASE_simulation/bipartition.internal.counts
+Rscript scripts/annotate_tests.R --infile=~/GrASE_simulation/bipartition.test/test_bipartition.TSSTTS_glmmTMB_MAP_prior.txt --splitdir=~/GrASE_simulation/bipartition.TSSTTS.counts
+
+Rscript scripts/annotate_tests.R --infile=~/GrASE_simulation/bipartition.test/test_glmmTMB_fixed_EB.txt
+Rscript scripts/annotate_tests.R --infile=~/GrASE_simulation/bipartition.test/test_VGAM_MLE_EB_init.txt
+Rscript scripts/annotate_tests.R --infile=~/GrASE_simulation/bipartition.test/test_wilcoxon.txt
+
+Rscript scripts/compare_saturn_grase.R -g ~/GrASE_simulation/bipartition.test/test_glmmTMB_MAP_prior.annotated.txt -s ~/GrASE_simulation/saturn_CD4_CD4_N_STIM/all.CD4_CD4_N_STIM.sumExp_filteredbyCountMultiExon.txt -o ~/GrASE_simulation/saturn_glmmTMB_MAP_prior_comparison.txt 
+Rscript scripts/compare_saturn_grase.R -g ~/GrASE_simulation/bipartition.test/test_glmmTMB_fixed_EB.annotated.txt -s ~/GrASE_simulation/saturn_CD4_CD4_N_STIM/all.CD4_CD4_N_STIM.sumExp_filteredbyCountMultiExon.txt -o ~/GrASE_simulation/saturn_glmmTMB_fixed_EB_comparison.txt
+Rscript scripts/compare_saturn_grase.R -g ~/GrASE_simulation/bipartition.test/test_VGAM_MLE_EB_init.annotated.txt -s ~/GrASE_simulation/saturn_CD4_CD4_N_STIM/all.CD4_CD4_N_STIM.sumExp_filteredbyCountMultiExon.txt -o ~/GrASE_simulation/saturn_VGAM_MLE_EB_init_comparison.txt
+Rscript scripts/compare_saturn_grase.R -g ~/GrASE_simulation/bipartition.test/test_wilcoxon.annotated.txt -s ~/GrASE_simulation/saturn_CD4_CD4_N_STIM/all.CD4_CD4_N_STIM.sumExp_filteredbyCountMultiExon.txt -o ~/GrASE_simulation/saturn_wilcoxon_comparison.txt
+
+Rscript scripts/compare_rmats_grase.R \
+  --grase ~/GrASE_simulation/bipartition.test/test_glmmTMB_MAP_prior.annotated.txt \
+  --rmats_dir ~/GrASE_simulation/rmats_post_CD4_CD4_N_STIM/ \
+  --map_dir ~/GrASE_simulation/grase_results/results.bipartitions/tmp/ \
+  --output ~/GrASE_simulation/rmats_glmmTMB_MAP_prior_comparison.txt
+
+Rscript scripts/compare_rmats_grase.R \
+  --grase ~/GrASE_simulation/bipartition.test/test_glmmTMB_fixed_EB.annotated.txt \
+  --rmats_dir ~/GrASE_simulation/rmats_post_CD4_CD4_N_STIM/ \
+  --map_dir ~/GrASE_simulation/grase_results/results.bipartitions/tmp/ \
+  --output ~/GrASE_simulation/rmats_glmmTMB_fixed_EB_comparison.txt
+
+Rscript scripts/compare_rmats_grase.R \
+  --grase ~/GrASE_simulation/bipartition.test/test_VGAM_MLE_EB_init.annotated.txt \
+  --rmats_dir ~/GrASE_simulation/rmats_post_CD4_CD4_N_STIM/ \
+  --map_dir ~/GrASE_simulation/grase_results/results.bipartitions/tmp/ \
+  --output ~/GrASE_simulation/rmats_VGAM_MLE_EB_init_comparison.txt
+
+Rscript scripts/compare_rmats_grase.R \
+  --grase ~/GrASE_simulation/bipartition.test/test_wilcoxon.annotated.txt \
+  --rmats_dir ~/GrASE_simulation/rmats_post_CD4_CD4_N_STIM/ \
+  --map_dir ~/GrASE_simulation/grase_results/results.bipartitions/tmp/ \
+  --output ~/GrASE_simulation/rmats_wilcoxon_comparison.txt
+
+
+# comparison between rMATS and DEXSeq
+# map rMATS
+Rscript scripts/map_rmats.R --dir=~/GrASE_simulation/ --split='bipartitions' 
+Rscript scripts/map_rmats.R --dir=~/GrASE_simulation/ --split='multinomial' 
+Rscript scripts/map_rmats.R --dir=~/GrASE_simulation/ --split='n_choose_2' 
+
+# map rMATS to DEXSeq
 Rscript scripts/integrate.R
-Rscript scripts/exoncnt.R --dir=~/DICE &> dice_exoncnt.out 
-bash concat_exoncnts.sh
-Rscript scripts/exontest.R --dir=~/DICE/split_exoncnts --file=bipartition.internal.exoncnt.txt --phi=phi.glmmtmb.txt --model=glmmTMB_prior &>  glmmTMB_prior.log &
-Rscript scripts/exontest.R --dir=~/DICE/split_exoncnts --file=bipartition.internal.exoncnt.txt --phi=phi.glmmtmb.txt --model=glmmTMB_fixedEB &>  glmmTMB_fixedEB.log &
-Rscript scripts/exontest.R --dir=~/DICE/split_exoncnts --file=bipartition.internal.exoncnt.txt --phi=phi.glmmtmb.txt --model=VGAM_MLE_EB_init &> VGAM_MLE_EB_init.log &
-Rscript scripts/exontest.R --dir=~/DICE/split_exoncnts --file=bipartition.internal.exoncnt.txt --phi=phi.glmmtmb.txt --model=wilcoxon &> wilcoxon.log &
-
-Rscript scripts/annotate_tests.R --input=~/DICE/split_exoncnts/test_glmmTMB_MAP_prior.txt
-Rscript scripts/annotate_tests.R --input=~/DICE/split_exoncnts/test_glmmTMB_fixed_EB.txt
-Rscript scripts/annotate_tests.R --input=~/DICE/split_exoncnts/test_VGAM_MLE_EB_init.txt
-Rscript scripts/annotate_tests.R --input=~/DICE/split_exoncnts/test_wilcoxon.txt
-
-Rscript scripts/compare_saturn_grase.R -g ~/DICE/split_exoncnts/test_glmmTMB_MAP_prior.annotated.txt -s ~/DICE/saturn_CD4_CD4_N_STIM/all.CD4_CD4_N_STIM.sumExp_filteredbyCountMultiExon.txt -o ~/DICE/saturn_glmmTMB_MAP_prior_comparison.txt 
-Rscript scripts/compare_saturn_grase.R -g ~/DICE/split_exoncnts/test_glmmTMB_fixed_EB.annotated.txt -s ~/DICE/saturn_CD4_CD4_N_STIM/all.CD4_CD4_N_STIM.sumExp_filteredbyCountMultiExon.txt -o ~/DICE/saturn_glmmTMB_fixed_EB_comparison.txt
-Rscript scripts/compare_saturn_grase.R -g ~/DICE/split_exoncnts/test_VGAM_MLE_EB_init.annotated.txt -s ~/DICE/saturn_CD4_CD4_N_STIM/all.CD4_CD4_N_STIM.sumExp_filteredbyCountMultiExon.txt -o ~/DICE/saturn_VGAM_MLE_EB_init_comparison.txt
-Rscript scripts/compare_saturn_grase.R -g ~/DICE/split_exoncnts/test_wilcoxon.annotated.txt -s ~/DICE/saturn_CD4_CD4_N_STIM/all.CD4_CD4_N_STIM.sumExp_filteredbyCountMultiExon.txt -o ~/DICE/saturn_wilcoxon_comparison.txt
-
-Rscript scripts/compare_rmats_grase.R \
-  --grase ~/DICE/split_exoncnts/test_glmmTMB_MAP_prior.annotated.txt \
-  --rmats_dir ~/DICE/rmats_post_CD4_CD4_N_STIM/ \
-  --map_dir ~/DICE/grase_results/results.bipartitions/tmp/ \
-  --output ~/DICE/rmats_glmmTMB_MAP_prior_comparison.txt
-
-Rscript scripts/compare_rmats_grase.R \
-  --grase ~/DICE/split_exoncnts/test_glmmTMB_fixed_EB.annotated.txt \
-  --rmats_dir ~/DICE/rmats_post_CD4_CD4_N_STIM/ \
-  --map_dir ~/DICE/grase_results/results.bipartitions/tmp/ \
-  --output ~/DICE/rmats_glmmTMB_fixed_EB_comparison.txt
-
-Rscript scripts/compare_rmats_grase.R \
-  --grase ~/DICE/split_exoncnts/test_VGAM_MLE_EB_init.annotated.txt \
-  --rmats_dir ~/DICE/rmats_post_CD4_CD4_N_STIM/ \
-  --map_dir ~/DICE/grase_results/results.bipartitions/tmp/ \
-  --output ~/DICE/rmats_VGAM_MLE_EB_init_comparison.txt
-
-Rscript scripts/compare_rmats_grase.R \
-  --grase ~/DICE/split_exoncnts/test_wilcoxon.annotated.txt \
-  --rmats_dir ~/DICE/rmats_post_CD4_CD4_N_STIM/ \
-  --map_dir ~/DICE/grase_results/results.bipartitions/tmp/ \
-  --output ~/DICE/rmats_wilcoxon_comparison.txt
-
 
 
