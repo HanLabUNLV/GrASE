@@ -12,9 +12,7 @@ map_rMATS_multinomial(
   fromGTF_A5SS,
   fromGTF_SE,
   fromGTF_RI,
-  bipartitions,
-  grase_output_dir,
-  results_dir
+  splits
 )
 }
 \arguments{
@@ -32,11 +30,7 @@ map_rMATS_multinomial(
 
 \item{fromGTF_RI}{Path to rMATS RI fromGTF file}
 
-\item{bipartitions}{Multinomial data frame with setdiff1, setdiff2, etc. columns}
-
-\item{grase_output_dir}{Output directory for GrASE results}
-
-\item{results_dir}{Results subdirectory name}
+\item{splits}{Multinomial data frame with setdiff1, setdiff2, etc. columns}
 }
 \value{
 Modified graph object with rMATS event annotations

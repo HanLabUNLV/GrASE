@@ -4,7 +4,7 @@ library(dplyr)
 .onLoad <- function(libname, pkgname) {
   op <- options()
   op.my_package <- list(
-    my_package.debug = FALSE 
+    my_package.debug = FALSE
   )
   toset <- !(names(op.my_package) %in% names(op))
   if (any(toset)) options(op.my_package[toset])
@@ -30,10 +30,8 @@ parse_dexseq_frag_str <- function(frag_str) {
 }
 
 
-map_rMATS_event_overhang <- function(g, fromGTF_path, eventType, gene, gff_path, bipartitions, grase_output_dir, results_dir) {
+map_rMATS_event_overhang <- function(g, rmats_df, eventType, gene, gff_path, splits) {
   
-  #rmats_df <- read_tsv(fromGTF_path, col_types = cols(.default = "c"))
-  rmats_df <- read.table(fromGTF_path, header=TRUE )
   if (nrow(rmats_df) == 0) {
     return(g)
   }
@@ -59,13 +57,13 @@ map_rMATS_event_overhang <- function(g, fromGTF_path, eventType, gene, gff_path,
   rmats2bipart <- list()
   bipart2rmats <- list()  
 
-  bipartitions$ID = rownames(bipartitions)
-  ref_elists <- lapply(bipartitions$ref_ex_part, function(x) { E(g)[dexseq_fragment %in% parse_dexseq_frag_str(x)] })
-  diff1_elists <- lapply(bipartitions$setdiff1, function(x) { E(g)[dexseq_fragment %in% parse_dexseq_frag_str(x)] })
-  diff2_elists <- lapply(bipartitions$setdiff2, function(x) { E(g)[dexseq_fragment %in% parse_dexseq_frag_str(x)] })
-  ref_vlists <- lapply(ref_elists, function(x) {ends(g, x)}) 
-  diff1_vlists <- lapply(diff1_elists, function(x) {ends(g, x)}) 
-  diff2_vlists <- lapply(diff2_elists, function(x) {ends(g, x)}) 
+  splits$ID = rownames(splits)
+  ref_elists <- lapply(splits$ref_ex_part, function(x) { igraph::E(g)[dexseq_fragment %in% parse_dexseq_frag_str(x)] })
+  diff1_elists <- lapply(splits$setdiff1, function(x) { igraph::E(g)[dexseq_fragment %in% parse_dexseq_frag_str(x)] })
+  diff2_elists <- lapply(splits$setdiff2, function(x) { igraph::E(g)[dexseq_fragment %in% parse_dexseq_frag_str(x)] })
+  ref_vlists <- lapply(ref_elists, function(x) {igraph::ends(g, x)}) 
+  diff1_vlists <- lapply(diff1_elists, function(x) {igraph::ends(g, x)}) 
+  diff2_vlists <- lapply(diff2_elists, function(x) {igraph::ends(g, x)}) 
 if (length(diff2_vlists[[1]]) == 0) {
     diff_vlists <- diff1_vlists
   } else {
@@ -73,7 +71,7 @@ if (length(diff2_vlists[[1]]) == 0) {
   }
 
 
-  for (x in seq_along(rmats_1base$ID)) {
+  for (x in seq_len(nrow(rmats_1base))) {
     id <- as.character(rmats_1base$ID[x])
     les <- format(rmats_1base$longExonStart_0base[x], scientific = FALSE)
     lee <- format(rmats_1base$longExonEnd[x], scientific = FALSE)
@@ -82,12 +80,12 @@ if (length(diff2_vlists[[1]]) == 0) {
     fles <- format(rmats_1base$flankingES[x], scientific = FALSE)
     flee <- format(rmats_1base$flankingEE[x], scientific = FALSE)
 
-    v_les = V(g)[position == les]$name
-    v_lee = V(g)[position == lee]$name
-    v_ses = V(g)[position == ses]$name
-    v_see = V(g)[position == see]$name
-    v_fles = V(g)[position == fles]$name
-    v_flee = V(g)[position == flee]$name
+    v_les = igraph::V(g)[position == les]$name
+    v_lee = igraph::V(g)[position == lee]$name
+    v_ses = igraph::V(g)[position == ses]$name
+    v_see = igraph::V(g)[position == see]$name
+    v_fles = igraph::V(g)[position == fles]$name
+    v_flee = igraph::V(g)[position == flee]$name
 
     log_debug(v_les)
     log_debug(v_lee)
@@ -107,7 +105,7 @@ if (length(diff2_vlists[[1]]) == 0) {
 
         match_diff <- sapply(diff_vlists, function(x) {if(nrow(x)) {x[nrow(x),1] == v_lee & x[1,2] == v_see} else { FALSE }})
         match_ref <- sapply(ref_vlists, function(x) {if(nrow(x)) {x[nrow(x),2] == v_fles} else { FALSE }})
-        bipartition_info = bipartitions[match_diff & match_ref,]
+        bipartition_info = splits[match_diff & match_ref,]
         if (nrow(bipartition_info) > 1) { 
           bipartition_info = bipartition_info[bipartition_info$source == bubble_source & bipartition_info$sink == bubble_sink,] 
         }
@@ -121,7 +119,7 @@ if (length(diff2_vlists[[1]]) == 0) {
 
         match_diff <- sapply(diff_vlists, function(x) {if(nrow(x)) {x[1,1] == v_les & x[nrow(x),2] == v_ses} else { FALSE }})
         match_ref <- sapply(ref_vlists, function(x) {if(nrow(x)) {x[1,2] == v_flee} else { FALSE }})
-        bipartition_info = bipartitions[match_diff & match_ref,]
+        bipartition_info = splits[match_diff & match_ref,]
         if (nrow(bipartition_info) > 1) { 
           bipartition_info = bipartition_info[bipartition_info$source == bubble_source & bipartition_info$sink == bubble_sink,] 
         }
@@ -137,7 +135,7 @@ if (length(diff2_vlists[[1]]) == 0) {
 
         match_diff <- sapply(diff_vlists, function(x) {if(nrow(x)) {x[1,1] == v_see & x[nrow(x),2] == v_lee} else {FALSE}})
         match_ref <- sapply(ref_vlists, function(x) {if(nrow(x)) {x[nrow(x),1] == v_fles} else { FALSE }})
-        bipartition_info = bipartitions[match_diff & match_ref,]
+        bipartition_info = splits[match_diff & match_ref,]
         if (nrow(bipartition_info) > 1) { 
           bipartition_info = bipartition_info[bipartition_info$source == bubble_source & bipartition_info$sink == bubble_sink,] 
         }
@@ -151,7 +149,7 @@ if (length(diff2_vlists[[1]]) == 0) {
 
         match_diff <- sapply(diff_vlists, function(x) {if(nrow(x)) {x[nrow(x),1] == v_ses & x[1,2] == v_les} else {FALSE}})
         match_ref <- sapply(ref_vlists, function(x) {if(nrow(x)) {x[1,1] == v_flee} else { FALSE }})
-        bipartition_info = bipartitions[match_diff & match_ref,]
+        bipartition_info = splits[match_diff & match_ref,]
         if (nrow(bipartition_info) > 1) { 
           bipartition_info = bipartition_info[bipartition_info$source == bubble_source & bipartition_info$sink == bubble_sink,] 
         }
@@ -189,9 +187,9 @@ if (length(diff2_vlists[[1]]) == 0) {
     ref_list <- parse_dexseq_frag_str(bipartition_info$ref_ex_part)
     if (length(diff_list1) == 0 && length(diff_list2) == 0) {next}
 
-    diff_frag1 <- E(g)[dexseq_fragment %in% diff_list1]
-    diff_frag2 <- E(g)[dexseq_fragment %in% diff_list2]
-    ref_frag <- E(g)[dexseq_fragment %in% ref_list]
+    diff_frag1 <- igraph::E(g)[dexseq_fragment %in% diff_list1]
+    diff_frag2 <- igraph::E(g)[dexseq_fragment %in% diff_list2]
+    ref_frag <- igraph::E(g)[dexseq_fragment %in% ref_list]
 
     for (i in seq_along(diff_list1)) {
       rmats2dex[[id]] <- c(rmats2dex[[id]], paste0("E", diff_list1[i]))
@@ -223,10 +221,8 @@ if (length(diff2_vlists[[1]]) == 0) {
     rmats_new_df <- left_join(rmats_new_df, rmats2bipart_df, by = "ID") 
   }
 
-  out1 <- file.path(grase_output_dir, 'gene_files', gene, "output", paste0("fromGTF_", eventType, ".txt"))
-  out2 <- file.path(grase_output_dir, results_dir, "tmp", paste0("combined.fromGTF.", eventType, ".txt"))
-  write.table(rmats_new_df, file = out1, sep = "\t", row.names = FALSE, col.names = FALSE, quote = FALSE)
-  write.table(rmats_new_df, file = out2, sep = "\t", row.names = FALSE, col.names = FALSE, append = TRUE, quote = FALSE)
+  #out2 <- file.path(grase_output_dir, paste0("combined.fromGTF.", eventType, ".txt"))
+  #write.table(rmats_new_df, file = out2, sep = "\t", row.names = FALSE, col.names = FALSE, append = TRUE, quote = FALSE)
 
   mapped_col <- sapply(dex_df[,14], function(x) {
     x_str <- as.character(x)
@@ -255,20 +251,17 @@ if (length(diff2_vlists[[1]]) == 0) {
   mapped_df$DexseqFragment <- paste0("E", mapped_df$DexseqFragment)
   mapped_df$GeneID <- gsub(";", "", mapped_df$GeneID)
 
-  out3 <- file.path(grase_output_dir, 'gene_files', gene, "output", paste0(g$gene, ".dexseq.", eventType, ".mapped.txt"))
-  out4 <- file.path(grase_output_dir, results_dir, "tmp", paste0("combined.dexseq.", eventType, ".mapped.txt"))
-  write.table(mapped_df, file = out3, sep = "\t", row.names = FALSE, col.names = FALSE, quote = FALSE)
-  write.table(mapped_df, file = out4, sep = "\t", row.names = FALSE, col.names = FALSE, append = TRUE, quote = FALSE)
+  #out4 <- file.path(grase_output_dir, paste0("combined.dexseq.", eventType, ".mapped.txt"))
+  #write.table(mapped_df, file = out4, sep = "\t", row.names = FALSE, col.names = FALSE, append = TRUE, quote = FALSE)
 
-  return(g)
+  return(list(g=g, rmats=rmats_new_df, mapped=mapped_df))
 }
 
 
-map_rMATS_event_full_fragment <- function(g, fromGTF_path, eventType, gene, gff_path, bipartitions, grase_output_dir, results_dir) {
+map_rMATS_event_full_fragment <- function(g, rmats_df, eventType, gene, gff_path, splits) {
   
   # Read rMATS and DEXSeq data
 
-  rmats_df <- read.table(fromGTF_path, header=TRUE )
   if (nrow(rmats_df) == 0) {
     return(g)
   }
@@ -296,13 +289,13 @@ map_rMATS_event_full_fragment <- function(g, fromGTF_path, eventType, gene, gff_
   rmats2bipart <- list()
   bipart2rmats <- list()  
 
-  bipartitions$ID = rownames(bipartitions)
-  ref_elists <- lapply(bipartitions$ref_ex_part, function(x) { E(g)[dexseq_fragment %in% parse_dexseq_frag_str(x)] })
-  diff1_elists <- lapply(bipartitions$setdiff1, function(x) { E(g)[dexseq_fragment %in% parse_dexseq_frag_str(x)] })
-  diff2_elists <- lapply(bipartitions$setdiff2, function(x) { E(g)[dexseq_fragment %in% parse_dexseq_frag_str(x)] })
-  ref_vlists <- lapply(ref_elists, function(x) {ends(g, x)}) 
-  diff1_vlists <- lapply(diff1_elists, function(x) {ends(g, x)}) 
-  diff2_vlists <- lapply(diff2_elists, function(x) {ends(g, x)}) 
+  splits$ID = rownames(splits)
+  ref_elists <- lapply(splits$ref_ex_part, function(x) { igraph::E(g)[dexseq_fragment %in% parse_dexseq_frag_str(x)] })
+  diff1_elists <- lapply(splits$setdiff1, function(x) { igraph::E(g)[dexseq_fragment %in% parse_dexseq_frag_str(x)] })
+  diff2_elists <- lapply(splits$setdiff2, function(x) { igraph::E(g)[dexseq_fragment %in% parse_dexseq_frag_str(x)] })
+  ref_vlists <- lapply(ref_elists, function(x) {igraph::ends(g, x)}) 
+  diff1_vlists <- lapply(diff1_elists, function(x) {igraph::ends(g, x)}) 
+  diff2_vlists <- lapply(diff2_elists, function(x) {igraph::ends(g, x)}) 
   if (length(diff2_vlists[[1]]) == 0) {
     diff_vlists <- diff1_vlists
   } else {
@@ -310,7 +303,7 @@ map_rMATS_event_full_fragment <- function(g, fromGTF_path, eventType, gene, gff_
   }
 
 
-  for (x in seq_along(rmats_1base$ID)) {
+  for (x in seq_len(nrow(rmats_1base))) {
     id <- as.character(rmats_1base$ID[x])
     es <- format(rmats_1base$exonStart_0base[x], scientific = FALSE)
     ee <- format(rmats_1base$exonEnd[x], scientific = FALSE)
@@ -319,12 +312,12 @@ map_rMATS_event_full_fragment <- function(g, fromGTF_path, eventType, gene, gff_
     des <- format(rmats_1base$downstreamES[x], scientific = FALSE)
     dee <- format(rmats_1base$downstreamEE[x], scientific = FALSE)
 
-    v_es = V(g)[position == es]$name
-    v_ee = V(g)[position == ee]$name
-    v_ues = V(g)[position == ues]$name
-    v_uee = V(g)[position == uee]$name
-    v_des = V(g)[position == des]$name
-    v_dee = V(g)[position == dee]$name
+    v_es = igraph::V(g)[position == es]$name
+    v_ee = igraph::V(g)[position == ee]$name
+    v_ues = igraph::V(g)[position == ues]$name
+    v_uee = igraph::V(g)[position == uee]$name
+    v_des = igraph::V(g)[position == des]$name
+    v_dee = igraph::V(g)[position == dee]$name
 
     log_debug(id)
     log_debug(paste('v_es',v_es))
@@ -344,7 +337,7 @@ map_rMATS_event_full_fragment <- function(g, fromGTF_path, eventType, gene, gff_
 
         match_diff <- sapply(diff_vlists, function(x) {if(nrow(x)) {x[nrow(x),1] == v_ee & x[1,2] == v_es} else { FALSE }})
         match_ref <- sapply(ref_vlists, function(x) {if(nrow(x)) {x[nrow(x),2] == v_des & x[1,1] == v_uee} else { FALSE }})
-        bipartition_info = bipartitions[match_diff & match_ref,]
+        bipartition_info = splits[match_diff & match_ref,]
         if (nrow(bipartition_info) > 1) { 
           bipartition_info = bipartition_info[bipartition_info$source == bubble_source & bipartition_info$sink == bubble_sink,] 
         }
@@ -358,7 +351,7 @@ map_rMATS_event_full_fragment <- function(g, fromGTF_path, eventType, gene, gff_
 
         match_diff <- sapply(diff_vlists, function(x) {if(nrow(x)) {x[1,1] == v_es & x[nrow(x),2] == v_ee} else { FALSE }})
         match_ref <- sapply(ref_vlists, function(x) {if(nrow(x)) {x[nrow(x),1] == v_des & x[1,2] == v_uee} else { FALSE }})
-        bipartition_info = bipartitions[match_diff & match_ref,]
+        bipartition_info = splits[match_diff & match_ref,]
         if (nrow(bipartition_info) > 1) {
           bipartition_info = bipartition_info[bipartition_info$source == bubble_source & bipartition_info$sink == bubble_sink,]
         }
@@ -374,7 +367,7 @@ map_rMATS_event_full_fragment <- function(g, fromGTF_path, eventType, gene, gff_
 
         match_diff <- sapply(diff_vlists, function(x) {if(nrow(x)) {x[nrow(x),1] == v_des & x[1,2] == v_uee} else { FALSE }})
         match_ref <- sapply(ref_vlists, function(x) {if(nrow(x)) {x[nrow(x),1] == v_ee & x[1,2] == v_es} else { FALSE }})
-        bipartition_info = bipartitions[match_diff & match_ref,]
+        bipartition_info = splits[match_diff & match_ref,]
         if (nrow(bipartition_info) > 1) { 
           bipartition_info = bipartition_info[bipartition_info$source == bubble_source & bipartition_info$sink == bubble_sink,] 
         } 
@@ -387,7 +380,7 @@ map_rMATS_event_full_fragment <- function(g, fromGTF_path, eventType, gene, gff_
 
         match_diff <- sapply(diff_vlists, function(x) {if(nrow(x)) {x[1,1] == v_uee & x[nrow(x),2] == v_des} else { FALSE }})
         match_ref <- sapply(ref_vlists, function(x) {if(nrow(x)) {x[nrow(x),2] == v_ee & x[1,1] == v_es} else { FALSE }})
-        bipartition_info = bipartitions[match_diff & match_ref,]
+        bipartition_info = splits[match_diff & match_ref,]
         if (nrow(bipartition_info) > 1) { 
           bipartition_info = bipartition_info[bipartition_info$source == bubble_source & bipartition_info$sink == bubble_sink,] 
         } 
@@ -428,9 +421,9 @@ map_rMATS_event_full_fragment <- function(g, fromGTF_path, eventType, gene, gff_
     ref_list <- parse_dexseq_frag_str(bipartition_info$ref_ex_part)
     if (length(diff_list1) == 0 && length(diff_list2) == 0) {next}
   
-    diff_frag1 <- E(g)[dexseq_fragment %in% diff_list1]
-    diff_frag2 <- E(g)[dexseq_fragment %in% diff_list2]
-    ref_frag <- E(g)[dexseq_fragment %in% ref_list]
+    diff_frag1 <- igraph::E(g)[dexseq_fragment %in% diff_list1]
+    diff_frag2 <- igraph::E(g)[dexseq_fragment %in% diff_list2]
+    ref_frag <- igraph::E(g)[dexseq_fragment %in% ref_list]
 
     for (i in seq_along(diff_list1)) {
       rmats2dex[[id]] <- c(rmats2dex[[id]], paste0("E", diff_list1[i]))
@@ -466,10 +459,8 @@ map_rMATS_event_full_fragment <- function(g, fromGTF_path, eventType, gene, gff_
     rmats_new_df <- left_join(rmats_df, rmats2dex_df, by = "ID")
     rmats_new_df <- left_join(rmats_new_df, rmats2bipart_df, by = "ID")
   }
-  out1 <- file.path(grase_output_dir, 'gene_files', gene, "output", paste0("fromGTF_", eventType, ".txt"))
-  out2 <- file.path(grase_output_dir, results_dir, "tmp", paste0("combined.fromGTF.", eventType, ".txt"))
-  write.table(rmats_new_df, file = out1, sep = "\t", row.names = FALSE, col.names = FALSE, quote = FALSE)
-  write.table(rmats_new_df, file = out2, sep = "\t", row.names = FALSE, col.names = FALSE, append = TRUE, quote = FALSE)
+  #out2 <- file.path(grase_output_dir, paste0("combined.fromGTF.", eventType, ".txt"))
+  #write.table(rmats_new_df, file = out2, sep = "\t", row.names = FALSE, col.names = FALSE, append = TRUE, quote = FALSE)
 
   mapped_col <- sapply(dex_df[,14], function(x) {
     x_str <- as.character(x)
@@ -498,12 +489,10 @@ map_rMATS_event_full_fragment <- function(g, fromGTF_path, eventType, gene, gff_
   mapped_df$DexseqFragment <- paste0("E", mapped_df$DexseqFragment)
   mapped_df$GeneID <- gsub(";", "", mapped_df$GeneID)
 
-  out3 <- file.path(grase_output_dir, 'gene_files', gene, "output", paste0(g$gene, ".dexseq.", eventType, ".mapped.txt"))
-  out4 <- file.path(grase_output_dir, results_dir, "tmp", paste0("combined.dexseq.", eventType, ".mapped.txt"))
-  write.table(mapped_df, file = out3, sep = "\t", row.names = FALSE, col.names = FALSE, quote = FALSE)
-  write.table(mapped_df, file = out4, sep = "\t", row.names = FALSE, col.names = FALSE, append = TRUE, quote = FALSE)
+  #out4 <- file.path(grase_output_dir, paste0("combined.dexseq.", eventType, ".mapped.txt"))
+  #write.table(mapped_df, file = out4, sep = "\t", row.names = FALSE, col.names = FALSE, append = TRUE, quote = FALSE)
 
-  return(g)
+  return(list(g=g, rmats=rmats_new_df, mapped=mapped_df))
 }
 
 
@@ -517,39 +506,51 @@ map_rMATS_event_full_fragment <- function(g, fromGTF_path, eventType, gene, gff_
 #' @param fromGTF_A5SS Path to rMATS A5SS fromGTF file
 #' @param fromGTF_SE Path to rMATS SE fromGTF file
 #' @param fromGTF_RI Path to rMATS RI fromGTF file
-#' @param bipartitions Bipartition data frame with columns: setdiff1, setdiff2, ref_ex_part, path1, path2
-#' @param grase_output_dir Output directory for GrASE results
-#' @param results_dir Results subdirectory name
+#' @param splits Bipartition data frame with columns: setdiff1, setdiff2, ref_ex_part, path1, path2
 #' @return Modified graph object with rMATS event annotations
 #' @export
-map_rMATS_bipartition <- function(g, gene, gff, fromGTF_A3SS, fromGTF_A5SS, fromGTF_SE, fromGTF_RI, bipartitions, grase_output_dir, results_dir) {
+map_rMATS_bipartition <- function(g, gene, gff, fromGTF_A3SS, fromGTF_A5SS, fromGTF_SE, fromGTF_RI, splits) {
   # Ensure we have the expected bipartition structure
   required_cols <- c("setdiff1", "setdiff2", "ref_ex_part", "path1", "path2")
-  if (!all(required_cols %in% colnames(bipartitions))) {
+  if (!all(required_cols %in% colnames(splits))) {
     stop("bipartition analysis requires columns: ", paste(required_cols, collapse = ", "))
   }
   
   # Initialize edge attributes
-  E(g)$rmats <- ""
-  E(g)$A3SS <- FALSE
-  E(g)$A5SS <- FALSE
-  E(g)$SE <- FALSE
-  E(g)$RI <- FALSE
+  igraph::E(g)$rmats <- ""
+  igraph::E(g)$A3SS <- FALSE
+  igraph::E(g)$A5SS <- FALSE
+  igraph::E(g)$SE <- FALSE
+  igraph::E(g)$RI <- FALSE
 
-  if (!is.null(fromGTF_A3SS)) {
-    g <- map_rMATS_event_overhang(g, fromGTF_A3SS, "A3SS", gene, gff, bipartitions, grase_output_dir, results_dir)
+  results_A3SS = NULL 
+  results_A5SS = NULL 
+  results_SE = NULL 
+  results_RI = NULL
+
+  if (nrow(fromGTF_A3SS) > 0) {
+    results_A3SS <- map_rMATS_event_overhang(g, fromGTF_A3SS, "A3SS", gene, gff, splits)
   }
-  if (!is.null(fromGTF_A5SS)) {
-    g <- map_rMATS_event_overhang(g, fromGTF_A5SS, "A5SS", gene, gff, bipartitions, grase_output_dir, results_dir)
+  if (nrow(fromGTF_A5SS) > 0) {
+    results_A5SS <- map_rMATS_event_overhang(g, fromGTF_A5SS, "A5SS", gene, gff, splits)
   }
-  if (!is.null(fromGTF_SE)) {
-    g <- map_rMATS_event_full_fragment(g, fromGTF_SE, "SE", gene, gff, bipartitions, grase_output_dir, results_dir)
+  if (nrow(fromGTF_SE) > 0) {
+    results_SE <- map_rMATS_event_full_fragment(g, fromGTF_SE, "SE", gene, gff, splits)
   }
-  if (!is.null(fromGTF_RI)) {
-    g <- map_rMATS_event_full_fragment(g, fromGTF_RI, "RI", gene, gff, bipartitions, grase_output_dir, results_dir)
+  if (nrow(fromGTF_RI) > 0) {
+    results_RI <- map_rMATS_event_full_fragment(g, fromGTF_RI, "RI", gene, gff, splits)
   }
   
-  return(g)
+  return(list(g=g, 
+    rmats_A3SS=results_A3SS$rmats, 
+    rmats_A5SS=results_A5SS$rmats, 
+    rmats_SE=results_SE$rmats, 
+    rmats_RI=results_RI$rmats, 
+    mapped_A3SS=results_A3SS$mapped, 
+    mapped_A5SS=results_A5SS$mapped, 
+    mapped_SE=results_SE$mapped, 
+    mapped_RI=results_RI$mapped
+  ))
 }
 
 #' Map rMATS events using multinomial analysis (k-way partitions)
@@ -561,17 +562,15 @@ map_rMATS_bipartition <- function(g, gene, gff, fromGTF_A3SS, fromGTF_A5SS, from
 #' @param fromGTF_A5SS Path to rMATS A5SS fromGTF file
 #' @param fromGTF_SE Path to rMATS SE fromGTF file
 #' @param fromGTF_RI Path to rMATS RI fromGTF file
-#' @param bipartitions Multinomial data frame with setdiff1, setdiff2, etc. columns
-#' @param grase_output_dir Output directory for GrASE results
-#' @param results_dir Results subdirectory name
+#' @param splits Multinomial data frame with setdiff1, setdiff2, etc. columns
 #' @return Modified graph object with rMATS event annotations
 #' @export
-map_rMATS_multinomial <- function(g, gene, gff, fromGTF_A3SS, fromGTF_A5SS, fromGTF_SE, fromGTF_RI, bipartitions, grase_output_dir, results_dir) {
+map_rMATS_multinomial <- function(g, gene, gff, fromGTF_A3SS, fromGTF_A5SS, fromGTF_SE, fromGTF_RI, splits) {
   # Convert multinomial to bipartition format for rMATS compatibility
   # Strategy: Create pairwise comparisons from k-way partitions
   
   # Get setdiff columns
-  setdiff_cols <- grep("^setdiff[0-9]+$", colnames(bipartitions), value = TRUE)
+  setdiff_cols <- grep("^setdiff[0-9]+$", colnames(splits), value = TRUE)
   n_groups <- length(setdiff_cols)
   
   if (n_groups < 2) {
@@ -579,46 +578,55 @@ map_rMATS_multinomial <- function(g, gene, gff, fromGTF_A3SS, fromGTF_A5SS, from
   }
   
   # Initialize edge attributes
-  E(g)$rmats <- ""
-  E(g)$A3SS <- FALSE
-  E(g)$A5SS <- FALSE
-  E(g)$SE <- FALSE
-  E(g)$RI <- FALSE
+  igraph::E(g)$rmats <- ""
+  igraph::E(g)$A3SS <- FALSE
+  igraph::E(g)$A5SS <- FALSE
+  igraph::E(g)$SE <- FALSE
+  igraph::E(g)$RI <- FALSE
   
   # For each rMATS event type, create bipartition comparisons from multinomial data
   bipartition_results <- list()
   
   # Convert multinomial to multiple bipartition comparisons
   # Take the first two groups as primary comparison for rMATS mapping
-  bipartition_bipartitions <- bipartitions
-  bipartition_bipartitions$setdiff1 <- bipartitions[[setdiff_cols[1]]]
-  bipartition_bipartitions$setdiff2 <- bipartitions[[setdiff_cols[2]]]
+  bipartition_splits <- splits
+  bipartition_splits$setdiff1 <- splits[[setdiff_cols[1]]]
+  bipartition_splits$setdiff2 <- splits[[setdiff_cols[2]]]
   
   # Create combined paths for bipartition comparison
-  if ("paths" %in% colnames(bipartitions)) {
-    paths_split <- strsplit(bipartitions$paths, ",")
-    bipartition_bipartitions$path1 <- sapply(paths_split, function(x) x[1])
-    bipartition_bipartitions$path2 <- sapply(paths_split, function(x) paste(x[-1], collapse = ","))
+  if ("paths" %in% colnames(splits)) {
+    paths_split <- strsplit(splits$paths, ",")
+    bipartition_splits$path1 <- sapply(paths_split, function(x) x[1])
+    bipartition_splits$path2 <- sapply(paths_split, function(x) paste(x[-1], collapse = ","))
   }
   
   # Apply original mapping functions to converted bipartition format
-  if (!is.null(fromGTF_A3SS)) {
-    g <- map_rMATS_event_overhang(g, fromGTF_A3SS, "A3SS", gene, gff, bipartition_bipartitions, grase_output_dir, results_dir)
+  if (nrow(fromGTF_A3SS)) {
+    results_A3SS <- map_rMATS_event_overhang(g, fromGTF_A3SS, "A3SS", gene, gff, bipartition_splits)
   }
-  if (!is.null(fromGTF_A5SS)) {
-    g <- map_rMATS_event_overhang(g, fromGTF_A5SS, "A5SS", gene, gff, bipartition_bipartitions, grase_output_dir, results_dir)
+  if (nrow(fromGTF_A5SS)) {
+    results_A5SS <- map_rMATS_event_overhang(g, fromGTF_A5SS, "A5SS", gene, gff, bipartition_splits)
   }
-  if (!is.null(fromGTF_SE)) {
-    g <- map_rMATS_event_full_fragment(g, fromGTF_SE, "SE", gene, gff, bipartition_bipartitions, grase_output_dir, results_dir)
+  if (nrow(fromGTF_SE)) {
+    results_SE <- map_rMATS_event_full_fragment(g, fromGTF_SE, "SE", gene, gff, bipartition_splits)
   }
-  if (!is.null(fromGTF_RI)) {
-    g <- map_rMATS_event_full_fragment(g, fromGTF_RI, "RI", gene, gff, bipartition_bipartitions, grase_output_dir, results_dir)
+  if (nrow(fromGTF_RI)) {
+    results_RI <- map_rMATS_event_full_fragment(g, fromGTF_RI, "RI", gene, gff, bipartition_splits)
   }
   
   # Add multinomial-specific attributes
-  E(g)$multinomial_groups <- n_groups
+  igraph::E(g)$multinomial_groups <- n_groups
   
-  return(g)
+  return(list(g=g, 
+    rmats_A3SS=results_A3SS$rmats, 
+    rmats_A5SS=results_A5SS$rmats, 
+    rmats_SE=results_SE$rmats, 
+    rmats_RI=results_RI$rmats, 
+    mapped_A3SS=results_A3SS$mapped, 
+    mapped_A5SS=results_A5SS$mapped, 
+    mapped_SE=results_SE$mapped, 
+    mapped_RI=results_RI$mapped
+  ))
 }
 
 
@@ -632,60 +640,27 @@ map_rMATS_multinomial <- function(g, gene, gff, fromGTF_A3SS, fromGTF_A5SS, from
 #' @param fromGTF_SE Path to rMATS SE fromGTF file
 #' @param fromGTF_RI Path to rMATS RI fromGTF file
 #' @param splits Bipartition or multinomial splits data
-#' @param grase_output_dir Output directory for GrASE results
 #' @param analysis_type Optional string specifying analysis type ("bipartition", "multinomial", "n_choose_2").
 #' @return Modified graph object with rMATS event annotations
 #' @export
-map_rMATS <- function(g, gene, gff, fromGTF_A3SS, fromGTF_A5SS, fromGTF_SE, fromGTF_RI, splits, grase_output_dir, analysis_type = NULL) {
+map_rMATS <- function(g, gene, gff, fromGTF_A3SS, fromGTF_A5SS, fromGTF_SE, fromGTF_RI, splits, analysis_type = NULL) {
   # Validate user-provided analysis type
-  valid_types <- c("bipartitions", "multinomial", "n_choose_2")
+  valid_types <- c("bipartition", "multinomial", "n_choose_2")
   if (!analysis_type %in% valid_types) {
     stop("Invalid analysis_type '", analysis_type, "'. Must be one of: ", paste(valid_types, collapse = ", "))
   }
   message("Using user-specified analysis type: ", analysis_type)
 
-  switch(analysis_type,
-    "bipartitions" = map_rMATS_bipartition(g, gene, gff, fromGTF_A3SS, fromGTF_A5SS, fromGTF_SE, fromGTF_RI, splits, grase_output_dir, 'results.bipartitions'),
-    "multinomial" = map_rMATS_multinomial(g, gene, gff, fromGTF_A3SS, fromGTF_A5SS, fromGTF_SE, fromGTF_RI, splits, grase_output_dir, 'results.multinomial'),
-    "n_choose_2" = map_rMATS_bipartition(g, gene, gff, fromGTF_A3SS, fromGTF_A5SS, fromGTF_SE, fromGTF_RI, splits, grase_output_dir, 'results.n_choose_2'),
+  if (analysis_type == 'bipartition') {
+    results = map_rMATS_bipartition(g, gene, gff, fromGTF_A3SS, fromGTF_A5SS, fromGTF_SE, fromGTF_RI, splits)
+  } else if (analysis_type == 'multinomial') {
+    results = map_rMATS_multinomial(g, gene, gff, fromGTF_A3SS, fromGTF_A5SS, fromGTF_SE, fromGTF_RI, splits)
+  } else if (analysis_type == 'n_choose_2') {
+    results = map_rMATS_bipartition(g, gene, gff, fromGTF_A3SS, fromGTF_A5SS, fromGTF_SE, fromGTF_RI, splits)
+  } else {
     stop("Unknown analysis type: ", analysis_type)
-  )
+  } 
+  return (results)
 }
 
-#' Original map_rMATS function preserved for backward compatibility
-#'
-#' @param g Graph object
-#' @param gene Gene identifier
-#' @param gff GFF file path
-#' @param fromGTF_A3SS Path to rMATS A3SS fromGTF file
-#' @param fromGTF_A5SS Path to rMATS A5SS fromGTF file
-#' @param fromGTF_SE Path to rMATS SE fromGTF file
-#' @param fromGTF_RI Path to rMATS RI fromGTF file
-#' @param bipartitions Bipartition data
-#' @param grase_output_dir Output directory for GrASE results
-#' @return Modified graph object with rMATS event annotations
-#' @export  
-map_rMATS_original <- function(g, gene, gff, fromGTF_A3SS, fromGTF_A5SS, fromGTF_SE, fromGTF_RI, bipartitions, grase_output_dir) {
-  # Initialize edge attributes
-  E(g)$rmats <- ""
-  E(g)$A3SS <- FALSE
-  E(g)$A5SS <- FALSE
-  E(g)$SE <- FALSE
-  E(g)$RI <- FALSE
-
-  if (!is.null(fromGTF_A3SS)) {
-    g <- map_rMATS_event_overhang(g, fromGTF_A3SS, "A3SS", gene, gff, bipartitions, grase_output_dir, results_dir)
-  }
-  if (!is.null(fromGTF_A5SS)) {
-    g <- map_rMATS_event_overhang(g, fromGTF_A5SS, "A5SS", gene, gff, bipartitions, grase_output_dir, results_dir)
-  }
-  if (!is.null(fromGTF_SE)) {
-    g <- map_rMATS_event_full_fragment(g, fromGTF_SE, "SE", gene, gff, bipartitions, grase_output_dir, results_dir)
-  }
-  if (!is.null(fromGTF_RI)) {
-    g <- map_rMATS_event_full_fragment(g, fromGTF_RI, "RI", gene, gff, bipartitions, grase_output_dir, results_dir)
-  }
-  
-  return(g)
-}
 

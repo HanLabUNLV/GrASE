@@ -13,7 +13,6 @@ map_rMATS(
   fromGTF_SE,
   fromGTF_RI,
   splits,
-  grase_output_dir,
   analysis_type = NULL
 )
 }
@@ -33,8 +32,6 @@ map_rMATS(
 \item{fromGTF_RI}{Path to rMATS RI fromGTF file}
 
 \item{splits}{Bipartition or multinomial splits data}
-
-\item{grase_output_dir}{Output directory for GrASE results}
 
 \item{analysis_type}{Optional string specifying analysis type ("bipartition", "multinomial", "n_choose_2").}
 }

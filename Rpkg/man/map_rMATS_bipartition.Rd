@@ -12,9 +12,7 @@ map_rMATS_bipartition(
   fromGTF_A5SS,
   fromGTF_SE,
   fromGTF_RI,
-  bipartitions,
-  grase_output_dir,
-  results_dir
+  splits
 )
 }
 \arguments{
@@ -32,11 +30,7 @@ map_rMATS_bipartition(
 
 \item{fromGTF_RI}{Path to rMATS RI fromGTF file}
 
-\item{bipartitions}{Bipartition data frame with columns: setdiff1, setdiff2, ref_ex_part, path1, path2}
-
-\item{grase_output_dir}{Output directory for GrASE results}
-
-\item{results_dir}{Results subdirectory name}
+\item{splits}{Bipartition data frame with columns: setdiff1, setdiff2, ref_ex_part, path1, path2}
 }
 \value{
 Modified graph object with rMATS event annotations

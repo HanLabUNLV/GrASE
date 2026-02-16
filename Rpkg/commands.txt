@@ -72,9 +72,8 @@ Rscript scripts/compare_saturn_grase.R \
 
 # compare GrASE results with rMATS results
 # map rMATS
-Rscript scripts/map_rmats.R --dir=~/GrASE_simulation/ --split='bipartitions' 
-Rscript scripts/map_rmats.R --dir=~/GrASE_simulation/ --split='multinomial' 
-Rscript scripts/map_rmats.R --dir=~/GrASE_simulation/ --split='n_choose_2' 
+Rscript scripts/map_rmats.R --indir ~/GrASE_simulation/ --type bipartition --splitdir ~/GrASE_simulation/bipartition.internal.counts --rmatsdir ~/GrASE_simulation/rMATS/rmats_post_group1_group2/
+
 # compare GrASE results with rMATS results
 Rscript scripts/compare_rmats_grase.R \
   --grase ~/GrASE_simulation/bipartition.test/test_bipartition.internal_glmmTMB_MAP_prior.annotated.txt \
