@@ -10,6 +10,8 @@ library(optparse)
 # --- Main Execution Script ---
 
 indir = '~/GrASE_simulation/bipartition.test'
+countdir = '~/GrASE_simulation/bipartition.internal.counts'
+split = 'bipartition'
 model = 'glmmTMB_prior'
 masterfile = 'bipartition.internal.exoncnt.combined.txt'
 phifile = 'phi.glmmtmb.txt'
@@ -18,11 +20,15 @@ args = commandArgs(trailingOnly=TRUE)
 
 option_list = list(
   make_option(c("-f", "--file"), type="character",  
-              help="exoncnt dataset file name", metavar="character"),
+              help="file name of combined exoncnt dataset", metavar="character"),
   make_option(c("-d", "--dir"), type="character", 
-              help="input/output dir name", metavar="character"),
+              help="input/output dir that contains the exoncnt file", metavar="character"),
+  make_option(c("-c", "--countdir"), type="character", 
+              help="count dir that contains the count and split files by gene", metavar="character"),
+  make_option(c("-s", "--splittype"), type="character", 
+              help="split type: bipartition or multinomial or n_choose_2", metavar="character"),
   make_option(c("-p", "--phi"), type="character", 
-              help="phi estimate filename", metavar="character"),
+              help="filename for phi estimates", metavar="character"),
   make_option(c("-m", "--model"), type="character", 
               help="model name", metavar="character"),
   make_option(c("--cond1"), type="character", 
@@ -34,11 +40,17 @@ option_list = list(
 opt_parser = OptionParser(option_list=option_list);
 opt = parse_args(opt_parser);
 print(opt)
+if (!is.null(opt$file)) {
+  masterfile = opt$file
+}
 if (!is.null(opt$dir)) {
   indir = opt$dir
 }
-if (!is.null(opt$file)) {
-  masterfile = opt$file
+if (!is.null(opt$countdir)) {
+  countdir = opt$countdir
+}
+if (!is.null(opt$splittype)) {
+  split = opt$splittype
 }
 if (!is.null(opt$phi)) {
   phifile = opt$phi
@@ -58,6 +70,7 @@ if (!dir.exists(outdir)) {
 }
 exoncnt_master <- paste0(indir,'/', masterfile)
 out_prefix <- sub("^([^.]+\\.[^.]+).*", "\\1", masterfile)
+out_resultfile=paste0(outdir,'/test_', out_prefix,'_', model, '.txt')
 
 
 if (file.exists(exoncnt_master)) {
@@ -162,7 +175,7 @@ if (model == 'glmmTMB_prior') {
       results$pvalue <- NULL
   }
   
-  write.table(results, file=paste0(outdir,'/test_', out_prefix,'_glmmTMB_MAP_prior.txt'), quote=FALSE, sep="\t", row.names = FALSE)
+  write.table(results, file=out_resultfile, quote=FALSE, sep="\t", row.names = FALSE)
 
 } else if (model == 'glmmTMB_fixedEB') {
 
@@ -201,7 +214,7 @@ if (model == 'glmmTMB_prior') {
       results$pvalue <- NULL
   }
 
-  write.table(results, file=paste0(outdir,'/test_', out_prefix,'_glmmTMB_fixed_EB.txt'), quote=FALSE, sep="\t", row.names=FALSE)
+  write.table(results, file=out_resultfile, quote=FALSE, sep="\t", row.names=FALSE)
 
 } else if (model == 'VGAM_MLE_EB_init') {
 
@@ -240,7 +253,7 @@ if (model == 'glmmTMB_prior') {
       results$pvalue <- NULL
   }
   
-  write.table(results, file=paste0(outdir,'/test_', out_prefix,'_VGAM_MLE_EB_init.txt'), quote=FALSE, sep="\t", row.names = FALSE)
+  write.table(results, file=out_resultfile, quote=FALSE, sep="\t", row.names = FALSE)
 
 
 } else if (model == 'DM_EB') {
@@ -268,7 +281,7 @@ if (model == 'glmmTMB_prior') {
       results$pvalue <- NULL
   }
 
-  write.table(results, paste0(outdir,'/test_', out_prefix,'_DM_EB.txt'), sep="\t", quote=F, row.names = FALSE)
+  write.table(results, file=out_resultfile, sep="\t", quote=F, row.names = FALSE)
 
 } else if (model == 'DM_Wald_EB') {                                                                                            
 
@@ -310,7 +323,7 @@ if (model == 'glmmTMB_prior') {
       # wald_results_df$pvalue <- NULL # Keep if needed or remove. Wald test might have p.value or Pr(>Chi)
   }
 
-  write.table(wald_results_df, file=paste0(outdir,'/test_', out_prefix,'_DM_Wald_EB.txt'), sep="\t", quote=FALSE, row.names = FALSE)
+  write.table(wald_results_df, file=out_resultfile, sep="\t", quote=FALSE, row.names = FALSE)
 } else if (model == 'wilcoxon') {
 
   result_list <- mclapply(grouped_data, function(dd) {
@@ -333,10 +346,86 @@ if (model == 'glmmTMB_prior') {
       results$pvalue <- NULL
   }
 
-  write.table(results, file=paste0(outdir,'/test_', out_prefix,'_wilcoxon.txt'), quote=FALSE, sep="\t", row.names = FALSE)
+  write.table(results, file=out_resultfile, quote=FALSE, sep="\t", row.names = FALSE)
 
 } else {
   print ("model misspecified")
   print ("choose between glmmTMB_prior, glmmTMB_fixedEB, VGAM_MLE_EB_init, DM_EB, DM_Wald_EB, wilcoxon")
 
 }
+
+
+
+
+
+# now annotate the test results 
+# Construct output filename from input filename
+if (grepl("\\.txt$", out_resultfile)) {
+  out_result_annotated <- sub("\\.txt$", ".annotated.txt", out_resultfile)
+} else {
+  out_result_annotated <- paste0(out_resultfile, ".annotated.txt")
+}
+
+# Read test results first to get the list of genes
+message(paste("Reading test results from", out_resultfile, "..."))
+tests <- read.table(out_resultfile, header = TRUE, stringsAsFactors = FALSE)
+tests <- as_tibble(tests)
+message(paste("Loaded", nrow(tests), "test results."))
+
+# Get unique genes
+unique_genes <- unique(tests$gene)
+message(paste("Processing", length(unique_genes), "unique genes."))
+
+# Function to safely read a specific gene file
+read_gene_split <- function(gene_id) {
+  # Construct filename based on gene ID
+  f <- file.path(countdir, paste0(gene_id, ".", split, ".txt"))
+  
+  if (!file.exists(f)) {
+    # Try resolving tilde expansion if needed (Sys.glob might help if path has ~)
+    f_expanded <- Sys.glob(f)
+    if (length(f_expanded) > 0) f <- f_expanded[1]
+  }
+
+  if (file.exists(f)) {
+     tryCatch({
+      df <- read.table(f, header = TRUE, stringsAsFactors = FALSE, sep = "\t")
+      # Ensure gene column is character to match tests
+      df$gene <- as.character(df$gene)
+      if("source" %in% names(df)) df$source <- as.character(df$source)
+      if("sink" %in% names(df)) df$sink <- as.character(df$sink)
+      return(as_tibble(df))
+    }, error = function(e) {
+      warning(paste("Failed to read", f, ":", e$message))
+      return(NULL)
+    })
+  } else {
+    return(NULL)
+  }
+}
+
+
+
+# Iterate over unique genes and read their corresponding files
+n_cores <- 32
+message(paste("Using", n_cores, "cores for reading split files."))
+split_list <- mclapply(unique_genes, read_gene_split, mc.cores = n_cores)
+# Filter out NULLs
+split_list <- split_list[!sapply(split_list, is.null)]
+if (length(split_list) == 0) {
+  stop("No matching split files found for any genes in the test file.")
+}
+splits <- bind_rows(split_list)
+message(paste("Loaded split data for", length(unique(splits$gene)), "genes."))
+
+
+# Combine data
+# Using left_join to keep all tests, filling NAs for missing annotations
+message("Merging data...")
+merged_data <- left_join(tests, bipartitions, by = c("gene", "event"))
+message(paste("Merged dataset has", nrow(merged_data), "rows."))
+
+# Write output
+write.table(merged_data, out_result_annotated, sep = "\t", quote = FALSE, row.names = FALSE)
+message(paste("Successfully wrote annotated tests to", out_result_annotated))
+      
