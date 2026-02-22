@@ -659,8 +659,175 @@ map_rMATS <- function(g, gene, gff, fromGTF_A3SS, fromGTF_A5SS, fromGTF_SE, from
     results = map_rMATS_bipartition(g, gene, gff, fromGTF_A3SS, fromGTF_A5SS, fromGTF_SE, fromGTF_RI, splits)
   } else {
     stop("Unknown analysis type: ", analysis_type)
-  } 
+  }
   return (results)
 }
 
 
+# Graph-based rMATS mapping utilities (split-free) 
+#' Compute rMATS event bubble boundaries and alternative region
+#'
+#' Given an rMATS event type, strand, and one row of a fromGTF data frame,
+#' returns the graph positions of the bubble boundaries (b1, b2) and the
+#' coordinate range of the alternative region (alt_low, alt_hi).
+#' All positions follow the graph +1 convention (0-based rMATS coords + 1).
+#'
+#' @param etype  Event type: "SE", "RI", "A3SS", or "A5SS".
+#' @param strand Gene strand: "+" or "-".
+#' @param row    A single-row data frame or list with rMATS fromGTF columns.
+#' @return list(b1, b2, alt_low, alt_hi) as integers, or NULL if unrecognised.
+#' @export
+rmats_event_boundaries <- function(etype, strand, row) {
+  p1 <- function(x) as.integer(x) + 1L   # 0-based -> graph position
+
+  if (etype == "SE") {
+    list(b1      = p1(row$upstreamEE),
+         b2      = p1(row$downstreamES),
+         alt_low = p1(row$exonStart_0base),
+         alt_hi  = p1(row$exonEnd))
+
+  } else if (etype == "RI") {
+    list(b1      = p1(row$upstreamEE),
+         b2      = p1(row$downstreamES),
+         alt_low = p1(row$upstreamEE),
+         alt_hi  = p1(row$downstreamES))
+
+  } else if (etype == "A3SS") {
+    les <- p1(row$longExonStart_0base)
+    lee <- p1(row$longExonEnd)
+    ses <- p1(row$shortES)
+    see <- p1(row$shortEE)
+    fes <- p1(row$flankingES)
+    fee <- p1(row$flankingEE)
+    if (strand == "+") {
+      list(b1 = fee, b2 = lee, alt_low = les, alt_hi = ses)
+    } else {
+      list(b1 = fes, b2 = les, alt_low = see, alt_hi = lee)
+    }
+
+  } else if (etype == "A5SS") {
+    les <- p1(row$longExonStart_0base)
+    lee <- p1(row$longExonEnd)
+    ses <- p1(row$shortES)
+    see <- p1(row$shortEE)
+    fes <- p1(row$flankingES)
+    fee <- p1(row$flankingEE)
+    if (strand == "+") {
+      list(b1 = les, b2 = fes, alt_low = see, alt_hi = lee)
+    } else {
+      list(b1 = lee, b2 = fee, alt_low = les, alt_hi = ses)
+    }
+
+  } else {
+    NULL
+  }
+}
+
+
+#' Precompute per-gene edge tables from a GrASE splice graph
+#'
+#' Builds a compact cache of edge data for fast repeated queries over multiple
+#' rMATS events on the same gene.  The cache includes a transcript membership
+#' matrix, edge-attribute positions (valid for regular ex/in edges), vertex-based
+#' positions (valid for ALL edges including ex_part edges whose from_pos/to_pos
+#' attributes are stored as "NA"), and DEXSeq fragment labels.
+#'
+#' @param g An igraph object read from a GrASE graphml file.
+#' @return A named list with elements: tx_cols, tx_mat, ex_or_in, from_pos,
+#'   to_pos, vx_from, vx_to, dex_frag.
+#' @export
+precompute_gene_graph <- function(g) {
+  reserved <- c("sgedge_id", "ex_or_in", "from_pos", "to_pos", "dexseq_fragment")
+  tx_cols  <- setdiff(igraph::edge_attr_names(g), reserved)
+
+  # GraphML boolean attrs may be read as logical or character; as.logical() handles both.
+  tx_mat <- matrix(0L, nrow = igraph::ecount(g), ncol = length(tx_cols))
+  colnames(tx_mat) <- tx_cols
+  for (tx in tx_cols) {
+    v <- igraph::edge_attr(g, tx)
+    tx_mat[, tx] <- as.integer(as.logical(v))
+  }
+
+  # Vertex positions (integer; NA for the root "R" vertex)
+  v_pos <- suppressWarnings(as.integer(igraph::V(g)$position))
+
+  # Actual from/to positions for every edge via graph topology.
+  # Works for ex_part edges too (whose from_pos/to_pos attributes are "NA").
+  ee <- igraph::ends(g, igraph::E(g), names = FALSE)
+
+  list(
+    tx_cols  = tx_cols,
+    tx_mat   = tx_mat,
+    ex_or_in = igraph::E(g)$ex_or_in,
+    from_pos = suppressWarnings(as.integer(igraph::E(g)$from_pos)),
+    to_pos   = suppressWarnings(as.integer(igraph::E(g)$to_pos)),
+    vx_from  = v_pos[ee[, 1L]],
+    vx_to    = v_pos[ee[, 2L]],
+    dex_frag = igraph::E(g)$dexseq_fragment
+  )
+}
+
+
+#' Map one rMATS event to DEXSeq fragments via transcript set-difference
+#'
+#' Uses a precomputed gene graph cache (from \code{precompute_gene_graph}) to
+#' identify which DEXSeq exonic-part fragments are specific to the alternative
+#' isoform of an rMATS event.  Local transcripts (those incident to both bubble
+#' boundary vertices b1 and b2) are split into path1 (those with exonic coverage
+#' of the alternative region) and path2 (remaining local transcripts).  The
+#' set-difference gives the ex_part edges TRUE in path1 and FALSE in all path2
+#' transcripts.
+#'
+#' @param ge      Precomputed gene graph list from \code{precompute_gene_graph}.
+#' @param b1      Integer graph position of the bubble entry boundary.
+#' @param b2      Integer graph position of the bubble exit boundary.
+#' @param alt_low Integer lower bound of the alternative region (inclusive).
+#' @param alt_hi  Integer upper bound of the alternative region (inclusive).
+#' @return Sorted character vector of DEXSeq fragment labels (e.g. "E001"),
+#'   or \code{character(0)} if no fragments could be identified.
+#' @export
+graph_setdiff_frags <- function(ge, b1, b2, alt_low, alt_hi) {
+  fp <- ge$from_pos
+  tp <- ge$to_pos
+
+  # Edges incident to boundary vertices (regular ex/in edges have valid from_pos/to_pos)
+  at_b1 <- which(!is.na(fp) & !is.na(tp) & (fp == b1 | tp == b1))
+  at_b2 <- which(!is.na(fp) & !is.na(tp) & (fp == b2 | tp == b2))
+  if (length(at_b1) == 0L || length(at_b2) == 0L) return(character(0))
+
+  # Local transcripts: TRUE on at least one edge at b1 AND at least one at b2
+  tx_at_b1   <- colSums(ge$tx_mat[at_b1, , drop = FALSE]) > 0L
+  tx_at_b2   <- colSums(ge$tx_mat[at_b2, , drop = FALSE]) > 0L
+  local_mask <- tx_at_b1 & tx_at_b2
+  if (sum(local_mask) == 0L) return(character(0))
+
+  # ex_part edges within the alternative region.
+  # Use vertex-based positions (vx_from/vx_to) since ex_part edges store "NA"
+  # in their from_pos/to_pos attributes.
+  af        <- ge$vx_from
+  at_pos    <- ge$vx_to
+  is_expart <- ge$ex_or_in == "ex_part"
+
+  in_alt <- which(is_expart & !is.na(af) & !is.na(at_pos) &
+                    pmin(af, at_pos) >= alt_low &
+                    pmax(af, at_pos) <= alt_hi)
+  if (length(in_alt) == 0L) return(character(0))
+
+  # path1: local txs with TRUE on any alt ex_part edge
+  path1_mask <- local_mask &
+    (colSums(ge$tx_mat[in_alt, , drop = FALSE]) > 0L)
+  path2_mask <- local_mask & !path1_mask
+  if (sum(path1_mask) == 0L || sum(path2_mask) == 0L) return(character(0))
+
+  # Set-difference: alt ex_part edges TRUE in any path1 tx AND FALSE in all path2 txs
+  any_p1       <- rowSums(ge$tx_mat[in_alt, path1_mask, drop = FALSE]) > 0L
+  all_p2_false <- rowSums(ge$tx_mat[in_alt, path2_mask, drop = FALSE]) == 0L
+  sdiff_idx    <- in_alt[any_p1 & all_p2_false]
+  if (length(sdiff_idx) == 0L) return(character(0))
+
+  frags <- ge$dex_frag[sdiff_idx]
+  frags <- frags[!is.na(frags) & nchar(frags) > 0L]
+  if (length(frags) == 0L) return(character(0))
+
+  sort(unique(paste0("E", sprintf("%03d", as.integer(frags)))))
+}

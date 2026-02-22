@@ -64,7 +64,7 @@ for (etype in event_types) {
   
   # 2. Look for rMATS result file
   # Trying JC.txt (Junction Counts only) or JCEC.txt (Junction Counts + Exon Counts)
-  rmats_filename <- paste0(etype, ".MATS.JC.txt")
+  rmats_filename <- paste0(etype, ".MATS.JCEC.txt")
   rmats_path <- file.path(rmats_dir, rmats_filename)
   
   if (!file.exists(map_path)) {
@@ -111,7 +111,8 @@ for (etype in event_types) {
       ID_map = as.character(ID)     # The rMATS ID
     ) %>%
     filter(!is.na(ID_map) & ID_map != "NA")
-  
+ 
+ 
   # Load rMATS
   rmats_dt <- fread(rmats_path)
   names(rmats_dt) <- make.unique(names(rmats_dt))
@@ -125,6 +126,7 @@ for (etype in event_types) {
       rmats_fdr = FDR,
       rmats_inc_diff = IncLevelDifference
     )
+
   
   # Merge: Mapping + rMATS (on rMATS 'ID')
   mapped_rmats <- inner_join(map_clean, rmats_clean, by = c("ID_map" = "ID"))
