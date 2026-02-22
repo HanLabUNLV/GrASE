@@ -99,8 +99,10 @@ find_diff_and_ref_exparts_for_split <- function(g, source, sink, split, parsed_p
       setdiff1 <- intersect_stream(setdiff1)
       setdiff2 <- intersect_stream(setdiff2)
 
-      setdiff1ID <- if (length(setdiff1) > 0) paste0("E", paste(dexseq_frag[setdiff1], collapse=",E")) else ""
-      setdiff2ID <- if (length(setdiff2) > 0) paste0("E", paste(dexseq_frag[setdiff2], collapse=",E")) else ""
+      frag1 <- sort(as.numeric(dexseq_frag[setdiff1]))
+      frag2 <- sort(as.numeric(dexseq_frag[setdiff2]))
+      setdiff1ID <- if (length(frag1) > 0) paste0("E", paste(frag1, collapse=",E")) else ""
+      setdiff2ID <- if (length(frag2) > 0) paste0("E", paste(frag2, collapse=",E")) else ""
 
       tx_ex_part1 <- tx_ex_parts[tx1[1]]
       tx_ex_part1 <- unique(unlist(tx_ex_part1))
@@ -118,7 +120,8 @@ find_diff_and_ref_exparts_for_split <- function(g, source, sink, split, parsed_p
       ) 
  
       ref_ex_part_set <- unique(unlist(c(ref_ex_part$common, ref_ex_part$source, ref_ex_part$sink)))
-      ref_ex_part_set_ID <- if (length(ref_ex_part_set) > 0) paste0("E", paste(dexseq_frag[ref_ex_part_set], collapse=",E")) else ""
+      ref_frag <- sort(as.numeric(dexseq_frag[ref_ex_part_set]))
+      ref_ex_part_set_ID <- if (length(ref_frag) > 0) paste0("E", paste(ref_frag, collapse=",E")) else ""
 
       new_row <- data.frame(
         gene = gene,
@@ -261,7 +264,7 @@ diff_exons_gene_ovr <- function(gene, g, outdir) {
 #' For each bubble, find all valid binary partitions of paths, then find diff exons for each partition. 
 #' Optionally collapse bubbles with redundant paths.
 #' @export
-bipartition_paths <- function(gene, g, outdir, max_path = 20, max_span = Inf, collapse_bubbles=FALSE) {
+bipartition_paths <- function(gene, g, outdir, max_path = 15, max_span = Inf, collapse_bubbles=FALSE) {
 
   bipartitions_df <- data.frame()
   g <- grase::set_edge_names(g)
@@ -271,7 +274,7 @@ bipartition_paths <- function(gene, g, outdir, max_path = 20, max_span = Inf, co
   bubbles_df <- grase::detect_bubbles_igraph(g)     # high_mem
   if ( nrow(bubbles_df) == 0) {
     message(paste("single transcript, no bubbles ", gene))
-    return (NULL) 
+    return (NULL)
   }
 
   bubbles_ordered = grase::bubble_ordering4(g, bubbles_df)
@@ -416,8 +419,10 @@ bipartition_paths <- function(gene, g, outdir, max_path = 20, max_span = Inf, co
 
   if (nrow(bipartitions_df) > 0) {
     bipartitions_df <- bipartitions_df %>% dplyr::mutate(ref_part_cnt = sapply(ref_ex_part, count_items))
-    # for all rows with same setdiff1 and setdiff2, only retain the row with minimum number of ref_ex_part
+    # deduplicate exact events (same ref_ex_part + setdiff1 + setdiff2 from different graph paths),
+    # then among remaining rows with same (setdiff1, setdiff2) keep the one with fewest ref parts
     bipartitions_filtered <- bipartitions_df %>%
+      dplyr::distinct(ref_ex_part, setdiff1, setdiff2, .keep_all = TRUE) %>%
       dplyr::group_by(setdiff1, setdiff2) %>%
       dplyr::filter(ref_part_cnt == min(ref_part_cnt)) %>%
       dplyr::ungroup() %>%
@@ -434,4 +439,61 @@ bipartition_paths <- function(gene, g, outdir, max_path = 20, max_span = Inf, co
   write.table(bipartitions_filtered, filename, sep = "\t", quote = FALSE, row.names = FALSE)
 
   bipartitions_filtered
+}
+
+#' Infer differential exonic parts given two groups of transcripts (e.g. changed vs constant)
+#' @export
+infer_diff_exons_from_tx_groups <- function(gene, g, tx_changed, tx_constant, outdir) {
+  
+  bipartitions_df <- data.frame()
+  g <- grase::set_edge_names(g)
+  
+  # Precompute graph derivatives
+  ex_or_in_vec <- igraph::edge_attr(g, "ex_or_in")
+  g_exon <- igraph::delete_edges(g, igraph::E(g)[ex_or_in_vec == 'ex_part'])
+  g_expart <- igraph::delete_edges(g, igraph::E(g)[ex_or_in_vec == 'ex'])
+  ex_or_in_gexpart <- igraph::edge_attr(g_expart, "ex_or_in")
+  names(ex_or_in_gexpart) <- igraph::edge_attr(g_expart, "name")
+  dexseq_frag <- igraph::edge_attr(g_expart, "dexseq_fragment")
+  names(dexseq_frag) <- igraph::edge_attr(g_expart, "name")
+  txpaths <- grase::txpath_from_edgeattr(g)
+  tx_exonpaths <- lapply(txpaths, grase::from_vpath_to_exon_path_simple, g=g_exon)
+  tx_ex_parts <- lapply(tx_exonpaths, grase::from_epath_to_expart_path_simple, g=g_expart)
+
+  bubbles_df <- grase::detect_bubbles_igraph(g)
+  if (nrow(bubbles_df) == 0) {
+    message(paste("single transcript, no bubbles ", gene))
+    return(NULL)
+  }
+
+  for (bubble_idx in 1:nrow(bubbles_df)) {
+    source <- bubbles_df$source[[bubble_idx]]
+    sink <- bubbles_df$sink[[bubble_idx]]
+    parsed_paths <- lapply(bubbles_df$paths[[bubble_idx]], function(x) strsplit(gsub("[{}]", "", x), ",")[[1]])
+    parsed_partitions <- lapply(bubbles_df$partitions[[bubble_idx]], function(x) strsplit(gsub("[{}]", "", x), ",")[[1]])
+    
+    # Identify which partitions contain transcripts from each group
+    idx_changed <- which(sapply(parsed_partitions, function(p) any(p %in% tx_changed)))
+    idx_constant <- which(sapply(parsed_partitions, function(p) any(p %in% tx_constant)))
+    
+    if (length(idx_changed) == 0 || length(idx_constant) == 0) {
+      next
+    }
+    
+    split <- list(group1 = idx_changed, group2 = idx_constant)
+    
+    retval <- find_diff_and_ref_exparts_for_split(
+      g=g, source=source, sink=sink, split=split,
+      parsed_partitions=parsed_partitions, parsed_paths=parsed_paths,
+      tx_ex_parts=tx_ex_parts, bipartitions_df=bipartitions_df, gene=gene,
+      g_exon=g_exon, g_expart=g_expart,
+      ex_or_in_gexpart=ex_or_in_gexpart, dexseq_frag=dexseq_frag
+    )
+    bipartitions_df <- retval$bipartitions_df
+  }
+  
+  filename <- file.path(outdir, paste0(gene, ".inferred_diff.txt"))
+  write.table(bipartitions_df, filename, sep = "\t", quote = FALSE, row.names = FALSE)
+  
+  return(bipartitions_df)
 }

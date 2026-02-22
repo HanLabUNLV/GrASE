@@ -100,7 +100,8 @@ find_diff_and_ref_exparts_general <- function(
   ref_ex_part_set <- unique(unlist(c(ref_ex_part$common, ref_ex_part$source, ref_ex_part$sink)))
 
   format_edges <- function(edges) {
-    if (length(edges) > 0) paste0("E", paste(dexseq_frag[edges], collapse=",E")) else ""
+    frags <- sort(as.numeric(dexseq_frag[edges]))
+    if (length(frags) > 0) paste0("E", paste(frags, collapse=",E")) else ""
   }
 
   # Build new row as a list (avoid rbind issues with variable columns)
@@ -313,6 +314,7 @@ multinomial_paths <- function(gene, g, sg, outdir, max_path = 20, max_span = Inf
     # Just remove duplicates based on all setdiff columns and ref_ex_part
     if (nrow(multipaths_filtered) > 0 && length(setdiff_cols) > 0) {
       multipaths_filtered <- multipaths_filtered %>%
+        dplyr::distinct(dplyr::across(all_of(c("ref_ex_part", setdiff_cols))), .keep_all = TRUE) %>%
         dplyr::group_by(dplyr::across(all_of(setdiff_cols))) %>%
         dplyr::filter(ref_part_cnt == min(ref_part_cnt)) %>%
         dplyr::ungroup() %>%

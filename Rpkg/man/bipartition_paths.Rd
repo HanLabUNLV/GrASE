@@ -10,7 +10,7 @@ bipartition_paths(
   gene,
   g,
   outdir,
-  max_path = 20,
+  max_path = 15,
   max_span = Inf,
   collapse_bubbles = FALSE
 )

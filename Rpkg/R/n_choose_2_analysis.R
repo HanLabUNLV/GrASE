@@ -18,7 +18,8 @@ find_diff_and_ref_exparts_pairwise <- function(
   names(dexseq_frag) <- igraph::edge_attr(g_expart, "name")
 
   format_edges <- function(edges) {
-    if (length(edges) > 0) paste0("E", paste(dexseq_frag[edges], collapse=",E")) else ""
+    frags <- sort(as.numeric(dexseq_frag[edges]))
+    if (length(frags) > 0) paste0("E", paste(frags, collapse=",E")) else ""
   }
 
   # Process each pairwise combination
@@ -293,6 +294,7 @@ n_choose_2_paths <- function(gene, g, sg, outdir, max_path = 20, max_span = Inf,
     # For pairwise analysis, use the same grouping logic as binary case
     if (nrow(pairwise_filtered) > 0) {
       pairwise_filtered <- pairwise_filtered %>%
+        dplyr::distinct(ref_ex_part, setdiff1, setdiff2, .keep_all = TRUE) %>%
         dplyr::group_by(setdiff1, setdiff2) %>%
         dplyr::filter(ref_part_cnt == min(ref_part_cnt)) %>%
         dplyr::ungroup() %>%

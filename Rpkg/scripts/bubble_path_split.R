@@ -77,12 +77,17 @@ split_bipartition <- function(gene) {
 
     g <- igraph::read_graph(graph_path, format = "graphml")
 
-    # based on the distribution of bubble sizes, we set max_paths to 20 to capture the 99% of all bubbles. 
+    # Here's the summary at key thresholds:
+    #max_path	Bubbles skipped	% skipped
+    #10	20,084	7.63%
+    #15	7,985	3.03%
+    #20	5,059	1.92%
+    # based on the distribution of bubble sizes, we set max_paths to 15 to capture the 97% of all bubbles. 
     grase::bipartition_paths(
         gene     = gene,
         g        = g,
         outdir   = outdir, 
-        max_path = 20,
+        max_path = 15,
         collapse_bubbles = collapse_bubbles 
     )
     print(paste0("FINISH ", gene))
