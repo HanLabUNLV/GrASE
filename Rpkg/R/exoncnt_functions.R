@@ -123,6 +123,92 @@ count_bipartitions <- function(bipartition_file, countmat, sampleinfo, outdir, o
 }
 
 
+# Like count_bipartitions() but emits BOTH setdiff1 and setdiff2 as separate
+# testable events (suffixed _s1 / _s2) instead of picking the higher-count side.
+# This lets the statistical test see both sides of each bipartition independently.
+#' @export
+count_bipartitions_both <- function(bipartition_file, countmat, sampleinfo, outdir, outfilesuffix) {
+  bipartitions <- as.data.frame(read_tsv(bipartition_file, col_types = cols(.default = "c")))
+  bipartitions$event = rownames(bipartitions)
+  bipartitions <- bipartitions[!(is.na(bipartitions$setdiff1) & is.na(bipartitions$setdiff2)), ]
+  if (nrow(bipartitions) == 0) { return(0) }
+  gene <- bipartitions$gene
+  n_samples <- ncol(countmat) - 2
+  sample_cols <- colnames(countmat)[1:n_samples]
+
+  bipartitions$ref_ex_part[is.na(bipartitions$ref_ex_part)] <- 'NA'
+  bipartitions$setdiff1[is.na(bipartitions$setdiff1)]       <- 'NA'
+  bipartitions$setdiff2[is.na(bipartitions$setdiff2)]       <- 'NA'
+
+  ref_counts_dict   <- t(sapply(unique(bipartitions$ref_ex_part), sum_exon_counts, counts_df = countmat))
+  diff1_counts_dict <- t(sapply(unique(bipartitions$setdiff1),    sum_exon_counts, counts_df = countmat))
+  diff2_counts_dict <- t(sapply(unique(bipartitions$setdiff2),    sum_exon_counts, counts_df = countmat))
+
+  ref_counts_df   <- as.data.frame(matrix(ref_counts_dict[bipartitions$ref_ex_part, ],  nrow = nrow(bipartitions), ncol = n_samples))
+  diff1_counts_df <- as.data.frame(matrix(diff1_counts_dict[bipartitions$setdiff1, ],   nrow = nrow(bipartitions), ncol = n_samples))
+  diff2_counts_df <- as.data.frame(matrix(diff2_counts_dict[bipartitions$setdiff2, ],   nrow = nrow(bipartitions), ncol = n_samples))
+
+  colnames(ref_counts_df) <- colnames(diff1_counts_df) <- colnames(diff2_counts_df) <- sample_cols
+
+  bipartitions$ref_mean   <- rowMeans(ref_counts_df,   na.rm = TRUE)
+  bipartitions$diff1_mean <- rowMeans(diff1_counts_df, na.rm = TRUE)
+  bipartitions$diff2_mean <- rowMeans(diff2_counts_df, na.rm = TRUE)
+
+  # Helper: build one side's bipartition table + count dfs with suffixed event IDs
+  build_side <- function(mask, setdiff_col, diff_counts, suffix) {
+    bp <- bipartitions[mask, , drop = FALSE]
+    if (nrow(bp) == 0) return(NULL)
+    bp$event   <- paste0(bp$event, suffix)
+    bp$setdiff <- bp[[setdiff_col]]
+    bp$side    <- setdiff_col
+    bp$diff_mean <- rowMeans(diff_counts[mask, , drop = FALSE], na.rm = TRUE)
+    rc <- ref_counts_df[mask, , drop = FALSE]
+    dc <- diff_counts[mask,   , drop = FALSE]
+    rc$event <- bp$event
+    dc$event <- bp$event
+    list(bp = bp, ref = rc, diff = dc)
+  }
+
+  has_s1 <- bipartitions$setdiff1 != 'NA'
+  has_s2 <- bipartitions$setdiff2 != 'NA'
+
+  s1 <- build_side(has_s1, "setdiff1", diff1_counts_df, "_s1")
+  s2 <- build_side(has_s2, "setdiff2", diff2_counts_df, "_s2")
+
+  sides <- Filter(Negate(is.null), list(s1, s2))
+  if (length(sides) == 0) return(0)
+
+  bp_both   <- bind_rows(lapply(sides, `[[`, "bp"))
+  ref_both  <- bind_rows(lapply(sides, `[[`, "ref"))
+  diff_both <- bind_rows(lapply(sides, `[[`, "diff"))
+
+  # sort by original numeric event (strip suffix first)
+  ord <- order(as.numeric(sub("_s[12]$", "", bp_both$event)))
+  bp_both   <- bp_both[ord, ]
+  ref_both  <- ref_both[ord, ]
+  diff_both <- diff_both[ord, ]
+
+  # only write if at least one side has non-zero counts
+  if (nrow(bp_both[bp_both$diff_mean > 0, ]) > 0) {
+    print(paste0("writing (both sides) ", gene[1]))
+    write.table(bp_both, file = paste0(outdir, '/', gene[1], '.', outfilesuffix, '.txt'),
+                quote = FALSE, sep = "\t")
+    # build joined ref/diff for write_exoncnt_long
+    meta_cols <- c('gene', 'event', 'source', 'sink', 'ref_ex_part', 'setdiff')
+    ref_joined  <- inner_join(bp_both[, meta_cols], ref_both,  by = "event")
+    diff_joined <- inner_join(bp_both[, meta_cols], diff_both, by = "event")
+    write_exoncnt_long(ref_joined, diff_joined,
+                       events    = bp_both$event,
+                       gene_name = gene[1],
+                       sampleinfo, outfilesuffix, outdir)
+  } else {
+    print(paste0("zero read counts at setdiff exons. skipping (both sides) ", gene[1]))
+  }
+
+  return(0)
+}
+
+
 #' @export
 count_multinomial <- function(multinomial_file, countmat, sampleinfo, outdir) {
   # 1. Load the definitions file

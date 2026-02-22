@@ -123,6 +123,33 @@ if (analysis_type == 'all' || analysis_type == 'bipartition') {
   }, mc.cores = 32)
   #}
 
+} else if (analysis_type == 'bipartition_both') {
+
+  # Like 'bipartition' but emits both setdiff1 and setdiff2 as separate events
+  bipartition_path = paste0(indir, '/bipartition.filtered')
+  outdir = paste0(indir,'/bipartition_both.',alt,'.counts')
+  if (!dir.exists(outdir)) {
+    dir.create(outdir, recursive = TRUE)
+  }
+  bipartition_files <- list.files(path = bipartition_path,
+                                   pattern = paste0("bipartition.",alt,".txt$"), full.names=TRUE)
+
+  res <- mclapply(bipartition_files, function(f) {
+    tryCatch({
+      gene_id <- sub(paste0("\\.bipartition\\.",alt,"\\.txt$"), "", basename(f))
+      gene_counts <- counts_list[[gene_id]]
+      if (!is.null(gene_counts)) {
+        count_bipartitions_both(bipartition_file = f, countmat = gene_counts, sampleinfo, outdir, 'bipartition_both')
+      }
+    }, error = function(e) {
+      msg <- sprintf("[%s] ERROR in %s (PID %d): %s\n",
+                     format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
+                     f, Sys.getpid(), conditionMessage(e))
+      cat(msg, file = "exoncnt.bipartition_both.errors.log", append = TRUE)
+      NULL
+    })
+  }, mc.cores = 32)
+
 } else if (analysis_type == 'all' || analysis_type == 'n_choose_2') {
 
   # input files
