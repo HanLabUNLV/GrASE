@@ -20,10 +20,6 @@ phi_estimate_glmmTMB <- function(dd) {
     dd <- dd[dd$n > 0, ]
     if (nrow(dd) < 2) return(NULL)
 
-    m0 <- tryCatch(
-      glmmTMB(cbind(y, n - y) ~ 1, data = dd, family = binomial(link = "logit")),
-      error = function(e) NULL
-    )
     m1 <- tryCatch(
       glmmTMB(
         cbind(y, n - y) ~ 1,
@@ -33,23 +29,18 @@ phi_estimate_glmmTMB <- function(dd) {
       error = function(e) NULL
     )
 
-    if (!is.null(m1) && !is.na(logLik(m1)) && !is.null(m0) && !is.na(logLik(m0)) ) {
-      test <- tryCatch(anova(m1, m0, test = "LRT"), error = function(e) NULL)
-      if (!is.null(test) && test$`Pr(>Chisq)`[2] < 0.05) {
-        phi_hat <- as.numeric(sigma(m1))  # dispersion
-        vc <- vcov(m1, full = TRUE)
-        ## log(phi and its variance from dispersion model
-        if ( nrow(vc) < 2 || ncol(vc) < 2) {
-          var_phi = NA_real_
-        } else {
-          var_log_phi <- vc["disp~(Intercept)", "disp~(Intercept)"]
-          se_log_phi  <- sqrt(var_log_phi)
-
-          ## Delta method: Var(phi) = phi^2 * Var(log(phi))
-          var_phi <- (phi_hat^2) * var_log_phi
-        }
-        return(data.frame(gene = gene, event = event, phi = phi_hat, var_phi=var_phi))
+    if (!is.null(m1) && !is.na(logLik(m1))) {
+      phi_hat <- as.numeric(sigma(m1))  # dispersion
+      vc <- vcov(m1, full = TRUE)
+      ## log(phi) and its variance from dispersion model
+      if (nrow(vc) < 2 || ncol(vc) < 2) {
+        var_phi <- NA_real_
+      } else {
+        var_log_phi <- vc["disp~(Intercept)", "disp~(Intercept)"]
+        ## Delta method: Var(phi) = phi^2 * Var(log(phi))
+        var_phi <- (phi_hat^2) * var_log_phi
       }
+      return(data.frame(gene = gene, event = event, phi = phi_hat, var_phi = var_phi))
     }
     return(NULL)
 }
@@ -139,6 +130,82 @@ moderate_phi_log_scale <- function(phi_table, trimming_limit = 1e+10) {
   phi_table$phi_mod <- exp(phi_table$z_mod)
   
   return(phi_table)
+}
+
+
+#' Trend-based phi moderation (analogous to DESeq2's dispersion trend).
+#'
+#' Fits a loess curve of log(phi) ~ log(baseMean) on events that have phi
+#' estimates, then uses the trend as the shrinkage target instead of the
+#' global mean.  Events with no phi estimate (non-convergent BB fit) are
+#' fully shrunk to the trend prediction (weight = 0).
+#'
+#' @param phi_df      data.frame with columns gene, event, phi, var_phi
+#' @param baseMean_df data.frame with columns gene, event, baseMean
+#'                    (ALL events, not just those with phi estimates)
+#' @param span        loess span parameter (default 0.5)
+#' @param trimming_limit upper bound on phi before log-transform (default 1e10)
+#' @return data.frame with all events in baseMean_df and columns
+#'         z, var_z, z_trend, w, z_mod, phi_mod
+#' @export
+moderate_phi_trend <- function(phi_df, baseMean_df, span = 0.5,
+                               trimming_limit = 1e+10) {
+  # -- Step 1: prepare phi estimates --
+  phi_est <- phi_df[phi_df$phi > 0 & phi_df$phi < trimming_limit, ]
+  phi_est <- phi_est %>%
+    left_join(baseMean_df, by = c("gene", "event")) %>%
+    filter(!is.na(baseMean) & baseMean > 0)
+  phi_est$z      <- log(phi_est$phi)
+  phi_est$var_z  <- phi_est$var_phi / (phi_est$phi^2)
+  phi_est$log_bm <- log(phi_est$baseMean)
+
+  # -- Step 2: fit loess trend on reliable estimates --
+  # Exclude the noisiest 10 % of estimates when fitting the trend
+  var_z_thresh <- quantile(phi_est$var_z, 0.9, na.rm = TRUE)
+  reliable     <- is.finite(phi_est$z) & !is.na(phi_est$var_z) &
+                  phi_est$var_z < var_z_thresh
+  z_bar <- median(phi_est$z[reliable], na.rm = TRUE)
+
+  trend_fit <- NULL
+  if (sum(reliable, na.rm = TRUE) >= 10) {
+    trend_fit <- tryCatch(
+      loess(z ~ log_bm, data = phi_est[reliable, ], span = span),
+      error = function(e) NULL
+    )
+  }
+
+  # -- Step 3: predict trend for ALL events --
+  all_events <- baseMean_df %>%
+    mutate(log_bm = log(pmax(baseMean, 1)))
+
+  if (!is.null(trend_fit)) {
+    all_events$z_trend <- predict(trend_fit, newdata = all_events)
+    # For out-of-range extrapolation, fall back to global median
+    all_events$z_trend[is.na(all_events$z_trend)] <- z_bar
+  } else {
+    all_events$z_trend <- z_bar
+  }
+
+  # -- Step 4: estimate biological variance tau^2 --
+  typical_var_z <- median(phi_est$var_z, na.rm = TRUE)
+  s2_z          <- var(phi_est$z, na.rm = TRUE)
+  tau2_z        <- max(s2_z - typical_var_z, 0)
+
+  # -- Step 5: join phi estimates onto all events, compute shrinkage --
+  result <- all_events %>%
+    left_join(phi_est %>% select(gene, event, z, var_z), by = c("gene", "event"))
+
+  # Events without a phi estimate get w = 0 → fully shrunk to the trend
+  result$w <- ifelse(
+    is.na(result$var_z), 0,
+    tau2_z / (tau2_z + result$var_z)
+  )
+  result$w[!is.finite(result$w)] <- 0
+
+  result$z_mod   <- result$w * result$z + (1 - result$w) * result$z_trend
+  result$phi_mod <- exp(result$z_mod)
+
+  return(result)
 }
 
 
@@ -273,21 +340,8 @@ test_model_glmmTMB_EB <- function(dd) {
     dd <- dd[dd$n > 0, ]
     if (nrow(dd) < 2 || length(unique(dd$groups)) < 2) return(NULL)
 
-    # Models include 'priors' for empirical Bayes moderation
-    target_log_phi = dd$z_mod[1]
-
-    # Fallback to Binomial GLM if dispersion is missing
-    if (is.na(target_log_phi)) {
-        m1 <- tryCatch(glm(cbind(y, n - y) ~ groups, data = dd, family = binomial), error = function(e) NULL)
-        m0 <- tryCatch(glm(cbind(y, n - y) ~ 1, data = dd, family = binomial), error = function(e) NULL)
-        if (!is.null(m1) && !is.null(m0)) {
-             LR <- 2 * (logLik(m1) - logLik(m0))
-             pval <- pchisq(as.numeric(LR), df = 1, lower.tail = FALSE)
-             eff_size <- coef(m1)[2]
-             return(data.frame(gene=gene, event=event, LRT=as.numeric(LR), p.value=pval, model="binomial_glm", phi=NA, effect_size=eff_size))
-        }
-        return(NULL)
-    }
+    target_log_phi <- dd$z_mod[1]
+    if (is.na(target_log_phi)) return(NULL)
 
     m1 <- tryCatch(
       glmmTMB(cbind(y, n - y) ~ groups, 
@@ -328,33 +382,8 @@ test_model_vgam_EB_init <- function(dd) {
   dd <- dd[dd$n > 0, ]
   if (nrow(dd) < 2 || length(unique(dd$groups)) < 2) return(NULL)
   
-  phi_mod = dd$phi_mod[1]
-
-  # Fallback to Binomial GLM if dispersion is missing
-  if (is.na(phi_mod)) {
-      m1 <- tryCatch(glm(cbind(y, n - y) ~ groups, data = dd, family = binomial), error = function(e) NULL)
-      m0 <- tryCatch(glm(cbind(y, n - y) ~ 1, data = dd, family = binomial), error = function(e) NULL)
-      if (!is.null(m1) && !is.null(m0)) {
-          LR <- 2 * (logLik(m1) - logLik(m0))
-          pval <- pchisq(as.numeric(LR), df = 1, lower.tail = FALSE)
-          eff_size <- coef(m1)[2]
-          return(data.frame(
-            gene    = gene,
-            event   = event,
-            LRT     = as.numeric(LR),
-            p.value = pval,
-            phi_hat = NA,
-            phi_mod = NA,
-            w       = NA,
-            rho     = NA,
-            phi     = NA,
-            model   = "binomial_glm",
-            effect_size = eff_size,
-            stringsAsFactors = FALSE
-          ))
-      }
-      return(NULL)
-  }
+  phi_mod <- dd$phi_mod[1]
+  if (is.na(phi_mod)) return(NULL)
 
   phi_hat = dd$phi[1]
   phi_mod = dd$phi_mod[1]

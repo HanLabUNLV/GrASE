@@ -31,10 +31,14 @@ option_list = list(
               help="filename for phi estimates", metavar="character"),
   make_option(c("-m", "--model"), type="character", 
               help="model name", metavar="character"),
-  make_option(c("--cond1"), type="character", 
+  make_option(c("--cond1"), type="character",
               help="condition 1 name (Group 1 - Group 2)", metavar="character"),
-  make_option(c("--cond2"), type="character", 
-              help="condition 2 name (Reference Group)", metavar="character")
+  make_option(c("--cond2"), type="character",
+              help="condition 2 name (Reference Group)", metavar="character"),
+  make_option(c("--phi_trend"), action="store_true", default=FALSE,
+              help="use loess phi trend (log(phi) ~ log(baseMean)) as EB shrinkage target instead of global mean"),
+  make_option(c("--independent_filtering"), action="store_true", default=FALSE,
+              help="use DESeq2-style independent filtering (filter on baseMean) before BH FDR correction")
 ); 
  
 opt_parser = OptionParser(option_list=option_list);
@@ -62,8 +66,10 @@ if (!is.null(opt$cond1)) {
   cond1 = opt$cond1 
 }
 if (!is.null(opt$cond2)) {
-  cond2 = opt$cond2 
+  cond2 = opt$cond2
 }
+phi_trend    <- isTRUE(opt$phi_trend)
+indep_filter <- isTRUE(opt$independent_filtering)
 outdir = indir
 if (!dir.exists(outdir)) {
   dir.create(outdir, recursive = TRUE)
@@ -179,10 +185,32 @@ if (model == 'glmmTMB_prior') {
 
 } else if (model == 'glmmTMB_fixedEB') {
 
+  ## baseMean per event (used for trend fitting and independent filtering)
+  baseMean_df_all <- splitcnts %>%
+    group_by(gene, event) %>%
+    summarise(baseMean = mean(n, na.rm = TRUE), .groups = "drop")
+
   ## Empirical Bayes hyperparameters: prior mean and variance
-  phi_table <- moderate_phi_log_scale(phi_df)
-  splitcnts_eb <- splitcnts %>%
-    left_join(phi_table, by = c("gene", "event"))
+  if (phi_trend) {
+    ## Trend-based moderation: loess(log(phi) ~ log(baseMean)) as shrinkage target.
+    ## Returns a row for EVERY event; events without a phi estimate get w=0
+    ## (fully shrunk to the trend prediction — no binomial fallback needed).
+    phi_table <- moderate_phi_trend(phi_df, baseMean_df_all)
+    splitcnts_eb <- splitcnts %>%
+      left_join(phi_table %>% select(gene, event, z_mod, baseMean),
+                by = c("gene", "event"))
+    ## Residual NAs (event not in baseMean_df_all) → trend median as fallback
+    fallback_z <- median(phi_table$z_mod, na.rm = TRUE)
+    splitcnts_eb$z_mod[is.na(splitcnts_eb$z_mod)] <- fallback_z
+  } else {
+    ## Global-mean moderation (original behaviour)
+    phi_table <- moderate_phi_log_scale(phi_df)
+    splitcnts_eb <- splitcnts %>%
+      left_join(phi_table, by = c("gene", "event"))
+    ## Events with no phi estimate are fully shrunk to the global prior mean
+    z_bar <- median(phi_table$z, na.rm = TRUE)
+    splitcnts_eb$z_mod[is.na(splitcnts_eb$z_mod)] <- z_bar
+  }
   grouped_data_eb <- group_by_event(splitcnts_eb, 'diff', 'n')
   #grouped_data_eb <- grouped_data_eb[1:10]
 
@@ -207,10 +235,13 @@ if (model == 'glmmTMB_prior') {
   #stopCluster(cl)
 
   results <- bind_rows(Filter(Negate(is.null), result_list))
-  
+
+  # Add mean total count per event as filter statistic for independent filtering
+  results <- results %>% left_join(baseMean_df_all, by = c("gene", "event"))
+
   if (exists("pvalueAdjustment") && nrow(results) > 0) {
       results$pvalue <- results$p.value
-      results <- pvalueAdjustment(results, independentFiltering=FALSE, theta=NULL, alpha=0.05, pAdjustMethod="BH")
+      results <- pvalueAdjustment(results, independentFiltering=indep_filter, alpha=0.05, pAdjustMethod="BH")
       results$pvalue <- NULL
   }
 
@@ -222,6 +253,9 @@ if (model == 'glmmTMB_prior') {
   phi_table <- moderate_phi_log_scale(phi_df)
   splitcnts_eb <- splitcnts %>%
     left_join(phi_table, by = c("gene", "event"))
+  ## Events with no phi estimate are fully shrunk to the global prior mean
+  z_bar <- median(phi_table$z, na.rm = TRUE)
+  splitcnts_eb$phi_mod[is.na(splitcnts_eb$phi_mod)] <- exp(z_bar)
   grouped_data_eb <- group_by_event(splitcnts_eb, 'diff', 'n')
   #grouped_data_eb <- grouped_data_eb[1:10]
 
@@ -422,10 +456,100 @@ message(paste("Loaded split data for", length(unique(splits$gene)), "genes."))
 # Combine data
 # Using left_join to keep all tests, filling NAs for missing annotations
 message("Merging data...")
-merged_data <- left_join(tests, bipartitions, by = c("gene", "event"))
+merged_data <- left_join(tests, splits, by = c("gene", "event"))
 message(paste("Merged dataset has", nrow(merged_data), "rows."))
 
 # Write output
 write.table(merged_data, out_result_annotated, sep = "\t", quote = FALSE, row.names = FALSE)
 message(paste("Successfully wrote annotated tests to", out_result_annotated))
+
+
+# Each bipartition event was tested twice (_s1 and _s2 sides). 
+if (split == 'bipartition_both' && nrow(merged_data) > 0 && 'setdiff' %in% names(merged_data)) {
+
+  # Min p-value combination for bipartition_both:
+  # Take the minimum p-value across sides per event, union the setdiff exonic parts,
+  # and re-apply BH FDR correction on the reduced hypothesis set (N not 2N).
+  # Per-event: min p-value + union of setdiff exon parts
+  combo_df <- merged_data %>%
+    mutate(event_base = sub("_s[12]$", "", event)) %>%
+    group_by(gene, event_base) %>%
+    summarise(
+      p_min         = min(p.value[!is.na(p.value) & p.value > 0 & p.value <= 1],
+                          na.rm = TRUE),
+      setdiff_union = paste(unique(trimws(unlist(strsplit(
+                              na.omit(setdiff), ",")))), collapse = ","),
+      .groups = "drop"
+    ) %>%
+    mutate(p_min = ifelse(is.infinite(p_min), NA_real_, p_min))
+
+  # Primary row per event: prefer the side with the lower p-value
+  primary_df <- merged_data %>%
+    mutate(event_base = sub("_s[12]$", "", event)) %>%
+    group_by(gene, event_base) %>%
+    slice(which.min(p.value)) %>%
+    ungroup()
+
+  min_data <- primary_df %>%
+    left_join(combo_df, by = c("gene", "event_base")) %>%
+    mutate(
+      event   = event_base,
+      p.value = p_min,
+      setdiff = setdiff_union
+    ) %>%
+    select(-event_base, -p_min, -setdiff_union)
+
+  if (exists("pvalueAdjustment") && nrow(min_data) > 0) {
+    min_data$pvalue <- min_data$p.value
+    min_data <- pvalueAdjustment(min_data, independentFiltering=indep_filter, alpha=0.05, pAdjustMethod="BH")
+    min_data$pvalue <- NULL
+  } else {
+    min_data$padj <- p.adjust(min_data$p.value, method = "BH")
+  }
+
+  out_mincomb <- sub("\\.annotated\\.txt$", ".mincomb.annotated.txt",
+                     out_result_annotated)
+  write.table(min_data, out_mincomb, sep = "\t", quote = FALSE, row.names = FALSE)
+  message(paste("Min-p combined results written to", out_mincomb))
+
+  # Fisher p-value combination for bipartition_both:
+  # Combine p-values from _s1 and _s2 using Fisher's method:
+  #   X = -2 * sum(log(p))  ~  chi-squared with 2*k df  (k = number of sides)
+  # When only one side has a valid p-value, use that p directly (1 df = 2).
+  fisher_combo_df <- merged_data %>%
+    mutate(event_base = sub("_s[12]$", "", event)) %>%
+    group_by(gene, event_base) %>%
+    summarise(
+      p_fisher      = {
+        pv <- p.value[!is.na(p.value) & p.value > 0 & p.value <= 1]
+        if (length(pv) == 0) NA_real_
+        else pchisq(-2 * sum(log(pv)), df = 2 * length(pv), lower.tail = FALSE)
+      },
+      setdiff_union = paste(unique(trimws(unlist(strsplit(
+                              na.omit(setdiff), ",")))), collapse = ","),
+      .groups = "drop"
+    )
+
+  fisher_data <- primary_df %>%
+    left_join(fisher_combo_df, by = c("gene", "event_base")) %>%
+    mutate(
+      event   = event_base,
+      p.value = p_fisher,
+      setdiff = setdiff_union
+    ) %>%
+    select(-event_base, -p_fisher, -setdiff_union)
+
+  if (exists("pvalueAdjustment") && nrow(fisher_data) > 0) {
+    fisher_data$pvalue <- fisher_data$p.value
+    fisher_data <- pvalueAdjustment(fisher_data, independentFiltering=indep_filter, alpha=0.05, pAdjustMethod="BH")
+    fisher_data$pvalue <- NULL
+  } else {
+    fisher_data$padj <- p.adjust(fisher_data$p.value, method = "BH")
+  }
+
+  out_fisher <- sub("\\.annotated\\.txt$", ".fisher_combined.annotated.txt",
+                    out_result_annotated)
+  write.table(fisher_data, out_fisher, sep = "\t", quote = FALSE, row.names = FALSE)
+  message(paste("Fisher combined results written to", out_fisher))
+}
       
