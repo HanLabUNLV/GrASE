@@ -38,8 +38,10 @@ option_list = list(
   make_option(c("--phi_trend"), action="store_true", default=FALSE,
               help="use loess phi trend (log(phi) ~ log(baseMean)) as EB shrinkage target instead of global mean"),
   make_option(c("--independent_filtering"), action="store_true", default=FALSE,
-              help="use DESeq2-style independent filtering (filter on baseMean) before BH FDR correction")
-); 
+              help="use DESeq2-style independent filtering (filter on baseMean) before BH FDR correction"),
+  make_option(c("--pseudocount"), type="integer", default=0L,
+              help="pseudocount added to diff (ref reads) and n (total) before testing; enables detection of all-or-nothing switches when ref coverage is zero [default: 0]")
+);
  
 opt_parser = OptionParser(option_list=option_list);
 opt = parse_args(opt_parser);
@@ -70,6 +72,7 @@ if (!is.null(opt$cond2)) {
 }
 phi_trend    <- isTRUE(opt$phi_trend)
 indep_filter <- isTRUE(opt$independent_filtering)
+pseudocount  <- as.integer(opt$pseudocount)
 outdir = indir
 if (!dir.exists(outdir)) {
   dir.create(outdir, recursive = TRUE)
@@ -83,35 +86,52 @@ if (file.exists(exoncnt_master)) {
   splitcnts <- read.table(exoncnt_master, header=TRUE, row.names=NULL)
   # Set levels such that cond2 is reference, so coefficient is cond1 - cond2
   splitcnts$groups <- factor(splitcnts$groups, levels = c(cond2, cond1))
+  # Add pseudocount to ref reads (and total n) only where ref == 0, so that
+  # all-or-nothing switches with zero reference coverage can still be tested
+  if (pseudocount > 0L) {
+    zero_ref <- splitcnts$ref == 0L
+    splitcnts$ref[zero_ref] <- pseudocount
+    splitcnts$n[zero_ref]   <- splitcnts$n[zero_ref] + pseudocount
+  }
 } else {
   print('exoncnt dataset file does not exist.')
   print('please combine the exoncounts into one file and specify the filename.')
   stop()
 }
 
-grouped_data <- group_by_event(splitcnts, 'diff', 'n')
-#grouped_data <- grouped_data[1:10]
-
-# Global Precision Estimation 
+# Global Precision Estimation
 if (model == 'glmmTMB_prior' || model == 'glmmTMB_fixedEB' || model == 'VGAM_MLE_EB_init') {
 
   if (file.exists(paste0(outdir,'/', phifile))) {
     phi_df <- read.table(paste0(outdir,'/', phifile), header=TRUE, row.names=NULL)
-   } else {
+  } else {
+    # Only create grouped_data when phi estimation is actually needed.
+    # When the phi file is cached this object is unnecessary and wastes memory.
+    grouped_data <- group_by_event(splitcnts, 'diff', 'n')
+    #grouped_data <- grouped_data[1:10]
     #cl <- makeCluster(30, outfile='phi.glmmtmb.log')
     #clusterEvalQ(cl, library(glmmTMB))
     #clusterExport(cl, varlist = c("phi_estimate_glmmTMB", "grouped_data"), envir = environment())
     phi_list <- mclapply(grouped_data, function(dd) {
     #phi_list <- parLapply(cl, grouped_data, function(dd) {
-      tryCatch({
-        phi_estimate_glmmTMB(dd) 
-      }, error = function(e) {
-        msg <- sprintf("[%s] ERROR in %s (PID %d): %s\n",
-                       format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
-                       dd$gene[1], Sys.getpid(), conditionMessage(e))
-        cat(msg, file = "phi.glmmtmb.errors.log", append = TRUE)
-        NULL
-      })
+      withCallingHandlers(
+        tryCatch({
+          phi_estimate_glmmTMB(dd)
+        }, error = function(e) {
+          msg <- sprintf("[%s] ERROR gene=%s event=%s (PID %d): %s\n",
+                         format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
+                         dd$gene[1], dd$event[1], Sys.getpid(), conditionMessage(e))
+          cat(msg, file = "phi.glmmtmb.errors.log", append = TRUE)
+          NULL
+        }),
+        warning = function(w) {
+          msg <- sprintf("[%s] WARN  gene=%s event=%s (PID %d): %s\n",
+                         format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
+                         dd$gene[1], dd$event[1], Sys.getpid(), conditionMessage(w))
+          cat(msg, file = "phi.glmmtmb.errors.log", append = TRUE)
+          invokeRestart("muffleWarning")
+        }
+      )
     #})
     }, mc.cores = 32)
     #stopCluster(cl)
@@ -185,21 +205,19 @@ if (model == 'glmmTMB_prior') {
 
 } else if (model == 'glmmTMB_fixedEB') {
 
-  ## baseMean per event (used for trend fitting and independent filtering)
-  baseMean_df_all <- splitcnts %>%
-    group_by(gene, event) %>%
-    summarise(baseMean = mean(n, na.rm = TRUE), .groups = "drop")
-
   ## Empirical Bayes hyperparameters: prior mean and variance
   if (phi_trend) {
     ## Trend-based moderation: loess(log(phi) ~ log(baseMean)) as shrinkage target.
-    ## Returns a row for EVERY event; events without a phi estimate get w=0
-    ## (fully shrunk to the trend prediction — no binomial fallback needed).
+    ## baseMean_df_all is needed only here; rm'd before fork to keep footprint small.
+    baseMean_df_all <- splitcnts %>%
+      group_by(gene, event) %>%
+      summarise(baseMean = mean(n, na.rm = TRUE), .groups = "drop")
     phi_table <- moderate_phi_trend(phi_df, baseMean_df_all)
+    rm(baseMean_df_all)
     splitcnts_eb <- splitcnts %>%
-      left_join(phi_table %>% select(gene, event, z_mod, baseMean),
+      left_join(phi_table %>% select(gene, event, z_mod),
                 by = c("gene", "event"))
-    ## Residual NAs (event not in baseMean_df_all) → trend median as fallback
+    ## Residual NAs (event not in phi_table) trend median as fallback
     fallback_z <- median(phi_table$z_mod, na.rm = TRUE)
     splitcnts_eb$z_mod[is.na(splitcnts_eb$z_mod)] <- fallback_z
   } else {
@@ -214,6 +232,12 @@ if (model == 'glmmTMB_prior') {
   grouped_data_eb <- group_by_event(splitcnts_eb, 'diff', 'n')
   #grouped_data_eb <- grouped_data_eb[1:10]
 
+  # Remove bindings to large objects no longer needed before forking.
+  # Do NOT call gc() before mclapply: gc() compacts R's heap, dirtying pages
+  # and breaking COW sharing across forked workers increasing memory usage.
+  rm(splitcnts, splitcnts_eb, phi_df, phi_table)
+  if (exists("grouped_data")) rm(grouped_data)
+
   # Moderated glmmTMB with EB
   #cl <- makeCluster(40, outfile='testglmmTMB_EB.log')
   #clusterEvalQ(cl, { library(glmmTMB); library(VGAM); library(tidyverse) })
@@ -221,23 +245,37 @@ if (model == 'glmmTMB_prior') {
 
   result_list <- mclapply(grouped_data_eb, function(dd) {
   #result_list <- parLapply(cl, grouped_data_eb, function(dd) {
-    tryCatch({
-      test_model_glmmTMB_EB(dd) # Defaults to moderated glmmTMB BB
-    }, error = function(e) {
-        msg <- sprintf("[%s] ERROR in %s (PID %d): %s\n",
+    withCallingHandlers(
+      tryCatch({
+        test_model_glmmTMB_EB(dd)
+      }, error = function(e) {
+        msg <- sprintf("[%s] ERROR gene=%s event=%s (PID %d): %s\n",
                        format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
-                       dd$gene[1], Sys.getpid(), conditionMessage(e))
+                       dd$gene[1], dd$event[1], Sys.getpid(), conditionMessage(e))
         cat(msg, file = "glmmtmb_EB.errors.log", append = TRUE)
         NULL
-    })
+      }),
+      warning = function(w) {
+        msg <- sprintf("[%s] WARN  gene=%s event=%s (PID %d): %s\n",
+                       format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
+                       dd$gene[1], dd$event[1], Sys.getpid(), conditionMessage(w))
+        cat(msg, file = "glmmtmb_EB.errors.log", append = TRUE)
+        invokeRestart("muffleWarning")
+      }
+    )
   #})
   }, mc.cores = 32)
   #stopCluster(cl)
 
   results <- bind_rows(Filter(Negate(is.null), result_list))
 
-  # Add mean total count per event as filter statistic for independent filtering
-  results <- results %>% left_join(baseMean_df_all, by = c("gene", "event"))
+  # Derive baseMean from grouped_data_eb (still alive) rather than keeping
+  # a separate large object alive through the fork.
+  baseMean_df <- bind_rows(lapply(grouped_data_eb, function(dd)
+    data.frame(gene = dd$gene[1], event = dd$event[1],
+               baseMean = mean(dd$n, na.rm = TRUE),
+               stringsAsFactors = FALSE)))
+  results <- results %>% left_join(baseMean_df, by = c("gene", "event"))
 
   if (exists("pvalueAdjustment") && nrow(results) > 0) {
       results$pvalue <- results$p.value
