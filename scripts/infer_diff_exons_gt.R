@@ -7,8 +7,8 @@
 # Iterates over genes in txdf (the simulation gene/transcript universe).
 #
 # Two logic branches:
-#   Background / DGE  — all bins NEGATIVE  (no differential transcript usage)
-#   DTU / DTE         — bin POSITIVE if it overlaps any transcript whose
+#   Background / DGE  all bins NEGATIVE  (no differential transcript usage)
+#   DTU / DTE         bin POSITIVE if it overlaps any transcript whose
 #                        fold_change != 1; NEGATIVE otherwise
 #
 # Usage:
@@ -27,12 +27,12 @@ out_dir  <- args[3]
 
 if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
 
-# ── Load simulation data ──────────────────────────────────────────────────────
+# Load simulation data 
 
 cat("Loading simulate.rda...\n")
 load(sim_rda)
 # Required objects:
-#   txdf         data.frame  GENEID, TXNAME, ntx  — simulation gene/tx universe
+#   txdf         data.frame  GENEID, TXNAME, ntx  simulation gene/tx universe
 #   fold_changes matrix      rows = transcript IDs, cols = conditions
 #   dge.genes / dte.genes / dtu.genes  character vectors
 
@@ -54,12 +54,12 @@ changed_tx <- rownames(fold_changes)[
 ]
 cat(sprintf("  Changed transcripts (any FC != 1): %d\n", length(changed_tx)))
 
-# Build gene → transcript list from txdf
+# Build gene transcript list from txdf
 txs_by_gene <- split(txdf$TXNAME, txdf$GENEID)
 all_genes   <- names(txs_by_gene)
 cat(sprintf("  Genes to process: %d\n", length(all_genes)))
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+# Helpers 
 
 # Format fold change values for a set of transcripts as "tx1:v1/v2+tx2:v1/v2"
 # (values = one entry per column of fold_changes; "/" separates conditions,
@@ -72,7 +72,7 @@ format_fc <- function(txs, fc_matrix) {
   }, character(1)), collapse = "+")
 }
 
-# ── GFF parser ────────────────────────────────────────────────────────────────
+# GFF parser 
 
 parse_dexseq_gff <- function(gff_path) {
   lines    <- readLines(gff_path, warn = FALSE)
@@ -89,7 +89,7 @@ parse_dexseq_gff <- function(gff_path) {
   )
 }
 
-# ── Process genes ─────────────────────────────────────────────────────────────
+# Process genes 
 
 cat("\nProcessing genes...\n")
 n_written <- 0L
@@ -124,6 +124,7 @@ for (gene_name in all_genes) {
       exonic_part = bins$bin_id,
       fold_change = fc_vals,
       group       = "negative",
+      group_grase = "negative",
       transcripts = bins$tx_str,
       changed_tx  = NA_character_,
       alt_tx      = NA_character_,
@@ -135,7 +136,8 @@ for (gene_name in all_genes) {
   } else {
 
     # DTU / DTE: bin positive if it overlaps any changed transcript for this gene
-    gene_changed <- intersect(txs_by_gene[[gene_name]], changed_tx)
+    gene_changed   <- intersect(txs_by_gene[[gene_name]], changed_tx)
+    gene_unchanged <- setdiff(txs_by_gene[[gene_name]], changed_tx)
 
     rows <- lapply(seq_len(nrow(bins)), function(i) {
       hit    <- intersect(bins$tx_list[[i]], gene_changed)
@@ -145,6 +147,13 @@ for (gene_name in all_genes) {
       #      (bin must separate changed transcripts, not contain all of them)
       is_pos <- if (sim_type == "DTU") length(hit) > 0 && length(alt) > 0
                 else                   length(hit) > 0
+      # group_grase: stricter DTE criterion bin must be EXCLUSIVE to changed
+      # transcripts (no overlap with unchanged), matching what GrASE tests
+      # (setdiff exons only).  DTU keeps the same criterion as group.
+      unch_in_bin  <- intersect(bins$tx_list[[i]], gene_unchanged)
+      is_grase_pos <-
+        if (sim_type == "DTE") length(hit) > 0 && length(unch_in_bin) == 0
+        else                   is_pos
       # Report FC for any changed transcripts present in the bin (hit),
       # regardless of whether the bin is positive or negative.
       fc_str <- format_fc(hit, fold_changes)
@@ -153,7 +162,8 @@ for (gene_name in all_genes) {
         sim_type    = sim_type,
         exonic_part = bins$bin_id[i],
         fold_change = fc_str,
-        group       = if (is_pos) "changed" else "negative",
+        group       = if (is_pos)       "changed" else "negative",
+        group_grase = if (is_grase_pos) "changed" else "negative",
         transcripts = bins$tx_str[i],
         changed_tx  = if (is_pos) paste(hit, collapse = "+") else NA_character_,
         alt_tx      = if (is_pos && length(alt) > 0) paste(alt, collapse = "+") else NA_character_,
@@ -172,5 +182,5 @@ for (gene_name in all_genes) {
   n_written <- n_written + 1L
 }
 
-cat(sprintf("Done. Written %d  |  Skipped %d (no GFF)  →  %s\n",
+cat(sprintf("Done. Written %d  |  Skipped %d (no GFF)   %s\n",
             n_written, n_skipped, out_dir))
