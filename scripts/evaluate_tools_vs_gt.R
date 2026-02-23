@@ -61,8 +61,7 @@ padj_thresholds <- c(0.01, 0.05, 0.1, 0.2)
 
 if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
 
-# ── helpers ───────────────────────────────────────────────────────────────────
-
+# helpers 
 f1_safe <- function(p, r) {
   if (is.na(p) || is.na(r) || (p + r) == 0) NA_real_
   else 2 * p * r / (p + r)
@@ -137,8 +136,8 @@ build_summary <- function(per_gene_df) {
   bind_rows(by_type, all_row) %>% arrange(sim_type, padj_thr)
 }
 
-# ── load sim gene type labels ─────────────────────────────────────────────────
-
+# load sim gene type labels
+ 
 cat("Loading simulate.rda...\n")
 dge_genes <- dte_genes <- dtu_genes <- character(0)
 if (file.exists(sim_rda)) {
@@ -161,7 +160,7 @@ get_sim_type <- function(gene) {
   )
 }
 
-# ── load ground truth ─────────────────────────────────────────────────────────
+# load ground truth 
 
 cat("Loading ground truth...\n")
 gt_fc_files      <- list.files(gt_dir, pattern = "\\.exonic_parts_fc\\.txt$",
@@ -184,11 +183,11 @@ gt_by_gene <- split(gt_all, gt_all$gene)
 cat(sprintf("  %d exonic part records across %d GT genes\n",
             nrow(gt_all), length(gt_by_gene)))
 
-# ── build rMATS exonic-part call table ───────────────────────────────────────
+# build rMATS exonic-part call table 
 
 cat("\nBuilding rMATS exonic-part call table...\n")
 
-# Event types that have mapping files (MXE omitted — no mapping available)
+# Event types that have mapping files (MXE omitted no mapping available)
 rmats_etypes <- c("SE", "A3SS", "A5SS", "RI")
 
 rmats_rows <- list()
@@ -264,7 +263,7 @@ rmats_testable_by_gene <- lapply(
 )
 cat(sprintf("  rMATS: %d genes with testable exonic parts\n", length(rmats_testable_by_gene)))
 
-# ── build Saturn exonic-part call table ───────────────────────────────────────
+#  build Saturn exonic-part call table 
 
 cat("Loading Saturn results...\n")
 saturn_df <- read.table(saturn_file, header = TRUE, sep = "\t",
@@ -312,7 +311,7 @@ if ("regular_FDR" %in% names(saturn_df)) {
   cat("  Saturn regular_FDR: column not found, skipping\n")
 }
 
-# ── evaluate both tools across padj thresholds ───────────────────────────────
+#  evaluate both tools across padj thresholds 
 
 eval_genes <- unique(gt_all$gene)
 
@@ -392,7 +391,7 @@ if (!is.null(saturn_regfdr_by_gene)) {
   )
 }
 
-# ── write per-gene results ────────────────────────────────────────────────────
+#  write per-gene results 
 
 for (thr in padj_thresholds) {
   write.table(
@@ -431,7 +430,7 @@ for (thr in padj_thresholds) {
   }
 }
 
-# ── summaries ─────────────────────────────────────────────────────────────────
+#  summaries 
 
 rmats_summary              <- build_summary(rmats_per_gene)
 saturn_summary             <- build_summary(saturn_per_gene)
@@ -462,7 +461,7 @@ if (!is.null(saturn_regfdr_by_gene)) {
               sep = "\t", quote = FALSE, row.names = FALSE)
 }
 
-# ── print results ─────────────────────────────────────────────────────────────
+# print results 
 
 cat("\n=== rMATS Summary (full GT) ===\n")
 print(as.data.frame(rmats_summary %>%
