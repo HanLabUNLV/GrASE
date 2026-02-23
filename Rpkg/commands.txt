@@ -2,17 +2,28 @@
 
 
 # GrASE split 
-Rscript scripts/bubble_path_split.R --graphdir=~/GrASE_simulation/graphml --outdir=~/GrASE_simulation/bipartition --split=bipartition
-Rscript scripts/bubble_path_split.R --graphdir=~/GrASE_simulation/graphml --outdir=~/GrASE_simulation/multinomial --split=multinomial
+Rscript scripts/bubble_path_split.R --graphdir=~/GrASE_simulation/graphml --outdir=~/GrASE_simulation/bipartition --split=bipartition &> bipartition.log &
+Rscript scripts/bubble_path_split.R --graphdir=~/GrASE_simulation/graphml --outdir=~/GrASE_simulation/multinomial --split=multinomial &> multinomial.log &
+Rscript scripts/bubble_path_split.R --graphdir=~/GrASE_simulation/graphml --outdir=~/GrASE_simulation/n_choose_2 --split=n_choose_2 &> n_choose_2.log &
 
 # filter split by internal bubbles and alternative TSS/TTS
-Rscript scripts/filterTSSTTS.R --split_dir="~/GrASE_simulation/bipartition2" --outdir="~/GrASE_simulation/bipartition.filtered" --split_type='bipartition'
+Rscript scripts/filterTSSTTS.R --split_dir="~/GrASE_simulation/bipartition" --outdir="~/GrASE_simulation/bipartition.filtered" --split_type='bipartition'
+Rscript scripts/filterTSSTTS.R --split_dir="~/GrASE_simulation/multinomial" --outdir="~/GrASE_simulation/multinomial.filtered" --split_type='multinomial'
+Rscript scripts/filterTSSTTS.R --split_dir="~/GrASE_simulation/n_choose_2" --outdir="~/GrASE_simulation/n_choose_2.filtered" --split_type='n_choose_2'
 
 
 # read counts for the distinct and reference exonic parts
 Rscript scripts/exoncnt.R --indir=~/GrASE_simulation --countdir=~/GrASE_simulation/DEXSeq/count_files --type='bipartition' --cond1=group1 --cond2=group2 --alt='internal' &> exoncnt.log
 Rscript scripts/exoncnt.R --indir=~/GrASE_simulation --countdir=~/GrASE_simulation/DEXSeq/count_files --type='bipartition' --cond1=group1 --cond2=group2 --alt='TSS' &> exoncnt.log
 
+Rscript scripts/exoncnt.R -d ~/GrASE_simulation -c ~/GrASE_simulation/DEXSeq/count_files  -t bipartition_both  --cond1=group1 --cond2=group2 -a internal -i ~/GrASE_simulation/bipartition.filtered
+Rscript scripts/exoncnt.R -d ~/GrASE_simulation -c ~/GrASE_simulation/DEXSeq/count_files  -t bipartition_both  --cond1=group1 --cond2=group2 -a TSS -i ~/GrASE_simulation/bipartition.filtered
+
+Rscript scripts/exoncnt.R -d ~/GrASE_simulation -c ~/GrASE_simulation/DEXSeq/count_files  -t multinomial  --cond1=group1 --cond2=group2 -a internal -i ~/GrASE_simulation/multinomial.filtered
+Rscript scripts/exoncnt.R -d ~/GrASE_simulation -c ~/GrASE_simulation/DEXSeq/count_files  -t multinomial  --cond1=group1 --cond2=group2 -a TSS -i ~/GrASE_simulation/multinomial.filtered
+
+Rscript scripts/exoncnt.R -d ~/GrASE_simulation -c ~/GrASE_simulation/DEXSeq/count_files  -t n_choose_2  --cond1=group1 --cond2=group2 -a internal -i ~/GrASE_simulation/n_choose_2.filtered
+Rscript scripts/exoncnt.R -d ~/GrASE_simulation -c ~/GrASE_simulation/DEXSeq/count_files  -t n_choose_2  --cond1=group1 --cond2=group2 -a TSS -i ~/GrASE_simulation/n_choose_2.filtered
 
 # test for different usage of alternative paths
 # glmmTMB_prior
@@ -28,21 +39,14 @@ Rscript scripts/exontest.R --file=bipartition.TSSTTS.exoncnt.combined.txt --dir=
 Rscript scripts/exontest.R --file=bipartition.internal.exoncnt.combined.txt --dir="~/GrASE_simulation/bipartition.test" --countdir="~/GrASE_simulation/bipartition.internal.counts/" --splittype=bipartition --phi=phi.glmmtmb.internal.txt --model=wilcoxon --cond1='group1' --cond2='group2' &> bipart.internal.wilcoxon.log 
 Rscript scripts/exontest.R --file=bipartition.TSSTTS.exoncnt.combined.txt --dir="~/GrASE_simulation/bipartition.test" --countdir="~/GrASE_simulation/bipartition.internal.counts/" --splittype=bipartition --phi=phi.glmmtmb.TSSTTS.txt --model=wilcoxon --cond1='group1' --cond2='group2' &>  bipart.TSSTTS.wilcoxon.log 
 
-#
-## annotate tests
-#Rscript scripts/annotate_tests.R --infile=~/GrASE_simulation/bipartition.test/test_bipartition.internal_glmmTMB_MAP_prior.txt --splitdir=~/GrASE_simulation/bipartition.internal.counts
-#Rscript scripts/annotate_tests.R --infile=~/GrASE_simulation/bipartition.test/test_bipartition.TSSTTS_glmmTMB_MAP_prior.txt --splitdir=~/GrASE_simulation/bipartition.TSSTTS.counts
-#
-#Rscript scripts/annotate_tests.R --infile=~/GrASE_simulation/bipartition.test/test_bipartition.internal_glmmTMB_fixed_EB.txt --splitdir=~/GrASE_simulation/bipartition.internal.counts
-#Rscript scripts/annotate_tests.R --infile=~/GrASE_simulation/bipartition.test/test_bipartition.TSSTTS_glmmTMB_fixed_EB.txt --splitdir=~/GrASE_simulation/bipartition.TSSTTS.counts
-#
-#Rscript scripts/annotate_tests.R --infile=~/GrASE_simulation/bipartition.test/test_bipartition.internal_VGAM_MLE_EB_init.txt --splitdir=~/GrASE_simulation/bipartition.internal.counts
-#Rscript scripts/annotate_tests.R --infile=~/GrASE_simulation/bipartition.test/test_bipartition.TSSTTS_VGAM_MLE_EB_init.txt --splitdir=~/GrASE_simulation/bipartition.TSSTTS.counts
-#
-#Rscript scripts/annotate_tests.R --infile=~/GrASE_simulation/bipartition.test/test_bipartition.internal_wilcoxon.txt --splitdir=~/GrASE_simulation/bipartition.internal.counts
-#Rscript scripts/annotate_tests.R --infile=~/GrASE_simulation/bipartition.test/test_bipartition.TSSTTS_wilcoxon.txt --splitdir=~/GrASE_simulation/bipartition.TSSTTS.counts
-#
-#
+
+Rscript scripts/exontest.R -f bipartition_both.internal.exoncnt.combined.txt -d ~/GrASE_simulation/bipartition_both.test -c ~/GrASE_simulation/bipartition_both.internal.counts  -s bipartition_both -m glmmTMB_fixedEB -p phi.glmmtmb.internal.txt --cond1 group1 --cond2 group2
+Rscript scripts/exontest.R -f bipartition_both.TSSTTS.exoncnt.combined.txt  -d ~/GrASE_simulation/bipartition_both.test -c ~/GrASE_simulation/bipartition_both.TSSTTS.counts  -s bipartition_both -m glmmTMB_fixedEB -p phi.glmmtmb.TSSTTS.txt --cond1 group1 --cond2 group2
+
+Rscript scripts/exontest.R -f n_choose_2.internal.exoncnt.combined.txt -d ~/GrASE_simulation/n_choose_2.test -c ~/GrASE_simulation/n_choose_2.internal.counts  -s n_choose_2 -m glmmTMB_fixedEB -p phi.glmmtmb.internal.txt --cond1 group1 --cond2 group2
+Rscript scripts/exontest.R -f n_choose_2.TSSTTS.exoncnt.combined.txt -d ~/GrASE_simulation/n_choose_2.test -c ~/GrASE_simulation/n_choose_2.TSSTTS.counts  -s n_choose_2 -m glmmTMB_fixedEB -p phi.glmmtmb.TSSTTS.txt --cond1 group1 --cond2 group2
+
+
 
 # compare GrASE results with Saturn results
 Rscript scripts/compare_saturn_grase.R \
@@ -78,26 +82,27 @@ Rscript scripts/map_rmats.R --indir ~/GrASE_simulation/ --type bipartition --spl
 Rscript scripts/compare_rmats_grase.R \
   --grase ~/GrASE_simulation/bipartition.test/test_bipartition.internal_glmmTMB_MAP_prior.annotated.txt \
   --rmats_dir ~/GrASE_simulation/rMATS/rmats_post_group1_group2/ \
-  --map_dir ~/GrASE_simulation/grase_results/results.bipartitions/tmp/ \
-  --output ~/GrASE_simulation/bipartition.test/rmats_grase_glmmTMB_MAP_prior_comparison.txt
+  --map_dir ~/GrASE_simulation/map_rmats/results.bipartition/ \
+  --output ~/GrASE_simulation/bipartition.test/rmats_grase_glmmTMB_MAP_prior_comparison.txt > rmats_grase_glmmTMB_MAP_prior.log 
 
 Rscript scripts/compare_rmats_grase.R \
   --grase ~/GrASE_simulation/bipartition.test/test_bipartition.internal_glmmTMB_fixed_EB.annotated.txt \
   --rmats_dir ~/GrASE_simulation/rMATS/rmats_post_group1_group2/ \
-  --map_dir ~/GrASE_simulation/grase_results/results.bipartitions/tmp/ \
-  --output ~/GrASE_simulation/bipartition.test/rmats_grase_glmmTMB_fixed_EB_comparison.txt
+  --map_dir ~/GrASE_simulation/map_rmats/results.bipartition/ \
+  --output ~/GrASE_simulation/bipartition.test/rmats_grase_glmmTMB_fixed_EB_comparison.txt > rmats_grase_glmmTMB_fixed_EB.log
 
 Rscript scripts/compare_rmats_grase.R \
   --grase ~/GrASE_simulation/bipartition.test/test_bipartition.internal_VGAM_MLE_EB_init.annotated.txt \
   --rmats_dir ~/GrASE_simulation/rMATS/rmats_post_group1_group2/ \
-  --map_dir ~/GrASE_simulation/grase_results/results.bipartitions/tmp/ \
-  --output ~/GrASE_simulation/bipartition.test/rmats_grase_VGAM_MLE_EB_init_comparison.txt
+  --map_dir ~/GrASE_simulation/map_rmats/results.bipartition/ \
+  --output ~/GrASE_simulation/bipartition.test/rmats_grase_VGAM_MLE_EB_init_comparison.txt > rmats_grase_VGAM_MLE_EB_init.log
 
 Rscript scripts/compare_rmats_grase.R \
   --grase ~/GrASE_simulation/bipartition.test/test_bipartition.internal_wilcoxon.annotated.txt \
   --rmats_dir ~/GrASE_simulation/rMATS/rmats_post_group1_group2/ \
-  --map_dir ~/GrASE_simulation/grase_results/results.bipartitions/tmp/ \
-  --output ~/GrASE_simulation/bipartition.test/rmats_grase_wilcoxon_comparison.txt
+  --map_dir ~/GrASE_simulation/map_rmats/results.bipartition/ \
+  --output ~/GrASE_simulation/bipartition.test/rmats_grase_wilcoxon_comparison.txt > rmats_grase_wilcoxon.log
+
 
 
 # comparison between rMATS and DEXSeq
