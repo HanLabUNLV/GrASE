@@ -19,7 +19,7 @@ find_diff_and_ref_exparts_pairwise <- function(
 
   format_edges <- function(edges) {
     frags <- sort(as.numeric(dexseq_frag[edges]))
-    if (length(frags) > 0) paste0("E", paste(frags, collapse=",E")) else ""
+    if (length(frags) > 0) paste0("E", paste(sprintf("%03d", frags), collapse=",E")) else ""
   }
 
   # Process each pairwise combination

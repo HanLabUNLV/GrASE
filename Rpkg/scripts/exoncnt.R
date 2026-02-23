@@ -5,12 +5,13 @@ library(optparse)
 
 # --- Main Execution Script ---
 
-analysis_type = 'bipartition' 
+analysis_type = 'bipartition'
 indir = '~/GrASE_simulation'
 countdir = '~/GrASE_simulation/DEXSeq/count_files'
 cond1 = 'group1'
 cond2 = 'group2'
 alt = 'internal'
+input_path = NULL
 
 args = commandArgs(trailingOnly=TRUE)
 
@@ -25,8 +26,10 @@ option_list = list(
               help="condition1", metavar="character"),
   make_option(c("-2", "--cond2"), type="character",  
               help="condition2", metavar="character"),
-  make_option(c("-a", "--alt"), type="character",  
-              help="choose between 'internal' (internal AS) or 'TSS'(alternative TSS) ", metavar="character")
+  make_option(c("-a", "--alt"), type="character",
+              help="choose between 'internal' (internal AS) or 'TSS'(alternative TSS) ", metavar="character"),
+  make_option(c("-i", "--input_path"), type="character",
+              help="path to filtered input files (default: indir/<type>.filtered)", metavar="character")
 ); 
  
 opt_parser = OptionParser(option_list=option_list);
@@ -47,6 +50,9 @@ if (!is.null(opt$cond1)) {
 if (!is.null(opt$cond2)) {
   cond2 = opt$cond2
 } 
+if (!is.null(opt$input_path)) {
+  input_path = opt$input_path
+}
 if (!is.null(opt$alt)) {
   if (opt$alt == 'internal') {
     alt = 'internal'
@@ -96,7 +102,7 @@ names(sampleinfo) <- rownames(sampleTable)
 if (analysis_type == 'all' || analysis_type == 'bipartition') {
 
   # input files
-  bipartition_path = paste0(indir, '/bipartition.filtered')
+  bipartition_path = if (!is.null(input_path)) input_path else paste0(indir, '/bipartition.filtered')
   outdir = paste0(indir,'/bipartition.',alt,'.counts')
   if (!dir.exists(outdir)) {
     dir.create(outdir, recursive = TRUE)
@@ -126,7 +132,7 @@ if (analysis_type == 'all' || analysis_type == 'bipartition') {
 } else if (analysis_type == 'bipartition_both') {
 
   # Like 'bipartition' but emits both setdiff1 and setdiff2 as separate events
-  bipartition_path = paste0(indir, '/bipartition.filtered')
+  bipartition_path = if (!is.null(input_path)) input_path else paste0(indir, '/bipartition.filtered')
   outdir = paste0(indir,'/bipartition_both.',alt,'.counts')
   if (!dir.exists(outdir)) {
     dir.create(outdir, recursive = TRUE)
@@ -153,7 +159,7 @@ if (analysis_type == 'all' || analysis_type == 'bipartition') {
 } else if (analysis_type == 'all' || analysis_type == 'n_choose_2') {
 
   # input files
-  n_choose_2_path = paste0(indir, '/n_choose_2.filtered')
+  n_choose_2_path = if (!is.null(input_path)) input_path else paste0(indir, '/n_choose_2.filtered')
   outdir = paste0(indir,'/n_choose_2.',alt,'.counts')
   if (!dir.exists(outdir)) {
     dir.create(outdir, recursive = TRUE)
@@ -169,7 +175,7 @@ if (analysis_type == 'all' || analysis_type == 'bipartition') {
       #count_bipartitions(bipartition_file = f, countmat = read_counts[read_counts$gene==gene_id,], sampleinfo, outdir, 'n_choose_2')
       gene_counts <- counts_list[[gene_id]]
       if (!is.null(gene_counts)) {
-        count_bipartitions(bipartition_file = f, countmat = gene_counts, sampleinfo, outdir, 'n_choose_2')
+        count_bipartitions_both(bipartition_file = f, countmat = gene_counts, sampleinfo, outdir, 'n_choose_2')
       }
  
     }, error = function(e) {
@@ -185,7 +191,7 @@ if (analysis_type == 'all' || analysis_type == 'bipartition') {
 
 
   # input files
-  multinomial_path = paste0(indir, '/multinomial.filtered')
+  multinomial_path = if (!is.null(input_path)) input_path else paste0(indir, '/multinomial.filtered')
   outdir = paste0(indir,'/multinomial.',alt,'.counts')
   if (!dir.exists(outdir)) {
     dir.create(outdir, recursive = TRUE)

@@ -136,7 +136,8 @@ if (model == 'glmmTMB_prior' || model == 'glmmTMB_fixedEB' || model == 'VGAM_MLE
     }, mc.cores = 32)
     #stopCluster(cl)
     phi_df <- bind_rows(Filter(Negate(is.null), phi_list))
-    write.table(phi_df, file=paste0(outdir,'/', phifile), quote=FALSE, sep="\t", row.names = FALSE) 
+    rm(phi_list)
+    write.table(phi_df, file=paste0(outdir,'/', phifile), quote=FALSE, sep="\t", row.names = FALSE)
   }
 } else if (model == 'DM_EB' || model == 'DM_Wald_EB') {
   # DM Moderation Pipeline (NEW)
@@ -152,6 +153,7 @@ if (model == 'glmmTMB_prior' || model == 'glmmTMB_fixedEB' || model == 'VGAM_MLE
     #prec_list <- parLapply(cl, grouped_counts, prec_estimate_vgam)
     #stopCluster(cl)
     prec_table <- moderate_prec_log_scale(bind_rows(Filter(Negate(is.null), prec_list)))
+    rm(prec_list)
     write.table(prec_table, paste0(outdir,'/', prec_file), sep="\t", quote=F, row.names = FALSE)
   }
 }
@@ -369,6 +371,7 @@ if (model == 'glmmTMB_prior') {
     #prec_list <- parLapply(cl, grouped_counts, prec_estimate_vgam)
     #stopCluster(cl)
     prec_table <- moderate_prec_log_scale(bind_rows(Filter(Negate(is.null), prec_list)))
+    rm(prec_list)
     write.table(prec_table, paste0(outdir,'/', prec_file), sep="\t", quote=F, row.names = FALSE)
   }
 

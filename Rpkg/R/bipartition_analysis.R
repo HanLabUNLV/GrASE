@@ -101,8 +101,8 @@ find_diff_and_ref_exparts_for_split <- function(g, source, sink, split, parsed_p
 
       frag1 <- sort(as.numeric(dexseq_frag[setdiff1]))
       frag2 <- sort(as.numeric(dexseq_frag[setdiff2]))
-      setdiff1ID <- if (length(frag1) > 0) paste0("E", paste(frag1, collapse=",E")) else ""
-      setdiff2ID <- if (length(frag2) > 0) paste0("E", paste(frag2, collapse=",E")) else ""
+      setdiff1ID <- if (length(frag1) > 0) paste0("E", paste(sprintf("%03d", frag1), collapse=",E")) else ""
+      setdiff2ID <- if (length(frag2) > 0) paste0("E", paste(sprintf("%03d", frag2), collapse=",E")) else ""
 
       tx_ex_part1 <- tx_ex_parts[tx1[1]]
       tx_ex_part1 <- unique(unlist(tx_ex_part1))
@@ -121,7 +121,7 @@ find_diff_and_ref_exparts_for_split <- function(g, source, sink, split, parsed_p
  
       ref_ex_part_set <- unique(unlist(c(ref_ex_part$common, ref_ex_part$source, ref_ex_part$sink)))
       ref_frag <- sort(as.numeric(dexseq_frag[ref_ex_part_set]))
-      ref_ex_part_set_ID <- if (length(ref_frag) > 0) paste0("E", paste(ref_frag, collapse=",E")) else ""
+      ref_ex_part_set_ID <- if (length(ref_frag) > 0) paste0("E", paste(sprintf("%03d", ref_frag), collapse=",E")) else ""
 
       new_row <- data.frame(
         gene = gene,
