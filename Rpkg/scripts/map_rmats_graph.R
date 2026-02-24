@@ -35,6 +35,7 @@
 suppressPackageStartupMessages({
   library(igraph)
   library(data.table)
+  library(grase)
 })
 
 # Source shared graph utilities from the GrASE package R file
@@ -42,7 +43,7 @@ suppressPackageStartupMessages({
   sub("--file=", "", grep("--file=", commandArgs(FALSE), value = TRUE)[1]),
   mustWork = FALSE
 ))
-suppressMessages(source(file.path(.script_dir, "..", "Rpkg", "R", "rMATS.R")))
+
 
 args <- commandArgs(trailingOnly = TRUE)
 if (length(args) < 3) {
@@ -61,7 +62,7 @@ rmats_dir   <- args[2]
 out_dir     <- args[3]
 if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
 
-# ── per-gene and per-event mapping ────────────────────────────────────────────
+# per-gene and per-event mapping 
 # Thin wrappers around shared functions from Rpkg/R/rMATS.R
 
 map_event <- function(ge, etype, strand, row) {
@@ -70,7 +71,7 @@ map_event <- function(ge, etype, strand, row) {
   graph_setdiff_frags(ge, reg$b1, reg$b2, reg$alt_low, reg$alt_hi)
 }
 
-# ── load gene list ─────────────────────────────────────────────────────────────
+# load gene list 
 
 event_types <- c("SE", "A3SS", "A5SS", "RI")
 
@@ -85,7 +86,7 @@ for (etype in event_types) {
 }
 cat(sprintf("  %d unique genes across all event types\n", length(all_genes)))
 
-# ── load and precompute graphs ────────────────────────────────────────────────
+# load and precompute graphs 
 
 cat("Loading and precomputing graphs...\n")
 gene_data <- list()
@@ -104,7 +105,7 @@ for (gene in all_genes) {
 cat(sprintf("  Precomputed %d genes (%.1f%%)\n",
             n_loaded, 100 * n_loaded / length(all_genes)))
 
-# ── map each event type ───────────────────────────────────────────────────────
+# map each event type 
 
 for (etype in event_types) {
   cat(sprintf("\nMapping %s events...\n", etype))

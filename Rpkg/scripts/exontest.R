@@ -9,7 +9,7 @@ library(optparse)
 
 # --- Main Execution Script ---
 
-indir = '~/GrASE_simulation/bipartition.test'
+outdir = '~/GrASE_simulation/bipartition.test'
 countdir = '~/GrASE_simulation/bipartition.internal.counts'
 split = 'bipartition'
 model = 'glmmTMB_prior'
@@ -21,8 +21,8 @@ args = commandArgs(trailingOnly=TRUE)
 option_list = list(
   make_option(c("-f", "--file"), type="character",  
               help="file name of combined exoncnt dataset", metavar="character"),
-  make_option(c("-d", "--dir"), type="character", 
-              help="input/output dir that contains the exoncnt file", metavar="character"),
+  make_option(c("-o", "--outdir"), type="character", 
+              help="output directory that contains the test results", metavar="character"),
   make_option(c("-c", "--countdir"), type="character", 
               help="count dir that contains the count and split files by gene", metavar="character"),
   make_option(c("-s", "--splittype"), type="character", 
@@ -49,8 +49,8 @@ print(opt)
 if (!is.null(opt$file)) {
   masterfile = opt$file
 }
-if (!is.null(opt$dir)) {
-  indir = opt$dir
+if (!is.null(opt$outdir)) {
+  outdir = opt$outdir
 }
 if (!is.null(opt$countdir)) {
   countdir = opt$countdir
@@ -73,11 +73,10 @@ if (!is.null(opt$cond2)) {
 phi_trend    <- isTRUE(opt$phi_trend)
 indep_filter <- isTRUE(opt$independent_filtering)
 pseudocount  <- as.integer(opt$pseudocount)
-outdir = indir
 if (!dir.exists(outdir)) {
   dir.create(outdir, recursive = TRUE)
 }
-exoncnt_master <- paste0(indir,'/', masterfile)
+exoncnt_master <- paste0(countdir,'/', masterfile)
 out_prefix <- sub("^([^.]+\\.[^.]+).*", "\\1", masterfile)
 out_resultfile=paste0(outdir,'/test_', out_prefix,'_', model, '.txt')
 
@@ -506,91 +505,93 @@ message(paste("Successfully wrote annotated tests to", out_result_annotated))
 
 
 # Each bipartition event was tested twice (_s1 and _s2 sides). 
-if (split == 'bipartition_both' && nrow(merged_data) > 0 && 'setdiff' %in% names(merged_data)) {
+if (split == 'bipartition' || split == 'n_choose_2') {
+  if (nrow(merged_data) > 0 && 'setdiff' %in% names(merged_data)) {
 
-  # Min p-value combination for bipartition_both:
-  # Take the minimum p-value across sides per event, union the setdiff exonic parts,
-  # and re-apply BH FDR correction on the reduced hypothesis set (N not 2N).
-  # Per-event: min p-value + union of setdiff exon parts
-  combo_df <- merged_data %>%
-    mutate(event_base = sub("_s[12]$", "", event)) %>%
-    group_by(gene, event_base) %>%
-    summarise(
-      p_min         = min(p.value[!is.na(p.value) & p.value > 0 & p.value <= 1],
-                          na.rm = TRUE),
-      setdiff_union = paste(unique(trimws(unlist(strsplit(
-                              na.omit(setdiff), ",")))), collapse = ","),
-      .groups = "drop"
-    ) %>%
-    mutate(p_min = ifelse(is.infinite(p_min), NA_real_, p_min))
+    # Min p-value combination for bipartition_both:
+    # Take the minimum p-value across sides per event, union the setdiff exonic parts,
+    # and re-apply BH FDR correction on the reduced hypothesis set (N not 2N).
+    # Per-event: min p-value + union of setdiff exon parts
+    combo_df <- merged_data %>%
+      mutate(event_base = sub("_s[12]$", "", event)) %>%
+      group_by(gene, event_base) %>%
+      summarise(
+        p_min         = min(p.value[!is.na(p.value) & p.value > 0 & p.value <= 1],
+                            na.rm = TRUE),
+        setdiff_union = paste(unique(trimws(unlist(strsplit(
+                                na.omit(setdiff), ",")))), collapse = ","),
+        .groups = "drop"
+      ) %>%
+      mutate(p_min = ifelse(is.infinite(p_min), NA_real_, p_min))
 
-  # Primary row per event: prefer the side with the lower p-value
-  primary_df <- merged_data %>%
-    mutate(event_base = sub("_s[12]$", "", event)) %>%
-    group_by(gene, event_base) %>%
-    slice(which.min(p.value)) %>%
-    ungroup()
+    # Primary row per event: prefer the side with the lower p-value
+    primary_df <- merged_data %>%
+      mutate(event_base = sub("_s[12]$", "", event)) %>%
+      group_by(gene, event_base) %>%
+      slice(which.min(p.value)) %>%
+      ungroup()
 
-  min_data <- primary_df %>%
-    left_join(combo_df, by = c("gene", "event_base")) %>%
-    mutate(
-      event   = event_base,
-      p.value = p_min,
-      setdiff = setdiff_union
-    ) %>%
-    select(-event_base, -p_min, -setdiff_union)
+    min_data <- primary_df %>%
+      left_join(combo_df, by = c("gene", "event_base")) %>%
+      mutate(
+        event   = event_base,
+        p.value = p_min,
+        setdiff = setdiff_union
+      ) %>%
+      select(-event_base, -p_min, -setdiff_union)
 
-  if (exists("pvalueAdjustment") && nrow(min_data) > 0) {
-    min_data$pvalue <- min_data$p.value
-    min_data <- pvalueAdjustment(min_data, independentFiltering=indep_filter, alpha=0.05, pAdjustMethod="BH")
-    min_data$pvalue <- NULL
-  } else {
-    min_data$padj <- p.adjust(min_data$p.value, method = "BH")
+    if (exists("pvalueAdjustment") && nrow(min_data) > 0) {
+      min_data$pvalue <- min_data$p.value
+      min_data <- pvalueAdjustment(min_data, independentFiltering=indep_filter, alpha=0.05, pAdjustMethod="BH")
+      min_data$pvalue <- NULL
+    } else {
+      min_data$padj <- p.adjust(min_data$p.value, method = "BH")
+    }
+
+    out_mincomb <- sub("\\.annotated\\.txt$", ".mincomb.annotated.txt",
+                      out_result_annotated)
+    write.table(min_data, out_mincomb, sep = "\t", quote = FALSE, row.names = FALSE)
+    message(paste("Min-p combined results written to", out_mincomb))
+
+    # Fisher p-value combination for bipartition_both:
+    # Combine p-values from _s1 and _s2 using Fisher's method:
+    #   X = -2 * sum(log(p))  ~  chi-squared with 2*k df  (k = number of sides)
+    # When only one side has a valid p-value, use that p directly (1 df = 2).
+    fisher_combo_df <- merged_data %>%
+      mutate(event_base = sub("_s[12]$", "", event)) %>%
+      group_by(gene, event_base) %>%
+      summarise(
+        p_fisher      = {
+          pv <- p.value[!is.na(p.value) & p.value > 0 & p.value <= 1]
+          if (length(pv) == 0) NA_real_
+          else pchisq(-2 * sum(log(pv)), df = 2 * length(pv), lower.tail = FALSE)
+        },
+        setdiff_union = paste(unique(trimws(unlist(strsplit(
+                                na.omit(setdiff), ",")))), collapse = ","),
+        .groups = "drop"
+      )
+
+    fisher_data <- primary_df %>%
+      left_join(fisher_combo_df, by = c("gene", "event_base")) %>%
+      mutate(
+        event   = event_base,
+        p.value = p_fisher,
+        setdiff = setdiff_union
+      ) %>%
+      select(-event_base, -p_fisher, -setdiff_union)
+
+    if (exists("pvalueAdjustment") && nrow(fisher_data) > 0) {
+      fisher_data$pvalue <- fisher_data$p.value
+      fisher_data <- pvalueAdjustment(fisher_data, independentFiltering=indep_filter, alpha=0.05, pAdjustMethod="BH")
+      fisher_data$pvalue <- NULL
+    } else {
+      fisher_data$padj <- p.adjust(fisher_data$p.value, method = "BH")
+    }
+
+    out_fisher <- sub("\\.annotated\\.txt$", ".fisher_combined.annotated.txt",
+                      out_result_annotated)
+    write.table(fisher_data, out_fisher, sep = "\t", quote = FALSE, row.names = FALSE)
+    message(paste("Fisher combined results written to", out_fisher))
   }
-
-  out_mincomb <- sub("\\.annotated\\.txt$", ".mincomb.annotated.txt",
-                     out_result_annotated)
-  write.table(min_data, out_mincomb, sep = "\t", quote = FALSE, row.names = FALSE)
-  message(paste("Min-p combined results written to", out_mincomb))
-
-  # Fisher p-value combination for bipartition_both:
-  # Combine p-values from _s1 and _s2 using Fisher's method:
-  #   X = -2 * sum(log(p))  ~  chi-squared with 2*k df  (k = number of sides)
-  # When only one side has a valid p-value, use that p directly (1 df = 2).
-  fisher_combo_df <- merged_data %>%
-    mutate(event_base = sub("_s[12]$", "", event)) %>%
-    group_by(gene, event_base) %>%
-    summarise(
-      p_fisher      = {
-        pv <- p.value[!is.na(p.value) & p.value > 0 & p.value <= 1]
-        if (length(pv) == 0) NA_real_
-        else pchisq(-2 * sum(log(pv)), df = 2 * length(pv), lower.tail = FALSE)
-      },
-      setdiff_union = paste(unique(trimws(unlist(strsplit(
-                              na.omit(setdiff), ",")))), collapse = ","),
-      .groups = "drop"
-    )
-
-  fisher_data <- primary_df %>%
-    left_join(fisher_combo_df, by = c("gene", "event_base")) %>%
-    mutate(
-      event   = event_base,
-      p.value = p_fisher,
-      setdiff = setdiff_union
-    ) %>%
-    select(-event_base, -p_fisher, -setdiff_union)
-
-  if (exists("pvalueAdjustment") && nrow(fisher_data) > 0) {
-    fisher_data$pvalue <- fisher_data$p.value
-    fisher_data <- pvalueAdjustment(fisher_data, independentFiltering=indep_filter, alpha=0.05, pAdjustMethod="BH")
-    fisher_data$pvalue <- NULL
-  } else {
-    fisher_data$padj <- p.adjust(fisher_data$p.value, method = "BH")
-  }
-
-  out_fisher <- sub("\\.annotated\\.txt$", ".fisher_combined.annotated.txt",
-                    out_result_annotated)
-  write.table(fisher_data, out_fisher, sep = "\t", quote = FALSE, row.names = FALSE)
-  message(paste("Fisher combined results written to", out_fisher))
 }
       

@@ -13,38 +13,35 @@ Rscript scripts/filterTSSTTS.R --split_dir="~/GrASE_simulation/n_choose_2" --out
 
 
 # read counts for the distinct and reference exonic parts
-Rscript scripts/exoncnt.R --indir=~/GrASE_simulation --countdir=~/GrASE_simulation/DEXSeq/count_files --type='bipartition' --cond1=group1 --cond2=group2 --alt='internal' &> exoncnt.log
-Rscript scripts/exoncnt.R --indir=~/GrASE_simulation --countdir=~/GrASE_simulation/DEXSeq/count_files --type='bipartition' --cond1=group1 --cond2=group2 --alt='TSS' &> exoncnt.log
+Rscript scripts/exoncnt.R -c ~/GrASE_simulation/DEXSeq/count_files  -t bipartition  --cond1=group1 --cond2=group2 -a internal -i ~/GrASE_simulation/bipartition.filtered -o ~/GrASE_simulation/bipartition.internal.counts
+Rscript scripts/exoncnt.R -c ~/GrASE_simulation/DEXSeq/count_files  -t bipartition  --cond1=group1 --cond2=group2 -a TSS -i ~/GrASE_simulation/bipartition.filtered  -o ~/GrASE_simulation/bipartition.TSSTTS.counts
 
-Rscript scripts/exoncnt.R -d ~/GrASE_simulation -c ~/GrASE_simulation/DEXSeq/count_files  -t bipartition_both  --cond1=group1 --cond2=group2 -a internal -i ~/GrASE_simulation/bipartition.filtered
-Rscript scripts/exoncnt.R -d ~/GrASE_simulation -c ~/GrASE_simulation/DEXSeq/count_files  -t bipartition_both  --cond1=group1 --cond2=group2 -a TSS -i ~/GrASE_simulation/bipartition.filtered
+Rscript scripts/exoncnt.R -c ~/GrASE_simulation/DEXSeq/count_files  -t multinomial  --cond1=group1 --cond2=group2 -a internal -i ~/GrASE_simulation/multinomial.filtered  -o ~/GrASE_simulation/multinomial.internal.counts
+Rscript scripts/exoncnt.R -c ~/GrASE_simulation/DEXSeq/count_files  -t multinomial  --cond1=group1 --cond2=group2 -a TSS -i ~/GrASE_simulation/multinomial.filtered -o ~/GrASE_simulation/multinomial.TSSTTS.counts
 
-Rscript scripts/exoncnt.R -d ~/GrASE_simulation -c ~/GrASE_simulation/DEXSeq/count_files  -t multinomial  --cond1=group1 --cond2=group2 -a internal -i ~/GrASE_simulation/multinomial.filtered
-Rscript scripts/exoncnt.R -d ~/GrASE_simulation -c ~/GrASE_simulation/DEXSeq/count_files  -t multinomial  --cond1=group1 --cond2=group2 -a TSS -i ~/GrASE_simulation/multinomial.filtered
-
-Rscript scripts/exoncnt.R -d ~/GrASE_simulation -c ~/GrASE_simulation/DEXSeq/count_files  -t n_choose_2  --cond1=group1 --cond2=group2 -a internal -i ~/GrASE_simulation/n_choose_2.filtered
-Rscript scripts/exoncnt.R -d ~/GrASE_simulation -c ~/GrASE_simulation/DEXSeq/count_files  -t n_choose_2  --cond1=group1 --cond2=group2 -a TSS -i ~/GrASE_simulation/n_choose_2.filtered
+Rscript scripts/exoncnt.R -c ~/GrASE_simulation/DEXSeq/count_files  -t n_choose_2  --cond1=group1 --cond2=group2 -a internal -i ~/GrASE_simulation/n_choose_2.filtered  -o ~/GrASE_simulation/n_choose_2.internal.counts
+Rscript scripts/exoncnt.R -c ~/GrASE_simulation/DEXSeq/count_files  -t n_choose_2  --cond1=group1 --cond2=group2 -a TSS -i ~/GrASE_simulation/n_choose_2.filtered  -o ~/GrASE_simulation/n_choose_2.TSSTTS.counts
 
 # test for different usage of alternative paths
 # glmmTMB_prior
-Rscript scripts/exontest.R --file=bipartition.internal.exoncnt.combined.txt --dir="~/GrASE_simulation/bipartition.test" --countdir="~/GrASE_simulation/bipartition.internal.counts/" --splittype=bipartition --phi=phi.glmmtmb.internal.txt --model=glmmTMB_prior --cond1='group1' --cond2='group2' &> bipart.internal.glmmTMB_prior.log 
-Rscript scripts/exontest.R --file=bipartition.TSSTTS.exoncnt.combined.txt --dir="~/GrASE_simulation/bipartition.test" --countdir="~/GrASE_simulation/bipartition.internal.counts/" --splittype=bipartition --phi=phi.glmmtmb.TSSTTS.txt --model=glmmTMB_prior --cond1='group1' --cond2='group2' &>  bipart.TSSTTS.glmmTMB_prior.log 
+Rscript scripts/exontest.R --file=bipartition.internal.exoncnt.combined.txt --outdir="~/GrASE_simulation/bipartition.test" --countdir="~/GrASE_simulation/bipartition.internal.counts/" --splittype=bipartition --phi=phi.glmmtmb.internal.txt --model=glmmTMB_prior --cond1='group1' --cond2='group2' &> bipart.internal.glmmTMB_prior.log 
+Rscript scripts/exontest.R --file=bipartition.TSSTTS.exoncnt.combined.txt --outdir="~/GrASE_simulation/bipartition.test" --countdir="~/GrASE_simulation/bipartition.TSSTTS.counts/" --splittype=bipartition --phi=phi.glmmtmb.TSSTTS.txt --model=glmmTMB_prior --cond1='group1' --cond2='group2' &>  bipart.TSSTTS.glmmTMB_prior.log 
 # glmmTMB_fixedEB
-Rscript scripts/exontest.R --file=bipartition.internal.exoncnt.combined.txt --dir="~/GrASE_simulation/bipartition.test" --countdir="~/GrASE_simulation/bipartition.internal.counts/" --splittype=bipartition --phi=phi.glmmtmb.internal.txt --model=glmmTMB_fixedEB --cond1='group1' --cond2='group2' &> bipart.internal.glmmTMB_fixedEB.log 
-Rscript scripts/exontest.R --file=bipartition.TSSTTS.exoncnt.combined.txt --dir="~/GrASE_simulation/bipartition.test" --countdir="~/GrASE_simulation/bipartition.internal.counts/" --splittype=bipartition --phi=phi.glmmtmb.TSSTTS.txt --model=glmmTMB_fixedEB --cond1='group1' --cond2='group2' &>  bipart.TSSTTS.glmmTMB_fixedEB.log 
+Rscript scripts/exontest.R --file=bipartition.internal.exoncnt.combined.txt --outdir="~/GrASE_simulation/bipartition.test" --countdir="~/GrASE_simulation/bipartition.internal.counts/" --splittype=bipartition --phi=phi.glmmtmb.internal.txt --model=glmmTMB_fixedEB --cond1='group1' --cond2='group2' &> bipart.internal.glmmTMB_fixedEB.log 
+Rscript scripts/exontest.R --file=bipartition.TSSTTS.exoncnt.combined.txt --outdir="~/GrASE_simulation/bipartition.test" --countdir="~/GrASE_simulation/bipartition.TSSTTS.counts/" --splittype=bipartition --phi=phi.glmmtmb.TSSTTS.txt --model=glmmTMB_fixedEB --cond1='group1' --cond2='group2' &>  bipart.TSSTTS.glmmTMB_fixedEB.log 
 # VGAM_MLE_EB_init
-Rscript scripts/exontest.R --file=bipartition.internal.exoncnt.combined.txt --dir="~/GrASE_simulation/bipartition.test" --countdir="~/GrASE_simulation/bipartition.internal.counts/" --splittype=bipartition --phi=phi.glmmtmb.internal.txt --model=VGAM_MLE_EB_init --cond1='group1' --cond2='group2' &> bipart.internal.VGAM_MLE_EB_init.log 
-Rscript scripts/exontest.R --file=bipartition.TSSTTS.exoncnt.combined.txt --dir="~/GrASE_simulation/bipartition.test" --countdir="~/GrASE_simulation/bipartition.internal.counts/" --splittype=bipartition --phi=phi.glmmtmb.TSSTTS.txt --model=VGAM_MLE_EB_init --cond1='group1' --cond2='group2' &>  bipart.TSSTTS.VGAM_MLE_EB_init.log 
+Rscript scripts/exontest.R --file=bipartition.internal.exoncnt.combined.txt --outdir="~/GrASE_simulation/bipartition.test" --countdir="~/GrASE_simulation/bipartition.internal.counts/" --splittype=bipartition --phi=phi.glmmtmb.internal.txt --model=VGAM_MLE_EB_init --cond1='group1' --cond2='group2' &> bipart.internal.VGAM_MLE_EB_init.log 
+Rscript scripts/exontest.R --file=bipartition.TSSTTS.exoncnt.combined.txt --outdir="~/GrASE_simulation/bipartition.test" --countdir="~/GrASE_simulation/bipartition.TSSTTS.counts/" --splittype=bipartition --phi=phi.glmmtmb.TSSTTS.txt --model=VGAM_MLE_EB_init --cond1='group1' --cond2='group2' &>  bipart.TSSTTS.VGAM_MLE_EB_init.log 
 # wilcoxon
-Rscript scripts/exontest.R --file=bipartition.internal.exoncnt.combined.txt --dir="~/GrASE_simulation/bipartition.test" --countdir="~/GrASE_simulation/bipartition.internal.counts/" --splittype=bipartition --phi=phi.glmmtmb.internal.txt --model=wilcoxon --cond1='group1' --cond2='group2' &> bipart.internal.wilcoxon.log 
-Rscript scripts/exontest.R --file=bipartition.TSSTTS.exoncnt.combined.txt --dir="~/GrASE_simulation/bipartition.test" --countdir="~/GrASE_simulation/bipartition.internal.counts/" --splittype=bipartition --phi=phi.glmmtmb.TSSTTS.txt --model=wilcoxon --cond1='group1' --cond2='group2' &>  bipart.TSSTTS.wilcoxon.log 
+Rscript scripts/exontest.R --file=bipartition.internal.exoncnt.combined.txt --outdir="~/GrASE_simulation/bipartition.test" --countdir="~/GrASE_simulation/bipartition.internal.counts/" --splittype=bipartition --phi=phi.glmmtmb.internal.txt --model=wilcoxon --cond1='group1' --cond2='group2' &> bipart.internal.wilcoxon.log 
+Rscript scripts/exontest.R --file=bipartition.TSSTTS.exoncnt.combined.txt --outdir="~/GrASE_simulation/bipartition.test" --countdir="~/GrASE_simulation/bipartition.TSSTTS.counts/" --splittype=bipartition --phi=phi.glmmtmb.TSSTTS.txt --model=wilcoxon --cond1='group1' --cond2='group2' &>  bipart.TSSTTS.wilcoxon.log 
 
 
-Rscript scripts/exontest.R -f bipartition_both.internal.exoncnt.combined.txt -d ~/GrASE_simulation/bipartition_both.test -c ~/GrASE_simulation/bipartition_both.internal.counts  -s bipartition_both -m glmmTMB_fixedEB -p phi.glmmtmb.internal.txt --cond1 group1 --cond2 group2
-Rscript scripts/exontest.R -f bipartition_both.TSSTTS.exoncnt.combined.txt  -d ~/GrASE_simulation/bipartition_both.test -c ~/GrASE_simulation/bipartition_both.TSSTTS.counts  -s bipartition_both -m glmmTMB_fixedEB -p phi.glmmtmb.TSSTTS.txt --cond1 group1 --cond2 group2
+#Rscript scripts/exontest.R -f bipartition.internal.exoncnt.combined.txt -d ~/GrASE_simulation/bipartition.test -c ~/GrASE_simulation/bipartition.internal.counts  -s bipartition -m glmmTMB_fixedEB -p phi.glmmtmb.internal.txt --cond1 group1 --cond2 group2
+#Rscript scripts/exontest.R -f bipartition.TSSTTS.exoncnt.combined.txt  -d ~/GrASE_simulation/bipartition.test -c ~/GrASE_simulation/bipartition.TSSTTS.counts  -s bipartition -m glmmTMB_fixedEB -p phi.glmmtmb.TSSTTS.txt --cond1 group1 --cond2 group2
 
-Rscript scripts/exontest.R -f n_choose_2.internal.exoncnt.combined.txt -d ~/GrASE_simulation/n_choose_2.test -c ~/GrASE_simulation/n_choose_2.internal.counts  -s n_choose_2 -m glmmTMB_fixedEB -p phi.glmmtmb.internal.txt --cond1 group1 --cond2 group2
-Rscript scripts/exontest.R -f n_choose_2.TSSTTS.exoncnt.combined.txt -d ~/GrASE_simulation/n_choose_2.test -c ~/GrASE_simulation/n_choose_2.TSSTTS.counts  -s n_choose_2 -m glmmTMB_fixedEB -p phi.glmmtmb.TSSTTS.txt --cond1 group1 --cond2 group2
+#Rscript scripts/exontest.R -f n_choose_2.internal.exoncnt.combined.txt -d ~/GrASE_simulation/n_choose_2.test -c ~/GrASE_simulation/n_choose_2.internal.counts  -s n_choose_2 -m glmmTMB_fixedEB -p phi.glmmtmb.internal.txt --cond1 group1 --cond2 group2
+#Rscript scripts/exontest.R -f n_choose_2.TSSTTS.exoncnt.combined.txt -d ~/GrASE_simulation/n_choose_2.test -c ~/GrASE_simulation/n_choose_2.TSSTTS.counts  -s n_choose_2 -m glmmTMB_fixedEB -p phi.glmmtmb.TSSTTS.txt --cond1 group1 --cond2 group2
 
 
 
