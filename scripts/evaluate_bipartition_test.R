@@ -284,15 +284,6 @@ eval_restr <- eval_exonic_parts("grase_restricted",
                         testable_by_gene = grase_testable_by_gene,
                         restrict_pos = TRUE)
 
-# Fair-DTE evaluations: use group_grase where DTE positives are restricted to
-# exons exclusive to the changed transcript (no overlap with unchanged txs).
-# This matches what GrASE structurally tests (setdiff exons only), so shared
-# exons of DTE genes no longer count as false negatives.
-eval_grase_fair <- eval_exonic_parts("grase_fair", gt_col = "group_grase")
-eval_grase_fair_restr <- eval_exonic_parts("grase_fair_restricted",
-                                   testable_by_gene = grase_testable_by_gene,
-                                   restrict_pos = TRUE,
-                                   gt_col = "group_grase")
 
 cat("\n=== Summary (full GT, micro metrics) ===\n")
 print(as.data.frame(eval_full$summary %>%
@@ -302,18 +293,6 @@ print(as.data.frame(eval_full$summary %>%
 
 cat("\n=== Summary (restricted to GrASE-testable exons) ===\n")
 print(as.data.frame(eval_restr$summary %>%
-  select(sim_type, padj_thr, n_genes,
-         micro_precision, micro_recall, micro_f1,
-         total_TP, total_FP, total_FN)))
-
-cat("\n=== Summary (fair DTE GT: setdiff-exclusive positives only) ===\n")
-print(as.data.frame(eval_grase_fair$summary %>%
-  select(sim_type, padj_thr, n_genes,
-         micro_precision, micro_recall, micro_f1,
-         total_TP, total_FP, total_FN)))
-
-cat("\n=== Summary (fair DTE GT + restricted to GrASE-testable) ===\n")
-print(as.data.frame(eval_grase_fair_restr$summary %>%
   select(sim_type, padj_thr, n_genes,
          micro_precision, micro_recall, micro_f1,
          total_TP, total_FP, total_FN)))

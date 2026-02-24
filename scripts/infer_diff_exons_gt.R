@@ -124,7 +124,6 @@ for (gene_name in all_genes) {
       exonic_part = bins$bin_id,
       fold_change = fc_vals,
       group       = "negative",
-      group_grase = "negative",
       transcripts = bins$tx_str,
       changed_tx  = NA_character_,
       alt_tx      = NA_character_,
@@ -136,8 +135,7 @@ for (gene_name in all_genes) {
   } else {
 
     # DTU / DTE: bin positive if it overlaps any changed transcript for this gene
-    gene_changed   <- intersect(txs_by_gene[[gene_name]], changed_tx)
-    gene_unchanged <- setdiff(txs_by_gene[[gene_name]], changed_tx)
+    gene_changed <- intersect(txs_by_gene[[gene_name]], changed_tx)
 
     rows <- lapply(seq_len(nrow(bins)), function(i) {
       hit    <- intersect(bins$tx_list[[i]], gene_changed)
@@ -147,13 +145,6 @@ for (gene_name in all_genes) {
       #      (bin must separate changed transcripts, not contain all of them)
       is_pos <- if (sim_type == "DTU") length(hit) > 0 && length(alt) > 0
                 else                   length(hit) > 0
-      # group_grase: stricter DTE criterion bin must be EXCLUSIVE to changed
-      # transcripts (no overlap with unchanged), matching what GrASE tests
-      # (setdiff exons only).  DTU keeps the same criterion as group.
-      unch_in_bin  <- intersect(bins$tx_list[[i]], gene_unchanged)
-      is_grase_pos <-
-        if (sim_type == "DTE") length(hit) > 0 && length(unch_in_bin) == 0
-        else                   is_pos
       # Report FC for any changed transcripts present in the bin (hit),
       # regardless of whether the bin is positive or negative.
       fc_str <- format_fc(hit, fold_changes)
@@ -162,8 +153,7 @@ for (gene_name in all_genes) {
         sim_type    = sim_type,
         exonic_part = bins$bin_id[i],
         fold_change = fc_str,
-        group       = if (is_pos)       "changed" else "negative",
-        group_grase = if (is_grase_pos) "changed" else "negative",
+        group       = if (is_pos) "changed" else "negative",
         transcripts = bins$tx_str[i],
         changed_tx  = if (is_pos) paste(hit, collapse = "+") else NA_character_,
         alt_tx      = if (is_pos && length(alt) > 0) paste(alt, collapse = "+") else NA_character_,
