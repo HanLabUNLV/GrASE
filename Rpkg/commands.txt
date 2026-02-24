@@ -37,11 +37,19 @@ Rscript scripts/exontest.R --file=bipartition.internal.exoncnt.combined.txt --ou
 Rscript scripts/exontest.R --file=bipartition.TSSTTS.exoncnt.combined.txt --outdir="~/GrASE_simulation/bipartition.test" --countdir="~/GrASE_simulation/bipartition.TSSTTS.counts/" --splittype=bipartition --phi=phi.glmmtmb.TSSTTS.txt --model=wilcoxon --cond1='group1' --cond2='group2' &>  bipart.TSSTTS.wilcoxon.log 
 
 
-#Rscript scripts/exontest.R -f bipartition.internal.exoncnt.combined.txt -d ~/GrASE_simulation/bipartition.test -c ~/GrASE_simulation/bipartition.internal.counts  -s bipartition -m glmmTMB_fixedEB -p phi.glmmtmb.internal.txt --cond1 group1 --cond2 group2
-#Rscript scripts/exontest.R -f bipartition.TSSTTS.exoncnt.combined.txt  -d ~/GrASE_simulation/bipartition.test -c ~/GrASE_simulation/bipartition.TSSTTS.counts  -s bipartition -m glmmTMB_fixedEB -p phi.glmmtmb.TSSTTS.txt --cond1 group1 --cond2 group2
-
-#Rscript scripts/exontest.R -f n_choose_2.internal.exoncnt.combined.txt -d ~/GrASE_simulation/n_choose_2.test -c ~/GrASE_simulation/n_choose_2.internal.counts  -s n_choose_2 -m glmmTMB_fixedEB -p phi.glmmtmb.internal.txt --cond1 group1 --cond2 group2
-#Rscript scripts/exontest.R -f n_choose_2.TSSTTS.exoncnt.combined.txt -d ~/GrASE_simulation/n_choose_2.test -c ~/GrASE_simulation/n_choose_2.TSSTTS.counts  -s n_choose_2 -m glmmTMB_fixedEB -p phi.glmmtmb.TSSTTS.txt --cond1 group1 --cond2 group2
+# test for different usage of alternative paths
+# glmmTMB_prior
+Rscript scripts/exontest.R --file=n_choose_2.internal.exoncnt.combined.txt --outdir="~/GrASE_simulation/n_choose_2.test" --countdir="~/GrASE_simulation/n_choose_2.internal.counts/" --splittype=n_choose_2 --phi=phi.glmmtmb.internal.txt --model=glmmTMB_prior --cond1='group1' --cond2='group2' &> nc2.internal.glmmTMB_prior.log 
+Rscript scripts/exontest.R --file=n_choose_2.TSSTTS.exoncnt.combined.txt --outdir="~/GrASE_simulation/n_choose_2.test" --countdir="~/GrASE_simulation/n_choose_2.TSSTTS.counts/" --splittype=n_choose_2 --phi=phi.glmmtmb.TSSTTS.txt --model=glmmTMB_prior --cond1='group1' --cond2='group2' &>  nc2.TSSTTS.glmmTMB_prior.log 
+# glmmTMB_fixedEB
+Rscript scripts/exontest.R --file=n_choose_2.internal.exoncnt.combined.txt --outdir="~/GrASE_simulation/n_choose_2.test" --countdir="~/GrASE_simulation/n_choose_2.internal.counts/" --splittype=n_choose_2 --phi=phi.glmmtmb.internal.txt --model=glmmTMB_fixedEB --cond1='group1' --cond2='group2' &> nc2.internal.glmmTMB_fixedEB.log 
+Rscript scripts/exontest.R --file=n_choose_2.TSSTTS.exoncnt.combined.txt --outdir="~/GrASE_simulation/n_choose_2.test" --countdir="~/GrASE_simulation/n_choose_2.TSSTTS.counts/" --splittype=n_choose_2 --phi=phi.glmmtmb.TSSTTS.txt --model=glmmTMB_fixedEB --cond1='group1' --cond2='group2' &>  nc2.TSSTTS.glmmTMB_fixedEB.log 
+# VGAM_MLE_EB_init
+Rscript scripts/exontest.R --file=n_choose_2.internal.exoncnt.combined.txt --outdir="~/GrASE_simulation/n_choose_2.test" --countdir="~/GrASE_simulation/n_choose_2.internal.counts/" --splittype=n_choose_2 --phi=phi.glmmtmb.internal.txt --model=VGAM_MLE_EB_init --cond1='group1' --cond2='group2' &> nc2.internal.VGAM_MLE_EB_init.log 
+Rscript scripts/exontest.R --file=n_choose_2.TSSTTS.exoncnt.combined.txt --outdir="~/GrASE_simulation/n_choose_2.test" --countdir="~/GrASE_simulation/n_choose_2.TSSTTS.counts/" --splittype=n_choose_2 --phi=phi.glmmtmb.TSSTTS.txt --model=VGAM_MLE_EB_init --cond1='group1' --cond2='group2' &>  nc2.TSSTTS.VGAM_MLE_EB_init.log 
+# wilcoxon
+Rscript scripts/exontest.R --file=n_choose_2.internal.exoncnt.combined.txt --outdir="~/GrASE_simulation/n_choose_2.test" --countdir="~/GrASE_simulation/n_choose_2.internal.counts/" --splittype=n_choose_2 --phi=phi.glmmtmb.internal.txt --model=wilcoxon --cond1='group1' --cond2='group2' &> nc2.internal.wilcoxon.log 
+Rscript scripts/exontest.R --file=n_choose_2.TSSTTS.exoncnt.combined.txt --outdir="~/GrASE_simulation/n_choose_2.test" --countdir="~/GrASE_simulation/n_choose_2.TSSTTS.counts/" --splittype=n_choose_2 --phi=phi.glmmtmb.TSSTTS.txt --model=wilcoxon --cond1='group1' --cond2='group2' &>  nc2.TSSTTS.wilcoxon.log 
 
 
 

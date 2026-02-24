@@ -157,18 +157,22 @@ if (model == 'glmmTMB_prior' || model == 'glmmTMB_fixedEB' || model == 'VGAM_MLE
   }
 }
 
-# Per Gene Model Estimation 
+# Per Gene Model Estimation
 if (model == 'glmmTMB_prior') {
+  if (!exists("grouped_data")) {
+    grouped_data <- group_by_event(splitcnts, 'diff', 'n')
+  }
   phi_trimmed <- phi_df[!is.na(phi_df$phi) & phi_df$phi < 1e+10 & phi_df$phi > 0,'phi']
 
   # fit normal to log(phi)
   log_phi_vals <- log(phi_trimmed)
+  median_logphi <- median(log_phi_vals, na.rm = TRUE)
   fit_logphi <- fitdistr(log_phi_vals, "normal")
   mean_logphi <- fit_logphi$estimate["mean"]
   sd_logphi   <- fit_logphi$estimate["sd"]
-  prior_disp <- data.frame(prior = sprintf("normal(%g,%g)", mean_logphi, sd_logphi), 
-    class = "fixef_disp", 
-    coef = "", # Explicitly target the intercept 
+  prior_disp <- data.frame(prior = sprintf("normal(%g,%g)", mean_logphi, sd_logphi),
+    class = "fixef_disp",
+    coef = "", # Explicitly target the intercept
     stringsAsFactors = FALSE
   )
   print(prior_disp)
@@ -182,7 +186,7 @@ if (model == 'glmmTMB_prior') {
   #result_list <- parLapply(cl, grouped_data, function(dd) {
     tryCatch({
       # Suppress glmmTMB timing messages from failed optimizations
-      suppressMessages(test_model_glmmTMB_with_prior(dd, prior_disp))
+      suppressMessages(test_model_glmmTMB_with_prior(dd, prior_disp, z_bar = median_logphi))
     }, error = function(e) {
         msg <- sprintf("[%s] ERROR in %s (PID %d): %s\n",
                        format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
@@ -399,6 +403,9 @@ if (model == 'glmmTMB_prior') {
 
   write.table(wald_results_df, file=out_resultfile, sep="\t", quote=FALSE, row.names = FALSE)
 } else if (model == 'wilcoxon') {
+  if (!exists("grouped_data")) {
+    grouped_data <- group_by_event(splitcnts, 'diff', 'n')
+  }
 
   result_list <- mclapply(grouped_data, function(dd) {
     tryCatch({
@@ -516,13 +523,14 @@ if (split == 'bipartition' || split == 'n_choose_2') {
       mutate(event_base = sub("_s[12]$", "", event)) %>%
       group_by(gene, event_base) %>%
       summarise(
-        p_min         = min(p.value[!is.na(p.value) & p.value > 0 & p.value <= 1],
-                            na.rm = TRUE),
+        p_min         = {
+          pv <- p.value[!is.na(p.value) & p.value > 0 & p.value <= 1]
+          if (length(pv) == 0) NA_real_ else min(pv)
+        },
         setdiff_union = paste(unique(trimws(unlist(strsplit(
                                 na.omit(setdiff), ",")))), collapse = ","),
         .groups = "drop"
-      ) %>%
-      mutate(p_min = ifelse(is.infinite(p_min), NA_real_, p_min))
+      )
 
     # Primary row per event: prefer the side with the lower p-value
     primary_df <- merged_data %>%

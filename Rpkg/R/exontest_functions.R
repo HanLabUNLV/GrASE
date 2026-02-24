@@ -278,15 +278,15 @@ moderate_prec_log_scale <- function(prec_table) {
 
 # 1. Moderated glmmTMB Beta-Binomial with Prior
 #' @export
-test_model_glmmTMB_with_prior <- function(dd, prior_disp) {
+test_model_glmmTMB_with_prior <- function(dd, prior_disp, z_bar = NULL) {
     gene  <- unique(dd$gene)
     event <- unique(dd$event)
     dd <- dd[dd$n > 0, ]
     if (nrow(dd) < 2 || length(unique(dd$groups)) < 2) return(NULL)
-   
+
     # Models include 'priors' for empirical Bayes moderation
     m1 <- tryCatch(
-      glmmTMB(cbind(y, n - y) ~ groups, data = dd, family = glmmTMB::betabinomial(link="logit"), priors = prior_disp, REML=TRUE), 
+      glmmTMB(cbind(y, n - y) ~ groups, data = dd, family = glmmTMB::betabinomial(link="logit"), priors = prior_disp, REML=TRUE),
       error = function(e) NULL
     )
     m0 <- tryCatch(
@@ -295,36 +295,41 @@ test_model_glmmTMB_with_prior <- function(dd, prior_disp) {
     )
 
     if (!is.null(m1) && !is.na(logLik(m1)) && !is.null(m0) && !is.na(logLik(m0))) {
-        
-        # If phi is extremely large (>1e4), the model effectively converged to Binomial.
-        # We force fallback to standard GLM for better stability and interpretability.
-        # this is necessary: 
-        # "Hauck-Donner effect" (or similar separation issues) in the glmmTMB optimizer.
-#< ENSG00000285219.2	242	51.7512574983776	6.29964641910099e-13	betabinomial_glmmTMB_MAP_with_prior22280123.2191247	-48.0759117491982 without fallback
-#> ENSG00000285219.2	242	0.483132649576106	0.487006771127791	binomial_glm	NA	-16.4594777497934107889c107889 # with fallback
-#< ENSG00000285219.2	248	51.7512574983776	6.29964641910099e-13	betabinomial_glmmTMB_MAP_with_prior22280123.2191247	-48.0759117491982 without fallback
-#> ENSG00000285219.2	248	0.483132649576106	0.487006771127791	binomial_glm	NA	-16.4594777497934 with fallback
 
-        if (sigma(m1) > 1e5) {
-            m1 <- NULL # Trends to else block
-        } else {
+        # If phi escaped to an extreme value despite the prior, the optimizer likely
+        # diverged rather than reflecting truly binomial data. Fall through to the
+        # fixed-dispersion fallback below instead of using a binomial GLM.
+        if (sigma(m1) <= 1e5) {
             LR <- 2 * (logLik(m1) - logLik(m0))
-            #LR <- max(0, as.numeric(LR))
             pval <- pchisq(as.numeric(LR), df = 1, lower.tail = FALSE)
             eff_size <- fixef(m1)$cond[2]
             return(data.frame(gene=gene, event=event, LRT=as.numeric(LR), p.value=pval, model="betabinomial_glmmTMB_MAP_with_prior", phi=sigma(m1), effect_size=eff_size))
         }
     }
 
-    if (is.null(m1) || is.na(logLik(m1)) || is.null(m0) || is.na(logLik(m0))) {
-        m1 <- tryCatch(glm(cbind(y, n - y) ~ groups, data = dd, family = binomial), error = function(e) NULL)
-        m0 <- tryCatch(glm(cbind(y, n - y) ~ 1, data = dd, family = binomial), error = function(e) NULL)
-        if (!is.null(m1) && !is.null(m0)) {
-             LR <- 2 * (logLik(m1) - logLik(m0))
-             LR <- max(0, as.numeric(LR))
-             pval <- pchisq(as.numeric(LR), df = 1, lower.tail = FALSE)
-             eff_size <- coef(m1)[2]
-             return(data.frame(gene=gene, event=event, LRT=as.numeric(LR), p.value=pval, model="binomial_glm", phi=NA, effect_size=eff_size))
+    # Fallback: fix dispersion at the global EB median log-phi and refit.
+    # This is conservative and consistent with the glmmTMB_fixedEB approach.
+    # A binomial GLM fallback would be anticonservative for overdispersed data.
+    if (!is.null(z_bar) && is.finite(z_bar)) {
+        m1 <- tryCatch(
+          glmmTMB(cbind(y, n - y) ~ groups, data = dd,
+                  family = glmmTMB::betabinomial(link = "logit"),
+                  start = list(betadisp = z_bar),
+                  map   = list(betadisp = factor(NA))),
+          error = function(e) NULL
+        )
+        m0 <- tryCatch(
+          glmmTMB(cbind(y, n - y) ~ 1, data = dd,
+                  family = glmmTMB::betabinomial(link = "logit"),
+                  start = list(betadisp = z_bar),
+                  map   = list(betadisp = factor(NA))),
+          error = function(e) NULL
+        )
+        if (!is.null(m1) && !is.na(logLik(m1)) && !is.null(m0) && !is.na(logLik(m0))) {
+            LR <- 2 * (logLik(m1) - logLik(m0))
+            pval <- pchisq(as.numeric(LR), df = 1, lower.tail = FALSE)
+            eff_size <- fixef(m1)$cond[2]
+            return(data.frame(gene=gene, event=event, LRT=as.numeric(LR), p.value=pval, model="betabinomial_glmmTMB_fixed_median", phi=sigma(m1), effect_size=eff_size))
         }
     }
     return(NULL)
