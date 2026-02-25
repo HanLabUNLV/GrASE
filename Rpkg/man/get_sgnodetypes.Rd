@@ -11,3 +11,11 @@ get_sgnodetypes(txpathmat, check.matrix = FALSE)
 identifies nodes that are exon starts and ends and marks them with 1 and 2 respectively.
 copied from SplicingGraphs
 }
+\examples{
+\dontrun{
+g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+g <- grase::set_txpath_to_vertex_attr(g)
+txmat <- grase::make_matrix_from_txpath_igraph(g)
+node_types <- grase::get_sgnodetypes(txmat)
+}
+}

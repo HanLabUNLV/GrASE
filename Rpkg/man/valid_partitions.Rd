@@ -9,3 +9,11 @@ valid_partitions(dag)
 \description{
 Generate valid binary partitions from DAG
 }
+\examples{
+dag <- igraph::graph_from_edgelist(
+  matrix(c("A","B", "B","C"), ncol=2, byrow=TRUE), directed = TRUE
+)
+igraph::V(dag)$name <- c("A","B","C")
+splits <- grase::valid_partitions(dag)
+length(splits)
+}

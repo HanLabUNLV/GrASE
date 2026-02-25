@@ -2,10 +2,18 @@
 % Please edit documentation in R/bubbles.R
 \name{detect_bubbles_igraph}
 \alias{detect_bubbles_igraph}
-\title{Main bubble detection from matrix}
+\title{Main bubble detection from igraph splice graph}
 \usage{
 detect_bubbles_igraph(g)
 }
 \description{
-Main bubble detection from matrix
+Main bubble detection from igraph splice graph
+}
+\examples{
+\dontrun{
+g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+g <- grase::set_edge_names(g)
+bubbles_df <- grase::detect_bubbles_igraph(g)
+# Returns S4Vectors::DataFrame with columns: source, sink, n, partitions, paths
+}
 }

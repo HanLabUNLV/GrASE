@@ -9,3 +9,12 @@ from_exon_path_to_exonic_part_path(g, exonpath)
 \description{
 Convert exon path to exonic part path
 }
+\examples{
+\dontrun{
+g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+g <- grase::set_edge_names(g)
+bubblepath <- c("R", "3", "5", "L")
+exonpath <- grase::from_vpath_to_exon_path(g, bubblepath)
+expart_path <- grase::from_exon_path_to_exonic_part_path(g, exonpath)
+}
+}

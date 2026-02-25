@@ -9,3 +9,10 @@ set_edge_names(g)
 \description{
 Set edge names
 }
+\examples{
+\dontrun{
+g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+g <- grase::set_edge_names(g)
+head(igraph::E(g)$name)
+}
+}

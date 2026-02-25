@@ -14,3 +14,15 @@ standardize_multinomial_columns(row_list, max_paths)
 \description{
 Standardize multinomial results from list to data frame with consistent column structure
 }
+\examples{
+row_list <- list(
+  list(gene="GENE1", source="3", sink="7", ref_ex_part="E001",
+       setdiff1="E002", transcripts1="TX1", path1="3-5-7",
+       setdiff2="E003", transcripts2="TX2", path2="3-6-7"),
+  list(gene="GENE1", source="3", sink="9", ref_ex_part="E004",
+       setdiff1="E005", transcripts1="TX1", path1="3-8-9",
+       setdiff2="",     transcripts2="TX3", path2="3-9")
+)
+df <- grase::standardize_multinomial_columns(row_list, max_paths = 2)
+colnames(df)
+}

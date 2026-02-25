@@ -17,3 +17,13 @@ n_choose_2_paths(
 \description{
 Compute diff exons from graph using n-choose-2 pairwise analysis
 }
+\examples{
+\dontrun{
+g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+result <- grase::n_choose_2_paths(
+  gene = "ENSG00000000003.14", g = g, sg = NULL, outdir = tempdir(), max_path = 20
+)
+head(result[, c("gene", "source", "sink", "path1_idx", "path2_idx",
+                 "setdiff1", "setdiff2", "ref_ex_part")])
+}
+}

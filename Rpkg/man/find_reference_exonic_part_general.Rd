@@ -15,3 +15,17 @@ find_reference_exonic_part_general(
 \description{
 Find reference exonic parts for multiple partitions (generalization of simple binary case)
 }
+\examples{
+\dontrun{
+g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+g <- grase::set_edge_names(g)
+ex_or_in_vec <- igraph::edge_attr(g, "ex_or_in")
+g_expart <- igraph::delete_edges(g, igraph::E(g)[ex_or_in_vec == "ex"])
+ref <- grase::find_reference_exonic_part_general(
+  source = "3", sink = "7",
+  ex_part_sets = list(character(0), character(0)),
+  tx_ex_part_sets = list(character(0), character(0)),
+  g_expart = g_expart
+)
+}
+}

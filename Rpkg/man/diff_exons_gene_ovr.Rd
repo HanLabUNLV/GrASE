@@ -9,3 +9,11 @@ diff_exons_gene_ovr(gene, g, outdir)
 \description{
 Compute diff exons with one-vs-rest approach for each partition
 }
+\examples{
+\dontrun{
+g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+result <- grase::diff_exons_gene_ovr(
+  gene = "ENSG00000000003.14", g = g, outdir = tempdir()
+)
+}
+}

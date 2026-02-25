@@ -19,10 +19,24 @@ moderate_phi_trend(phi_df, baseMean_df, span = 0.5, trimming_limit = 1e+10)
 \value{
 data.frame with all events in baseMean_df and columns
 z, var_z, z_trend, w, z_mod, phi_mod
+Moderate phi estimates using a trend-based loess prior over baseMean
 }
 \description{
 Fits a loess curve of log(phi) ~ log(baseMean) on events that have phi
 estimates, then uses the trend as the shrinkage target instead of the
 global mean.  Events with no phi estimate (non-convergent BB fit) are
 fully shrunk to the trend prediction (weight = 0).
+}
+\examples{
+\dontrun{
+phi_df <- read.table("phi.glmmtmb.txt", header = TRUE, row.names = NULL)
+splitcnts <- read.table("bipartition.internal.exoncnt.combined.txt",
+                        header = TRUE, row.names = NULL)
+baseMean_df <- dplyr::summarise(
+  dplyr::group_by(splitcnts, gene, event),
+  baseMean = mean(n, na.rm = TRUE), .groups = "drop"
+)
+phi_table <- grase::moderate_phi_trend(phi_df, baseMean_df)
+head(phi_table[, c("gene", "event", "baseMean", "phi_mod")])
+}
 }

@@ -9,3 +9,8 @@ count_items(x)
 \description{
 Count items in comma-separated string
 }
+\examples{
+count_items("E001,E002,E003")
+count_items("")
+count_items("E001")
+}

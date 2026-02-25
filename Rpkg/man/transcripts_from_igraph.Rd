@@ -9,3 +9,10 @@ transcripts_from_igraph(g)
 \description{
 get transcript names from igraph edge attributes
 }
+\examples{
+\dontrun{
+g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+tx_names <- grase::transcripts_from_igraph(g)
+tx_names
+}
+}

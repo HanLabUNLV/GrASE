@@ -9,3 +9,12 @@ diff_exons_between_tx(gene, g, tx_ids, outdir)
 \description{
 Compute diff exons from graph and splicing structure for specific transcripts
 }
+\examples{
+\dontrun{
+g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+tx_ids <- c("ENST00000373020.8", "ENST00000494424.1")
+result <- grase::diff_exons_between_tx(
+  gene = "ENSG00000000003.14", g = g, tx_ids = tx_ids, outdir = tempdir()
+)
+}
+}

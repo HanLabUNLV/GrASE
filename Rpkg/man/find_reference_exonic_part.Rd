@@ -17,3 +17,15 @@ find_reference_exonic_part(
 \description{
 Find reference exonic part near bubble region (legacy version)
 }
+\examples{
+\dontrun{
+g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+g <- grase::set_edge_names(g)
+ref <- grase::find_reference_exonic_part(
+  source = "3", sink = "7",
+  ex_part1_set = integer(0), ex_part2_set = integer(0),
+  tx_ex_part1_set = integer(0), tx_ex_part2_set = integer(0),
+  g = g
+)
+}
+}

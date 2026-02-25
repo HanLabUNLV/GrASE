@@ -9,3 +9,11 @@ map_DEXSeq_from_gff(g, gff)
 \description{
 add dexseq exonic part edges to igraph
 }
+\examples{
+\dontrun{
+g <- igraph::read_graph("ENSG00000000003.graphml", format = "graphml")
+gff <- readLines("ENSG00000000003.dexseq.gff")
+g <- grase::map_DEXSeq_from_gff(g, gff)
+igraph::write_graph(g, "ENSG00000000003.dexseq.graphml", "graphml")
+}
+}

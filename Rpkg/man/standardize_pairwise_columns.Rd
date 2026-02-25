@@ -9,3 +9,14 @@ standardize_pairwise_columns(pairwise_list)
 \description{
 Convert pairwise analysis results to standardized data frame
 }
+\examples{
+pairwise_list <- list(
+  list(gene="GENE1", source="3", sink="7",
+       path1_idx=1L, path2_idx=2L,
+       ref_ex_part="E001", setdiff1="E002", setdiff2="E003",
+       transcripts1="TX1", transcripts2="TX2",
+       path1="3-5-7", path2="3-6-7")
+)
+df <- grase::standardize_pairwise_columns(pairwise_list)
+colnames(df)
+}

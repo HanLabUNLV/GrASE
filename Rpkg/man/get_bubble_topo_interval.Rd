@@ -9,3 +9,13 @@ get_bubble_topo_interval(bubble, topo_idx)
 \description{
 Get topological interval for bubble
 }
+\examples{
+\dontrun{
+g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+g <- grase::set_edge_names(g)
+bubbles_df <- grase::detect_bubbles_igraph(g)
+topo <- igraph::topo_sort(g, mode = "out")
+topo_idx <- setNames(seq_along(topo), topo$name)
+interval <- grase::get_bubble_topo_interval(bubbles_df[1, ], topo_idx)
+}
+}

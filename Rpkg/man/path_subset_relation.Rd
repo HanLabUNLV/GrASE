@@ -9,3 +9,8 @@ path_subset_relation(sets)
 \description{
 Create subset relation graph from sets
 }
+\examples{
+sets <- list("1" = c(1L, 2L), "2" = c(1L, 2L, 3L), "3" = c(4L, 5L))
+dag <- grase::path_subset_relation(sets)
+igraph::E(dag)
+}

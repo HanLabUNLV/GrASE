@@ -30,3 +30,16 @@ of the alternative region) and path2 (remaining local transcripts).  The
 set-difference gives the ex_part edges TRUE in path1 and FALSE in all path2
 transcripts.
 }
+\examples{
+\dontrun{
+g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+ge <- grase::precompute_gene_graph(g)
+se_row <- list(upstreamEE = 1000L, downstreamES = 2000L,
+               exonStart_0base = 1100L, exonEnd = 1500L)
+bounds <- grase::rmats_event_boundaries("SE", "+", se_row)
+frags <- grase::graph_setdiff_frags(ge,
+  b1 = bounds$b1, b2 = bounds$b2,
+  alt_low = bounds$alt_low, alt_hi = bounds$alt_hi
+)
+}
+}

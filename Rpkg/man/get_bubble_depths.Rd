@@ -9,3 +9,8 @@ get_bubble_depths(intervals)
 \description{
 Get bubble depths from intervals
 }
+\examples{
+intervals <- list(c(1, 10), c(3, 7), c(12, 15))
+depths <- grase::get_bubble_depths(intervals)
+depths
+}

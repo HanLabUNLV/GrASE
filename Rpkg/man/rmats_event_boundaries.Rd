@@ -22,3 +22,8 @@ returns the graph positions of the bubble boundaries (b1, b2) and the
 coordinate range of the alternative region (alt_low, alt_hi).
 All positions follow the graph +1 convention (0-based rMATS coords + 1).
 }
+\examples{
+se_row <- list(upstreamEE = 1000L, downstreamES = 2000L,
+               exonStart_0base = 1100L, exonEnd = 1500L)
+grase::rmats_event_boundaries("SE", "+", se_row)
+}

@@ -9,3 +9,15 @@ infer_diff_exons_from_tx_groups(gene, g, tx_changed, tx_constant, outdir)
 \description{
 Infer differential exonic parts given two groups of transcripts (e.g. changed vs constant)
 }
+\examples{
+\dontrun{
+g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+result <- grase::infer_diff_exons_from_tx_groups(
+  gene       = "ENSG00000000003.14",
+  g          = g,
+  tx_changed  = c("ENST00000373020.8"),
+  tx_constant = c("ENST00000494424.1", "ENST00000379263.3"),
+  outdir     = tempdir()
+)
+}
+}

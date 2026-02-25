@@ -9,3 +9,11 @@ from_vpath_to_exon_path_simple(g, vpath)
 \description{
 convert vertex path to exon path
 }
+\examples{
+\dontrun{
+g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+g <- grase::set_edge_names(g)
+vpath <- c("R", "3", "5", "7", "L")
+epath <- grase::from_vpath_to_exon_path_simple(g, vpath)
+}
+}

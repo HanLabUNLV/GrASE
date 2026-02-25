@@ -19,3 +19,12 @@ Orders bubbles by span ascending (smallest/innermost first), then by
 source position ascending as tiebreaker. This ensures inner bubbles are
 processed and collapsed before the outer bubbles that contain them.
 }
+\examples{
+\dontrun{
+g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+g <- grase::set_edge_names(g)
+bubbles_df <- grase::detect_bubbles_igraph(g)
+ordered_df <- grase::bubble_ordering4(g, bubbles_df)
+head(ordered_df[, c("source", "sink", "span", "num_paths")])
+}
+}

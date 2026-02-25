@@ -38,3 +38,17 @@ Modified graph object with rMATS event annotations
 \description{
 Map rMATS events using multinomial analysis (k-way partitions)
 }
+\examples{
+\dontrun{
+g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+splits <- read.table("ENSG00000000003.multinomial.txt", header = TRUE, sep = "\t")
+fromGTF_SE <- read.table("fromGTF.SE.txt", header = TRUE, sep = "\t")
+results <- grase::map_rMATS_multinomial(
+  g = g, gene = "ENSG00000000003.14",
+  gff = "ENSG00000000003.dexseq.gff",
+  fromGTF_A3SS = data.frame(), fromGTF_A5SS = data.frame(),
+  fromGTF_SE = fromGTF_SE, fromGTF_RI = data.frame(),
+  splits = splits
+)
+}
+}

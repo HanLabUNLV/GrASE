@@ -9,3 +9,12 @@ get_bubble_variants(txpathmat, sgnodetypes, i, j)
 \description{
 copied from SplicingGraphs
 }
+\examples{
+\dontrun{
+g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+g <- grase::set_txpath_to_vertex_attr(g)
+txmat <- grase::make_matrix_from_txpath_igraph(g)
+sgtypes <- grase::get_sgnodetypes(txmat)
+variants <- grase::get_bubble_variants(txmat, sgtypes, 2, 6)
+}
+}

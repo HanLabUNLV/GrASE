@@ -19,3 +19,12 @@ find_diff_and_ref_exparts_pairwise(
 \description{
 Find differential and reference exonic parts for pairwise combinations
 }
+\examples{
+\dontrun{
+g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+g <- grase::set_edge_names(g)
+result <- grase::n_choose_2_paths(
+  gene = "ENSG00000000003.14", g = g, sg = NULL, outdir = tempdir()
+)
+}
+}

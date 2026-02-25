@@ -9,3 +9,15 @@ plottx(gene, outdir, gene_edges, gene_nodes)
 \description{
 Style and tx structure
 }
+\examples{
+\dontrun{
+library(SplicingGraphs)
+gr <- rtracklayer::import("ENSG00000000003.gtf")
+gr <- gr[!(rtracklayer::mcols(gr)$type \%in\% c("start_codon", "stop_codon"))]
+sg <- SplicingGraphs::SplicingGraphs(txdbmaker::makeTxDbFromGRanges(gr), min.ntx = 1)
+gene_edges <- as.data.frame(SplicingGraphs::sgedges(sg["ENSG00000000003.14"]))
+gene_nodes <- SplicingGraphs::sgnodes(sg["ENSG00000000003.14"])
+grase::plottx("ENSG00000000003.14", outdir = tempdir(),
+              gene_edges = gene_edges, gene_nodes = gene_nodes)
+}
+}

@@ -9,3 +9,11 @@ detect_bubbles_i_j_igraph(v_start_idx, v_end_idx, g, v_start_name, v_end_name)
 \description{
 bubble detection between v_start and v_end
 }
+\examples{
+\dontrun{
+g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+g <- grase::set_txpath_to_vertex_attr(g)
+v_names <- igraph::V(g)$name
+result <- grase::detect_bubbles_i_j_igraph(2, 6, g, v_names[2], v_names[6])
+}
+}

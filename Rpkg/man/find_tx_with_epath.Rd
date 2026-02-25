@@ -9,3 +9,12 @@ find_tx_with_epath(g, trans, edges_list)
 \description{
 Find transcripts that use given edge paths
 }
+\examples{
+\dontrun{
+g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+g <- grase::set_edge_names(g)
+trans <- grase::transcripts_from_igraph(g)
+edge_names <- igraph::E(g)$name[igraph::E(g)$ex_or_in == "ex"]
+result <- grase::find_tx_with_epath(g, trans, list(edge_names[1:2]))
+}
+}

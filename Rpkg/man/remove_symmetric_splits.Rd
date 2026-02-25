@@ -9,3 +9,12 @@ remove_symmetric_splits(splits)
 \description{
 Remove symmetric splits (where group1/group2 are swapped)
 }
+\examples{
+splits <- list(
+  list(group1 = c("A"), group2 = c("B", "C")),
+  list(group1 = c("B", "C"), group2 = c("A")),
+  list(group1 = c("A", "B"), group2 = c("C"))
+)
+unique_splits <- grase::remove_symmetric_splits(splits)
+length(unique_splits)
+}

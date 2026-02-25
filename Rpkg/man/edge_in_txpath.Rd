@@ -9,3 +9,12 @@ edge_in_txpath(g, trans, e)
 \description{
 Check if edge is in transcript path
 }
+\examples{
+\dontrun{
+g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+g <- grase::set_edge_names(g)
+trans <- grase::transcripts_from_igraph(g)
+eid <- as.integer(igraph::E(g))[1]
+grase::edge_in_txpath(g, trans, eid)
+}
+}

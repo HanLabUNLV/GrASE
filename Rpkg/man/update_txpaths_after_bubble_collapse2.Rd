@@ -20,3 +20,13 @@ The updated igraph graph
 After removing edges from a collapsed bubble, reassign the affected
 transcripts to the kept paths by setting edge attributes.
 }
+\examples{
+\dontrun{
+g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+g <- grase::set_edge_names(g)
+trans <- grase::transcripts_from_igraph(g)
+epaths <- list(c("3-5:ex", "5-7:ex"))
+tx_list <- grase::find_tx_with_epath(g, trans, epaths)
+g <- grase::update_txpaths_after_bubble_collapse2(g, tx_list, epaths)
+}
+}

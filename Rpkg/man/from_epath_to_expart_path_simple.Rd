@@ -2,10 +2,18 @@
 % Please edit documentation in R/graph_utils.R
 \name{from_epath_to_expart_path_simple}
 \alias{from_epath_to_expart_path_simple}
-\title{convert vertex path to exon path}
+\title{convert edge path (by name) to exonic part path}
 \usage{
 from_epath_to_expart_path_simple(g, epath)
 }
 \description{
-convert vertex path to exon path
+convert edge path (by name) to exonic part path
+}
+\examples{
+\dontrun{
+g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+g <- grase::set_edge_names(g)
+epath <- c("R-3:R", "3-5:ex", "5-7:ex", "7-L:L")
+expart_path <- grase::from_epath_to_expart_path_simple(g, epath)
+}
 }

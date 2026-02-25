@@ -9,3 +9,11 @@ valid_partitions_idx(dag)
 \description{
 Generate valid partition indices from DAG
 }
+\examples{
+dag <- igraph::graph_from_edgelist(
+  matrix(c("A","B", "B","C"), ncol=2, byrow=TRUE), directed = TRUE
+)
+igraph::V(dag)$name <- c("A","B","C")
+idx_splits <- grase::valid_partitions_idx(dag)
+idx_splits
+}

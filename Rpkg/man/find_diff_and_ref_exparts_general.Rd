@@ -19,3 +19,12 @@ find_diff_and_ref_exparts_general(
 \description{
 Find differential and reference exonic parts for multinomial partitions
 }
+\examples{
+\dontrun{
+g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+g <- grase::set_edge_names(g)
+result <- grase::multinomial_paths(
+  gene = "ENSG00000000003.14", g = g, sg = NULL, outdir = tempdir()
+)
+}
+}

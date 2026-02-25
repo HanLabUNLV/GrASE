@@ -20,3 +20,10 @@ matrix, edge-attribute positions (valid for regular ex/in edges), vertex-based
 positions (valid for ALL edges including ex_part edges whose from_pos/to_pos
 attributes are stored as "NA"), and DEXSeq fragment labels.
 }
+\examples{
+\dontrun{
+g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+ge <- grase::precompute_gene_graph(g)
+names(ge)
+}
+}

@@ -17,3 +17,12 @@ multinomial_paths(
 \description{
 Compute diff exons from graph using multinomial partitions (each path as its own group)
 }
+\examples{
+\dontrun{
+g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+result <- grase::multinomial_paths(
+  gene = "ENSG00000000003.14", g = g, sg = NULL, outdir = tempdir(), max_path = 20
+)
+head(result[, c("gene", "source", "sink", "setdiff1", "setdiff2", "ref_ex_part")])
+}
+}

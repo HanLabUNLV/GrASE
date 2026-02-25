@@ -9,3 +9,11 @@ from_vpath_to_exon_path(g, bubblepath)
 \description{
 Convert vertex path to exon path
 }
+\examples{
+\dontrun{
+g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+g <- grase::set_edge_names(g)
+bubblepath <- c("R", "3", "5", "L")
+epath <- grase::from_vpath_to_exon_path(g, bubblepath)
+}
+}

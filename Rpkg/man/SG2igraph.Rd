@@ -9,3 +9,14 @@ SG2igraph(geneID, gene_sg, gene_graph)
 \description{
 Convert splicingGraph to igraph
 }
+\examples{
+\dontrun{
+library(SplicingGraphs)
+gr <- rtracklayer::import("ENSG00000000003.gtf")
+gr <- gr[!(rtracklayer::mcols(gr)$type \%in\% c("start_codon", "stop_codon"))]
+sg <- SplicingGraphs::SplicingGraphs(txdbmaker::makeTxDbFromGRanges(gr), min.ntx = 1)
+edges_by_gene <- SplicingGraphs::sgedgesByGene(sg)
+geneID <- "ENSG00000000003.14"
+g <- grase::SG2igraph(geneID, sg[geneID], edges_by_gene[[geneID]])
+}
+}

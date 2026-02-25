@@ -9,3 +9,11 @@ bubble_ordering(g, bubbles_df)
 \description{
 Order bubbles by topological depth
 }
+\examples{
+\dontrun{
+g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+g <- grase::set_edge_names(g)
+bubbles_df <- grase::detect_bubbles_igraph(g)
+ordered_df <- grase::bubble_ordering(g, bubbles_df)
+}
+}

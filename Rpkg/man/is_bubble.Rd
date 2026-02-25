@@ -9,3 +9,11 @@ is_bubble(txpathmat, i, j)
 \description{
 copied from SplicingGraphs
 }
+\examples{
+\dontrun{
+g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+g <- grase::set_txpath_to_vertex_attr(g)
+txmat <- grase::make_matrix_from_txpath_igraph(g)
+grase::is_bubble(txmat, 2, 5)
+}
+}

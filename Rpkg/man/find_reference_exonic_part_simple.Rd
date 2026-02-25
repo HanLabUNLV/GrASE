@@ -17,3 +17,17 @@ find_reference_exonic_part_simple(
 \description{
 Find reference exonic part near bubble region between two partitions
 }
+\examples{
+\dontrun{
+g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+g <- grase::set_edge_names(g)
+ex_or_in_vec <- igraph::edge_attr(g, "ex_or_in")
+g_expart <- igraph::delete_edges(g, igraph::E(g)[ex_or_in_vec == "ex"])
+ref <- grase::find_reference_exonic_part_simple(
+  source = "3", sink = "7",
+  ex_part1_set = character(0), ex_part2_set = character(0),
+  tx_ex_part1_set = character(0), tx_ex_part2_set = character(0),
+  g_expart = g_expart
+)
+}
+}

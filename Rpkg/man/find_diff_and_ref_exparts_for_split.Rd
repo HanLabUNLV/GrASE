@@ -23,3 +23,10 @@ find_diff_and_ref_exparts_for_split(
 \description{
 Find differential and reference exonic parts for binary splits
 }
+\examples{
+\dontrun{
+g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+g <- grase::set_edge_names(g)
+result <- grase::bipartition_paths("ENSG00000000003.14", g, outdir = tempdir())
+}
+}

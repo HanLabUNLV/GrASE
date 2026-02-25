@@ -9,3 +9,11 @@ txpath_from_edgeattr(g, type = "exon")
 \description{
 Generate transcript-paths from igraph edge attributes
 }
+\examples{
+\dontrun{
+g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+txpaths <- grase::txpath_from_edgeattr(g)
+names(txpaths)
+txpaths[[1]]
+}
+}

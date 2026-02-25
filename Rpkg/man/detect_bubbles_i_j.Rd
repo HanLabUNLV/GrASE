@@ -9,3 +9,12 @@ detect_bubbles_i_j(i, j, txpathmat, sgnodetypes)
 \description{
 bubble detection between i and j
 }
+\examples{
+\dontrun{
+g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+g <- grase::set_txpath_to_vertex_attr(g)
+txmat <- grase::make_matrix_from_txpath_igraph(g)
+sgtypes <- grase::get_sgnodetypes(txmat)
+result <- grase::detect_bubbles_i_j(2, 6, txmat, sgtypes)
+}
+}

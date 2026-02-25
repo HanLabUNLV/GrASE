@@ -20,3 +20,12 @@ Compute diff exons from graph using binary partitions
 For each bubble, find all valid binary partitions of paths, then find diff exons for each partition.
 Optionally collapse bubbles with redundant paths.
 }
+\examples{
+\dontrun{
+g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+result <- grase::bipartition_paths(
+  gene = "ENSG00000000003.14", g = g, outdir = tempdir(), max_path = 15
+)
+head(result[, c("gene", "source", "sink", "setdiff1", "setdiff2", "ref_ex_part")])
+}
+}

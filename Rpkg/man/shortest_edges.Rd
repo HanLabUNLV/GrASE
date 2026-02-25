@@ -2,10 +2,17 @@
 % Please edit documentation in R/plot.R
 \name{shortest_edges}
 \alias{shortest_edges}
-\title{Style and plot splicing graph}
+\title{Find the shortest edges in an igraph layout for curvature adjustment}
 \usage{
 shortest_edges(g, coords)
 }
 \description{
-Style and plot splicing graph
+Find the shortest edges in an igraph layout for curvature adjustment
+}
+\examples{
+\dontrun{
+g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+coords <- igraph::layout_with_sugiyama(g)$layout
+pairs <- grase::shortest_edges(g, coords)
+}
 }
