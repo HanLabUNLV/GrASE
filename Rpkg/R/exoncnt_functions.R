@@ -1,6 +1,14 @@
 # Function to sum counts across columns for matching gene:exon keys
 # Function to compute column-wise sum for a gene's exons
+#' Sum exon counts for a comma-separated list of exon fragments
 #' @export
+#' @examples
+#' counts_df <- data.frame(
+#'   s1 = c(10, 20, 5, 0), s2 = c(8, 15, 3, 1),
+#'   gene = "GENE1", exon = c("001", "002", "003", "004"),
+#'   stringsAsFactors = FALSE
+#' )
+#' grase::sum_exon_counts("E001,E003", counts_df)
 sum_exon_counts <- function(count_col, counts_df) {
   if (is.na(count_col) || count_col == "" || count_col == "NA") return(rep(NA_real_, (ncol(counts_df)-2)))
 
@@ -19,7 +27,24 @@ sum_exon_counts <- function(count_col, counts_df) {
 }
 
 
+#' Write exon counts in long format for downstream statistical testing
 #' @export
+#' @examples
+#' \dontrun{
+#' sampleinfo <- c(sampleA = "group1", sampleB = "group1",
+#'                 sampleC = "group2", sampleD = "group2")
+#' ref_counts_df <- data.frame(
+#'   sampleA = c(100, 80), sampleB = c(90, 70),
+#'   sampleC = c(50, 40), sampleD = c(55, 45),
+#'   gene = "GENE1", event = c("1", "2"),
+#'   source = "3", sink = "7",
+#'   ref_ex_part = c("E001", "E002"), setdiff = c("E003", "E004")
+#' )
+#' grase::write_exoncnt_long(ref_counts_df, ref_counts_df,
+#'   events = c("1", "2"), gene_name = "GENE1",
+#'   sampleinfo = sampleinfo, outfilesuffix = "bipartition", outdir = tempdir()
+#' )
+#' }
 write_exoncnt_long <- function(ref_counts_df, diff_counts_df, events, gene_name, sampleinfo, outfilesuffix, outdir) {
 
   ref_long <- ref_counts_df[ref_counts_df$event %in% events,] %>% 
@@ -47,7 +72,19 @@ write_exoncnt_long <- function(ref_counts_df, diff_counts_df, events, gene_name,
 
 }
 
+#' Count exonic part reads for bipartition events
 #' @export
+#' @examples
+#' \dontrun{
+#' countmat <- read.table("GENE1.dexseq.counts.txt", header = TRUE)
+#' sampleinfo <- c(sampleA = "group1", sampleB = "group1",
+#'                 sampleC = "group2", sampleD = "group2")
+#' grase::count_bipartitions(
+#'   bipartition_file = "GENE1.bipartition.txt",
+#'   countmat = countmat, sampleinfo = sampleinfo,
+#'   outdir = tempdir(), outfilesuffix = "bipartition"
+#' )
+#' }
 count_bipartitions <- function(bipartition_file, countmat, sampleinfo, outdir, outfilesuffix) {
   bipartitions <- as.data.frame(read_tsv(bipartition_file, col_types = cols(.default = "c")))  # Reads columns as characters
   bipartitions$event = rownames(bipartitions)
@@ -126,7 +163,19 @@ count_bipartitions <- function(bipartition_file, countmat, sampleinfo, outdir, o
 # Like count_bipartitions() but emits BOTH setdiff1 and setdiff2 as separate
 # testable events (suffixed _s1 / _s2) instead of picking the higher-count side.
 # This lets the statistical test see both sides of each bipartition independently.
+#' Count exonic part reads for both setdiff1 and setdiff2 of bipartition events
 #' @export
+#' @examples
+#' \dontrun{
+#' countmat <- read.table("GENE1.dexseq.counts.txt", header = TRUE)
+#' sampleinfo <- c(sampleA = "group1", sampleB = "group1",
+#'                 sampleC = "group2", sampleD = "group2")
+#' grase::count_bipartitions_both(
+#'   bipartition_file = "GENE1.bipartition.txt",
+#'   countmat = countmat, sampleinfo = sampleinfo,
+#'   outdir = tempdir(), outfilesuffix = "bipartition"
+#' )
+#' }
 count_bipartitions_both <- function(bipartition_file, countmat, sampleinfo, outdir, outfilesuffix) {
   bipartitions <- as.data.frame(read_tsv(bipartition_file, col_types = cols(.default = "c")))
   bipartitions$event = rownames(bipartitions)
@@ -209,7 +258,18 @@ count_bipartitions_both <- function(bipartition_file, countmat, sampleinfo, outd
 }
 
 
+#' Count exonic part reads for multinomial events
 #' @export
+#' @examples
+#' \dontrun{
+#' countmat <- read.table("GENE1.dexseq.counts.txt", header = TRUE)
+#' sampleinfo <- c(sampleA = "group1", sampleB = "group1",
+#'                 sampleC = "group2", sampleD = "group2")
+#' grase::count_multinomial(
+#'   multinomial_file = "GENE1.multinomial.txt",
+#'   countmat = countmat, sampleinfo = sampleinfo, outdir = tempdir()
+#' )
+#' }
 count_multinomial <- function(multinomial_file, countmat, sampleinfo, outdir) {
   # 1. Load the definitions file
   multi_df <- as.data.frame(read_tsv(multinomial_file, col_types = cols(.default = "c")))

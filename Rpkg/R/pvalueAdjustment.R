@@ -2,8 +2,21 @@
 # unexported functions  copied from DESeq2
 ###########################################################
 
-#' pvalueAdjustment function 
+#' pvalueAdjustment function
 #' @export
+#' @examples
+#' \dontrun{
+#' results <- data.frame(
+#'   gene = c("GENE1", "GENE1", "GENE2"),
+#'   event = c("1", "2", "1"),
+#'   pvalue = c(0.01, 0.04, 0.20),
+#'   baseMean = c(100, 50, 10)
+#' )
+#' results_adj <- grase::pvalueAdjustment(results,
+#'   independentFiltering = FALSE, alpha = 0.05, pAdjustMethod = "BH"
+#' )
+#' results_adj[, c("gene", "event", "pvalue", "padj")]
+#' }
 pvalueAdjustment <- function(res, independentFiltering, filter,
                              theta, alpha, pAdjustMethod) {
   # perform independent filtering

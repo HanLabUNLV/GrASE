@@ -6,6 +6,12 @@
 
 #' Build transcript-path logical matrix from index lists
 #' @export
+#' @examples
+#' \dontrun{
+#' g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+#' g <- grase::set_txpath_to_vertex_attr(g)
+#' txmat <- grase::make_matrix_from_txpath_igraph(g)
+#' }
 make_matrix_from_txpath_igraph <- function(g, txpath_vertex_list) {
    
   attrs <- igraph::vertex_attr_names(g)
@@ -29,10 +35,17 @@ make_matrix_from_txpath_igraph <- function(g, txpath_vertex_list) {
   newmat
 }
 
-#' identifies nodes that are exon starts and ends and marks them with 1 and 2 respectively.  
+#' identifies nodes that are exon starts and ends and marks them with 1 and 2 respectively.
 #' copied from SplicingGraphs
 #' @export
-get_sgnodetypes <- function (txpathmat, check.matrix = FALSE) 
+#' @examples
+#' \dontrun{
+#' g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+#' g <- grase::set_txpath_to_vertex_attr(g)
+#' txmat <- grase::make_matrix_from_txpath_igraph(g)
+#' node_types <- grase::get_sgnodetypes(txmat)
+#' }
+get_sgnodetypes <- function (txpathmat, check.matrix = FALSE)
 {
     ans <- integer(ncol(txpathmat))
     names(ans) <- colnames(txpathmat)
@@ -58,7 +71,14 @@ get_sgnodetypes <- function (txpathmat, check.matrix = FALSE)
 
 #' copied from SplicingGraphs
 #' @export
-is_bubble <- function (txpathmat, i, j) 
+#' @examples
+#' \dontrun{
+#' g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+#' g <- grase::set_txpath_to_vertex_attr(g)
+#' txmat <- grase::make_matrix_from_txpath_igraph(g)
+#' grase::is_bubble(txmat, 2, 5)
+#' }
+is_bubble <- function (txpathmat, i, j)
 {
     txbase <- txpathmat[, i] & txpathmat[, j]   # marks whether i and j are both present (i.e. there is a path from i to j) in each transcript
     if (sum(txbase) <= 1L) 
@@ -75,7 +95,15 @@ is_bubble <- function (txpathmat, i, j)
 
 #' copied from SplicingGraphs
 #' @export
-get_bubble_variants <- function (txpathmat, sgnodetypes, i, j) 
+#' @examples
+#' \dontrun{
+#' g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+#' g <- grase::set_txpath_to_vertex_attr(g)
+#' txmat <- grase::make_matrix_from_txpath_igraph(g)
+#' sgtypes <- grase::get_sgnodetypes(txmat)
+#' variants <- grase::get_bubble_variants(txmat, sgtypes, 2, 6)
+#' }
+get_bubble_variants <- function (txpathmat, sgnodetypes, i, j)
 {
     txbase <- txpathmat[, i] & txpathmat[, j] # which transcripts are passing i and j
     bubble_submat <- txpathmat[txbase, (i + 1L):(j - 1L), drop = FALSE] # columns in between i and j for txbase
@@ -119,6 +147,14 @@ get_bubble_variants <- function (txpathmat, sgnodetypes, i, j)
 
 #' bubble detection between i and j
 #' @export
+#' @examples
+#' \dontrun{
+#' g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+#' g <- grase::set_txpath_to_vertex_attr(g)
+#' txmat <- grase::make_matrix_from_txpath_igraph(g)
+#' sgtypes <- grase::get_sgnodetypes(txmat)
+#' result <- grase::detect_bubbles_i_j(2, 6, txmat, sgtypes)
+#' }
 detect_bubbles_i_j <- function(i, j, txpathmat, sgnodetypes)
 {
     if (!is_bubble(txpathmat, i, j)) 
@@ -148,7 +184,14 @@ detect_bubbles_i_j <- function(i, j, txpathmat, sgnodetypes)
 
 #' Main bubble detection from matrix
 #' @export
-detect_bubbles_from_mat <- function (txpathmat) 
+#' @examples
+#' \dontrun{
+#' g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+#' g <- grase::set_txpath_to_vertex_attr(g)
+#' txmat <- grase::make_matrix_from_txpath_igraph(g)
+#' bubbles_df <- grase::detect_bubbles_from_mat(txmat)
+#' }
+detect_bubbles_from_mat <- function (txpathmat)
 {
     prev_locale <- Sys.getlocale("LC_COLLATE")
     Sys.setlocale("LC_COLLATE", "C")
@@ -177,8 +220,14 @@ detect_bubbles_from_mat <- function (txpathmat)
 }
 
 
+#' Get node types (exon start/end) from igraph splice graph
 #' @export
-get_sgnodetypes_igraph <- function (g_tmp, check.graph=FALSE) 
+#' @examples
+#' \dontrun{
+#' g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+#' node_types <- grase::get_sgnodetypes_igraph(g)
+#' }
+get_sgnodetypes_igraph <- function (g_tmp, check.graph=FALSE)
 {
   nodes = igraph::V(g_tmp)
    
@@ -203,7 +252,14 @@ get_sgnodetypes_igraph <- function (g_tmp, check.graph=FALSE)
 
 
 
+#' Get all simple paths through a bubble in an igraph splice graph
 #' @export
+#' @examples
+#' \dontrun{
+#' g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+#' g <- grase::set_edge_names(g)
+#' paths <- grase::bubble_paths_igraph(g, "3", "7")
+#' }
 bubble_paths_igraph <- function(g, v_start, v_end) {
 
   ex_parts = igraph::E(g)[igraph::edge_attr(g)$ex_or_in == 'ex_part']
@@ -218,7 +274,15 @@ bubble_paths_igraph <- function(g, v_start, v_end) {
 
 
 
+#' Get bubble variant partitions and paths from igraph splice graph
 #' @export
+#' @examples
+#' \dontrun{
+#' g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+#' g <- grase::set_txpath_to_vertex_attr(g)
+#' variants <- grase::get_bubble_variants_igraph(g, 2, 6)
+#' # Returns list with $partition and $path elements
+#' }
 get_bubble_variants_igraph <- function(g, v_start_idx, v_end_idx) {
 
   # ensure numeric vertex IDs
@@ -376,6 +440,13 @@ get_bubble_variants_igraph <- function(g, v_start_idx, v_end_idx) {
 
 #' bubble detection between v_start and v_end
 #' @export
+#' @examples
+#' \dontrun{
+#' g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+#' g <- grase::set_txpath_to_vertex_attr(g)
+#' v_names <- igraph::V(g)$name
+#' result <- grase::detect_bubbles_i_j_igraph(2, 6, g, v_names[2], v_names[6])
+#' }
 detect_bubbles_i_j_igraph <- function(v_start_idx, v_end_idx, g, v_start_name, v_end_name)
 {
   
@@ -407,9 +478,16 @@ detect_bubbles_i_j_igraph <- function(v_start_idx, v_end_idx, g, v_start_name, v
 
 
 
-#' Main bubble detection from matrix
+#' Main bubble detection from igraph splice graph
 #' @export
-detect_bubbles_igraph <- function (g) 
+#' @examples
+#' \dontrun{
+#' g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+#' g <- grase::set_edge_names(g)
+#' bubbles_df <- grase::detect_bubbles_igraph(g)
+#' # Returns S4Vectors::DataFrame with columns: source, sink, n, partitions, paths
+#' }
+detect_bubbles_igraph <- function (g)
 {
   # set transcript vertex_attr 
   if (length(igraph::vertex_attr_names(g)) <= 4)  {
@@ -453,6 +531,13 @@ detect_bubbles_igraph <- function (g)
 
 #' Generate valid binary partitions from DAG
 #' @export
+#' @examples
+#' dag <- igraph::graph_from_edgelist(
+#'   matrix(c("A","B", "B","C"), ncol=2, byrow=TRUE), directed = TRUE
+#' )
+#' igraph::V(dag)$name <- c("A","B","C")
+#' splits <- grase::valid_partitions(dag)
+#' length(splits)
 valid_partitions <- function(dag) {
   nodes <- igraph::V(dag)$name
   n     <- length(nodes)
@@ -498,6 +583,13 @@ valid_partitions <- function(dag) {
 
 #' Generate valid partition indices from DAG
 #' @export
+#' @examples
+#' dag <- igraph::graph_from_edgelist(
+#'   matrix(c("A","B", "B","C"), ncol=2, byrow=TRUE), directed = TRUE
+#' )
+#' igraph::V(dag)$name <- c("A","B","C")
+#' idx_splits <- grase::valid_partitions_idx(dag)
+#' idx_splits
 valid_partitions_idx <- function(dag) {
   nodes <- igraph::V(dag)$name
   n     <- length(nodes)
@@ -541,6 +633,14 @@ valid_partitions_idx <- function(dag) {
 
 #' Remove symmetric splits (where group1/group2 are swapped)
 #' @export
+#' @examples
+#' splits <- list(
+#'   list(group1 = c("A"), group2 = c("B", "C")),
+#'   list(group1 = c("B", "C"), group2 = c("A")),
+#'   list(group1 = c("A", "B"), group2 = c("C"))
+#' )
+#' unique_splits <- grase::remove_symmetric_splits(splits)
+#' length(unique_splits)
 remove_symmetric_splits <- function(splits){
   unique_splits <- list()
   for (split in splits) {
@@ -565,6 +665,15 @@ remove_symmetric_splits <- function(splits){
 
 #' Get topological interval for bubble
 #' @export
+#' @examples
+#' \dontrun{
+#' g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+#' g <- grase::set_edge_names(g)
+#' bubbles_df <- grase::detect_bubbles_igraph(g)
+#' topo <- igraph::topo_sort(g, mode = "out")
+#' topo_idx <- setNames(seq_along(topo), topo$name)
+#' interval <- grase::get_bubble_topo_interval(bubbles_df[1, ], topo_idx)
+#' }
 get_bubble_topo_interval <- function(bubble, topo_idx) {
   source_idx <- topo_idx[bubble$source]
   sink_idx <- topo_idx[bubble$sink]
@@ -573,6 +682,10 @@ get_bubble_topo_interval <- function(bubble, topo_idx) {
 
 #' Get bubble depths from intervals
 #' @export
+#' @examples
+#' intervals <- list(c(1, 10), c(3, 7), c(12, 15))
+#' depths <- grase::get_bubble_depths(intervals)
+#' depths
 get_bubble_depths <- function(intervals) {
   depths <- integer(length(intervals))
   for (i in seq_along(intervals)) {
@@ -593,6 +706,13 @@ get_bubble_depths <- function(intervals) {
 
 #' Order bubbles by topological depth
 #' @export
+#' @examples
+#' \dontrun{
+#' g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+#' g <- grase::set_edge_names(g)
+#' bubbles_df <- grase::detect_bubbles_igraph(g)
+#' ordered_df <- grase::bubble_ordering(g, bubbles_df)
+#' }
 bubble_ordering <- function(g, bubbles_df) {
   topo <- igraph::topo_sort(g, mode = "out")
   topo_idx <- setNames(seq_along(topo), topo$name)
@@ -615,6 +735,14 @@ bubble_ordering <- function(g, bubbles_df) {
 #' @param bubbles_df A data frame of detected bubbles
 #' @return The reordered bubbles_df with added columns: source_idx, sink_idx, span, num_paths
 #' @export
+#' @examples
+#' \dontrun{
+#' g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+#' g <- grase::set_edge_names(g)
+#' bubbles_df <- grase::detect_bubbles_igraph(g)
+#' ordered_df <- grase::bubble_ordering4(g, bubbles_df)
+#' head(ordered_df[, c("source", "sink", "span", "num_paths")])
+#' }
 bubble_ordering4 <- function(g, bubbles_df) {
   if (nrow(bubbles_df) == 0) return(bubbles_df)
 
@@ -644,6 +772,15 @@ bubble_ordering4 <- function(g, bubbles_df) {
 #' @param epath Edge paths to keep (list of edge name vectors)
 #' @return The updated igraph graph
 #' @export
+#' @examples
+#' \dontrun{
+#' g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+#' g <- grase::set_edge_names(g)
+#' trans <- grase::transcripts_from_igraph(g)
+#' epaths <- list(c("3-5:ex", "5-7:ex"))
+#' tx_list <- grase::find_tx_with_epath(g, trans, epaths)
+#' g <- grase::update_txpaths_after_bubble_collapse2(g, tx_list, epaths)
+#' }
 update_txpaths_after_bubble_collapse2 <- function(g, tx_list, epath) {
   eid = as.integer(igraph::E(g))
   names(eid) = igraph::edge_attr(g, "name")

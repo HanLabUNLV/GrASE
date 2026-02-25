@@ -3,6 +3,19 @@
 
 #' Find reference exonic part near bubble region between two partitions
 #' @export
+#' @examples
+#' \dontrun{
+#' g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+#' g <- grase::set_edge_names(g)
+#' ex_or_in_vec <- igraph::edge_attr(g, "ex_or_in")
+#' g_expart <- igraph::delete_edges(g, igraph::E(g)[ex_or_in_vec == "ex"])
+#' ref <- grase::find_reference_exonic_part_simple(
+#'   source = "3", sink = "7",
+#'   ex_part1_set = character(0), ex_part2_set = character(0),
+#'   tx_ex_part1_set = character(0), tx_ex_part2_set = character(0),
+#'   g_expart = g_expart
+#' )
+#' }
 find_reference_exonic_part_simple <- function(source, sink, ex_part1_set, ex_part2_set, tx_ex_part1_set, tx_ex_part2_set, g_expart) {
   source_adj_exonic_part <- c()
   sink_adj_exonic_part <- c()
@@ -28,6 +41,17 @@ find_reference_exonic_part_simple <- function(source, sink, ex_part1_set, ex_par
 
 #' Find reference exonic part near bubble region (legacy version)
 #' @export
+#' @examples
+#' \dontrun{
+#' g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+#' g <- grase::set_edge_names(g)
+#' ref <- grase::find_reference_exonic_part(
+#'   source = "3", sink = "7",
+#'   ex_part1_set = integer(0), ex_part2_set = integer(0),
+#'   tx_ex_part1_set = integer(0), tx_ex_part2_set = integer(0),
+#'   g = g
+#' )
+#' }
 find_reference_exonic_part <- function(source, sink, ex_part1_set, ex_part2_set, tx_ex_part1_set, tx_ex_part2_set, g) {
   source_adj_exonic_part <- c()
   sink_adj_exonic_part <- c()
@@ -49,6 +73,12 @@ find_reference_exonic_part <- function(source, sink, ex_part1_set, ex_part2_set,
 
 #' Find differential and reference exonic parts for binary splits
 #' @export
+#' @examples
+#' \dontrun{
+#' g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+#' g <- grase::set_edge_names(g)
+#' result <- grase::bipartition_paths("ENSG00000000003.14", g, outdir = tempdir())
+#' }
 find_diff_and_ref_exparts_for_split <- function(g, source, sink, split, parsed_partitions, parsed_paths, tx_ex_parts, bipartitions_df, gene=gene,
                                                   g_exon=NULL, g_expart=NULL, ex_or_in_gexpart=NULL, dexseq_frag=NULL) {
 
@@ -142,6 +172,14 @@ find_diff_and_ref_exparts_for_split <- function(g, source, sink, split, parsed_p
 
 #' Compute diff exons from graph and splicing structure for specific transcripts
 #' @export
+#' @examples
+#' \dontrun{
+#' g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+#' tx_ids <- c("ENST00000373020.8", "ENST00000494424.1")
+#' result <- grase::diff_exons_between_tx(
+#'   gene = "ENSG00000000003.14", g = g, tx_ids = tx_ids, outdir = tempdir()
+#' )
+#' }
 diff_exons_between_tx <- function(gene, g, tx_ids, outdir) {
 
   bipartitions_df <- data.frame()
@@ -208,6 +246,13 @@ diff_exons_between_tx <- function(gene, g, tx_ids, outdir) {
 
 #' Compute diff exons with one-vs-rest approach for each partition
 #' @export
+#' @examples
+#' \dontrun{
+#' g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+#' result <- grase::diff_exons_gene_ovr(
+#'   gene = "ENSG00000000003.14", g = g, outdir = tempdir()
+#' )
+#' }
 diff_exons_gene_ovr <- function(gene, g, outdir) {
 
   bipartitions_df <- data.frame()
@@ -261,9 +306,17 @@ diff_exons_gene_ovr <- function(gene, g, outdir) {
 }
 
 #' Compute diff exons from graph using binary partitions
-#' For each bubble, find all valid binary partitions of paths, then find diff exons for each partition. 
+#' For each bubble, find all valid binary partitions of paths, then find diff exons for each partition.
 #' Optionally collapse bubbles with redundant paths.
 #' @export
+#' @examples
+#' \dontrun{
+#' g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+#' result <- grase::bipartition_paths(
+#'   gene = "ENSG00000000003.14", g = g, outdir = tempdir(), max_path = 15
+#' )
+#' head(result[, c("gene", "source", "sink", "setdiff1", "setdiff2", "ref_ex_part")])
+#' }
 bipartition_paths <- function(gene, g, outdir, max_path = 15, max_span = Inf, collapse_bubbles=FALSE) {
 
   bipartitions_df <- data.frame()
@@ -443,6 +496,17 @@ bipartition_paths <- function(gene, g, outdir, max_path = 15, max_span = Inf, co
 
 #' Infer differential exonic parts given two groups of transcripts (e.g. changed vs constant)
 #' @export
+#' @examples
+#' \dontrun{
+#' g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+#' result <- grase::infer_diff_exons_from_tx_groups(
+#'   gene       = "ENSG00000000003.14",
+#'   g          = g,
+#'   tx_changed  = c("ENST00000373020.8"),
+#'   tx_constant = c("ENST00000494424.1", "ENST00000379263.3"),
+#'   outdir     = tempdir()
+#' )
+#' }
 infer_diff_exons_from_tx_groups <- function(gene, g, tx_changed, tx_constant, outdir) {
   
   bipartitions_df <- data.frame()

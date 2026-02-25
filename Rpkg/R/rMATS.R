@@ -491,6 +491,19 @@ map_rMATS_event_full_fragment <- function(g, rmats_df, eventType, gene, gff_path
 #' @param splits Bipartition data frame with columns: setdiff1, setdiff2, ref_ex_part, path1, path2
 #' @return Modified graph object with rMATS event annotations
 #' @export
+#' @examples
+#' \dontrun{
+#' g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+#' splits <- read.table("ENSG00000000003.bipartition.txt", header = TRUE, sep = "\t")
+#' fromGTF_SE <- read.table("fromGTF.SE.txt", header = TRUE, sep = "\t")
+#' results <- grase::map_rMATS_bipartition(
+#'   g = g, gene = "ENSG00000000003.14",
+#'   gff = "ENSG00000000003.dexseq.gff",
+#'   fromGTF_A3SS = data.frame(), fromGTF_A5SS = data.frame(),
+#'   fromGTF_SE = fromGTF_SE, fromGTF_RI = data.frame(),
+#'   splits = splits
+#' )
+#' }
 map_rMATS_bipartition <- function(g, gene, gff, fromGTF_A3SS, fromGTF_A5SS, fromGTF_SE, fromGTF_RI, splits) {
   # Ensure we have the expected bipartition structure
   required_cols <- c("setdiff1", "setdiff2", "ref_ex_part", "path1", "path2")
@@ -547,6 +560,19 @@ map_rMATS_bipartition <- function(g, gene, gff, fromGTF_A3SS, fromGTF_A5SS, from
 #' @param splits Multinomial data frame with setdiff1, setdiff2, etc. columns
 #' @return Modified graph object with rMATS event annotations
 #' @export
+#' @examples
+#' \dontrun{
+#' g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+#' splits <- read.table("ENSG00000000003.multinomial.txt", header = TRUE, sep = "\t")
+#' fromGTF_SE <- read.table("fromGTF.SE.txt", header = TRUE, sep = "\t")
+#' results <- grase::map_rMATS_multinomial(
+#'   g = g, gene = "ENSG00000000003.14",
+#'   gff = "ENSG00000000003.dexseq.gff",
+#'   fromGTF_A3SS = data.frame(), fromGTF_A5SS = data.frame(),
+#'   fromGTF_SE = fromGTF_SE, fromGTF_RI = data.frame(),
+#'   splits = splits
+#' )
+#' }
 map_rMATS_multinomial <- function(g, gene, gff, fromGTF_A3SS, fromGTF_A5SS, fromGTF_SE, fromGTF_RI, splits) {
   # Convert multinomial to bipartition format for rMATS compatibility
   # Strategy: Create pairwise comparisons from k-way partitions
@@ -625,6 +651,19 @@ map_rMATS_multinomial <- function(g, gene, gff, fromGTF_A3SS, fromGTF_A5SS, from
 #' @param analysis_type Optional string specifying analysis type ("bipartition", "multinomial", "n_choose_2").
 #' @return Modified graph object with rMATS event annotations
 #' @export
+#' @examples
+#' \dontrun{
+#' g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+#' splits <- read.table("ENSG00000000003.bipartition.txt", header = TRUE, sep = "\t")
+#' fromGTF_SE <- read.table("fromGTF.SE.txt", header = TRUE, sep = "\t")
+#' results <- grase::map_rMATS(
+#'   g = g, gene = "ENSG00000000003.14",
+#'   gff = "ENSG00000000003.dexseq.gff",
+#'   fromGTF_A3SS = data.frame(), fromGTF_A5SS = data.frame(),
+#'   fromGTF_SE = fromGTF_SE, fromGTF_RI = data.frame(),
+#'   splits = splits, analysis_type = "bipartition"
+#' )
+#' }
 map_rMATS <- function(g, gene, gff, fromGTF_A3SS, fromGTF_A5SS, fromGTF_SE, fromGTF_RI, splits, analysis_type = NULL) {
   # Validate user-provided analysis type
   valid_types <- c("bipartition", "multinomial", "n_choose_2")
@@ -659,6 +698,10 @@ map_rMATS <- function(g, gene, gff, fromGTF_A3SS, fromGTF_A5SS, fromGTF_SE, from
 #' @param row    A single-row data frame or list with rMATS fromGTF columns.
 #' @return list(b1, b2, alt_low, alt_hi) as integers, or NULL if unrecognised.
 #' @export
+#' @examples
+#' se_row <- list(upstreamEE = 1000L, downstreamES = 2000L,
+#'                exonStart_0base = 1100L, exonEnd = 1500L)
+#' grase::rmats_event_boundaries("SE", "+", se_row)
 rmats_event_boundaries <- function(etype, strand, row) {
   p1 <- function(x) as.integer(x) + 1L   # 0-based -> graph position
 
@@ -718,6 +761,12 @@ rmats_event_boundaries <- function(etype, strand, row) {
 #' @return A named list with elements: tx_cols, tx_mat, ex_or_in, from_pos,
 #'   to_pos, vx_from, vx_to, dex_frag.
 #' @export
+#' @examples
+#' \dontrun{
+#' g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+#' ge <- grase::precompute_gene_graph(g)
+#' names(ge)
+#' }
 precompute_gene_graph <- function(g) {
   reserved <- c("sgedge_id", "ex_or_in", "from_pos", "to_pos", "dexseq_fragment")
   tx_cols  <- setdiff(igraph::edge_attr_names(g), reserved)
@@ -768,6 +817,18 @@ precompute_gene_graph <- function(g) {
 #' @return Sorted character vector of DEXSeq fragment labels (e.g. "E001"),
 #'   or \code{character(0)} if no fragments could be identified.
 #' @export
+#' @examples
+#' \dontrun{
+#' g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+#' ge <- grase::precompute_gene_graph(g)
+#' se_row <- list(upstreamEE = 1000L, downstreamES = 2000L,
+#'                exonStart_0base = 1100L, exonEnd = 1500L)
+#' bounds <- grase::rmats_event_boundaries("SE", "+", se_row)
+#' frags <- grase::graph_setdiff_frags(ge,
+#'   b1 = bounds$b1, b2 = bounds$b2,
+#'   alt_low = bounds$alt_low, alt_hi = bounds$alt_hi
+#' )
+#' }
 graph_setdiff_frags <- function(ge, b1, b2, alt_low, alt_hi) {
   fp <- ge$from_pos
   tp <- ge$to_pos

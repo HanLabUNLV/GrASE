@@ -5,6 +5,16 @@
 
 #' Convert splicingGraph to igraph
 #' @export
+#' @examples
+#' \dontrun{
+#' library(SplicingGraphs)
+#' gr <- rtracklayer::import("ENSG00000000003.gtf")
+#' gr <- gr[!(rtracklayer::mcols(gr)$type %in% c("start_codon", "stop_codon"))]
+#' sg <- SplicingGraphs::SplicingGraphs(txdbmaker::makeTxDbFromGRanges(gr), min.ntx = 1)
+#' edges_by_gene <- SplicingGraphs::sgedgesByGene(sg)
+#' geneID <- "ENSG00000000003.14"
+#' g <- grase::SG2igraph(geneID, sg[geneID], edges_by_gene[[geneID]])
+#' }
 SG2igraph <- function(geneID,  gene_sg, gene_graph) {
 
   nodes = SplicingGraphs::sgnodes(gene_sg)
@@ -104,6 +114,12 @@ SG2igraph <- function(geneID,  gene_sg, gene_graph) {
 
 #' get transcript names from igraph edge attributes
 #' @export
+#' @examples
+#' \dontrun{
+#' g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+#' tx_names <- grase::transcripts_from_igraph(g)
+#' tx_names
+#' }
 transcripts_from_igraph <- function(g) {
   attrs <- igraph::edge_attr_names(g)
   excluded <- c("sgedge_id", "ex_or_in", "from_pos", "to_pos", "dexseq_fragment", "name")
@@ -114,6 +130,13 @@ transcripts_from_igraph <- function(g) {
 
 #' Generate transcript-paths from igraph edge attributes
 #' @export
+#' @examples
+#' \dontrun{
+#' g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+#' txpaths <- grase::txpath_from_edgeattr(g)
+#' names(txpaths)
+#' txpaths[[1]]
+#' }
 txpath_from_edgeattr <- function(g, type="exon") {
 
   # Identify transcript attributes on edges (exclude known graph attrs)
@@ -155,7 +178,14 @@ txpath_from_edgeattr <- function(g, type="exon") {
 }
 
 
+#' Set transcript paths as vertex attributes on an igraph splice graph
 #' @export
+#' @examples
+#' \dontrun{
+#' g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+#' g <- grase::set_txpath_to_vertex_attr(g)
+#' igraph::vertex_attr_names(g)
+#' }
 set_txpath_to_vertex_attr <- function(g)
 {
   txpaths <- grase::txpath_from_edgeattr(g)
@@ -175,6 +205,13 @@ set_txpath_to_vertex_attr <- function(g)
 
 #' add dexseq exonic part edges to igraph
 #' @export
+#' @examples
+#' \dontrun{
+#' g <- igraph::read_graph("ENSG00000000003.graphml", format = "graphml")
+#' gff <- readLines("ENSG00000000003.dexseq.gff")
+#' g <- grase::map_DEXSeq_from_gff(g, gff)
+#' igraph::write_graph(g, "ENSG00000000003.dexseq.graphml", "graphml")
+#' }
 map_DEXSeq_from_gff <- function(g, gff) {
   # Takes a gff DEXSeq output file and reads it.
   # The function will create edges on the igraph object based on DEXSeq exon fragments.
@@ -255,6 +292,12 @@ map_DEXSeq_from_gff <- function(g, gff) {
 
 #' Set edge names
 #' @export
+#' @examples
+#' \dontrun{
+#' g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+#' g <- grase::set_edge_names(g)
+#' head(igraph::E(g)$name)
+#' }
 set_edge_names <- function(g) {
 
   el <- igraph::as_edgelist(g, names = TRUE)   # an M×2 matrix of character
@@ -270,6 +313,13 @@ set_edge_names <- function(g) {
 
 #' convert vertex path to exon path
 #' @export
+#' @examples
+#' \dontrun{
+#' g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+#' g <- grase::set_edge_names(g)
+#' vpath <- c("R", "3", "5", "7", "L")
+#' epath <- grase::from_vpath_to_exon_path_simple(g, vpath)
+#' }
 from_vpath_to_exon_path_simple <- function(g, vpath) {
   edge_seq <- igraph::E(g, path = vpath)
   igraph::edge_attr(g, 'name', edge_seq) 
@@ -277,8 +327,15 @@ from_vpath_to_exon_path_simple <- function(g, vpath) {
 
 
 
-#' convert vertex path to exon path
+#' convert edge path (by name) to exonic part path
 #' @export
+#' @examples
+#' \dontrun{
+#' g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+#' g <- grase::set_edge_names(g)
+#' epath <- c("R-3:R", "3-5:ex", "5-7:ex", "7-L:L")
+#' expart_path <- grase::from_epath_to_expart_path_simple(g, epath)
+#' }
 from_epath_to_expart_path_simple <- function(g, epath) {
   # Early return
   if (length(epath) == 0) return(integer(0))
@@ -334,6 +391,13 @@ from_epath_to_expart_path_simple <- function(g, epath) {
 
 #' Convert vertex path to exon path
 #' @export
+#' @examples
+#' \dontrun{
+#' g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+#' g <- grase::set_edge_names(g)
+#' bubblepath <- c("R", "3", "5", "L")
+#' epath <- grase::from_vpath_to_exon_path(g, bubblepath)
+#' }
 from_vpath_to_exon_path <- function(g, bubblepath) {
   n <- length(bubblepath)
   if (n < 2) return(integer(0))
@@ -359,6 +423,14 @@ from_vpath_to_exon_path <- function(g, bubblepath) {
 
 #' Convert exon path to exonic part path
 #' @export
+#' @examples
+#' \dontrun{
+#' g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+#' g <- grase::set_edge_names(g)
+#' bubblepath <- c("R", "3", "5", "L")
+#' exonpath <- grase::from_vpath_to_exon_path(g, bubblepath)
+#' expart_path <- grase::from_exon_path_to_exonic_part_path(g, exonpath)
+#' }
 from_exon_path_to_exonic_part_path <- function(g, exonpath) {
   # Early return
   if (length(exonpath) == 0) return(integer(0))
@@ -421,6 +493,10 @@ is_proper_subset <- function(a, b) {
 
 #' Create subset relation graph from sets
 #' @export
+#' @examples
+#' sets <- list("1" = c(1L, 2L), "2" = c(1L, 2L, 3L), "3" = c(4L, 5L))
+#' dag <- grase::path_subset_relation(sets)
+#' igraph::E(dag)
 path_subset_relation <- function(sets) {
   n <- length(sets)
   if (n == 0) return(igraph::graph.empty())
@@ -445,12 +521,28 @@ path_subset_relation <- function(sets) {
 
 #' Check if edge is in transcript path
 #' @export
+#' @examples
+#' \dontrun{
+#' g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+#' g <- grase::set_edge_names(g)
+#' trans <- grase::transcripts_from_igraph(g)
+#' eid <- as.integer(igraph::E(g))[1]
+#' grase::edge_in_txpath(g, trans, eid)
+#' }
 edge_in_txpath <- function(g, trans, e){
    sapply(igraph::edge_attr(g)[trans], `[`, e)
 }
 
 #' Find transcripts that use given edge paths
 #' @export
+#' @examples
+#' \dontrun{
+#' g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+#' g <- grase::set_edge_names(g)
+#' trans <- grase::transcripts_from_igraph(g)
+#' edge_names <- igraph::E(g)$name[igraph::E(g)$ex_or_in == "ex"]
+#' result <- grase::find_tx_with_epath(g, trans, list(edge_names[1:2]))
+#' }
 find_tx_with_epath <- function(g, trans, edges_list) {
   eid = as.integer(igraph::E(g))
   names(eid) = igraph::edge_attr(g, "name")

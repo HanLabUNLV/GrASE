@@ -3,6 +3,14 @@
 
 #' Find differential and reference exonic parts for pairwise combinations
 #' @export
+#' @examples
+#' \dontrun{
+#' g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+#' g <- grase::set_edge_names(g)
+#' result <- grase::n_choose_2_paths(
+#'   gene = "ENSG00000000003.14", g = g, sg = NULL, outdir = tempdir()
+#' )
+#' }
 find_diff_and_ref_exparts_pairwise <- function(
     g, source, sink, path_pairs, 
     parsed_partitions, parsed_paths, tx_ex_parts, 
@@ -115,6 +123,16 @@ generate_path_pairs <- function(n_paths) {
 
 #' Convert pairwise analysis results to standardized data frame
 #' @export
+#' @examples
+#' pairwise_list <- list(
+#'   list(gene="GENE1", source="3", sink="7",
+#'        path1_idx=1L, path2_idx=2L,
+#'        ref_ex_part="E001", setdiff1="E002", setdiff2="E003",
+#'        transcripts1="TX1", transcripts2="TX2",
+#'        path1="3-5-7", path2="3-6-7")
+#' )
+#' df <- grase::standardize_pairwise_columns(pairwise_list)
+#' colnames(df)
 standardize_pairwise_columns <- function(pairwise_list) {
   if (length(pairwise_list) == 0) return(data.frame())
   
@@ -147,6 +165,15 @@ standardize_pairwise_columns <- function(pairwise_list) {
 
 #' Compute diff exons from graph using n-choose-2 pairwise analysis
 #' @export
+#' @examples
+#' \dontrun{
+#' g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+#' result <- grase::n_choose_2_paths(
+#'   gene = "ENSG00000000003.14", g = g, sg = NULL, outdir = tempdir(), max_path = 20
+#' )
+#' head(result[, c("gene", "source", "sink", "path1_idx", "path2_idx",
+#'                  "setdiff1", "setdiff2", "ref_ex_part")])
+#' }
 n_choose_2_paths <- function(gene, g, sg, outdir, max_path = 20, max_span = Inf, collapse_bubbles=FALSE) {
 
   pairwise_list <- list()

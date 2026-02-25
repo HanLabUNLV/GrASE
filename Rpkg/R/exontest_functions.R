@@ -1,6 +1,14 @@
 # --- Data Preparation Functions ---
 
+#' Group exon count data by gene and event
 #' @export
+#' @examples
+#' \dontrun{
+#' splitcnts <- read.table("bipartition.internal.exoncnt.combined.txt",
+#'                         header = TRUE, row.names = NULL)
+#' grouped_data <- grase::group_by_event(splitcnts, col_y = "diff", col_n = "n")
+#' length(grouped_data)
+#' }
 group_by_event <- function(dat, col_y, col_n) {
   dat$y <- dat[[col_y]]
   dat$n <- dat[[col_n]]
@@ -13,7 +21,16 @@ group_by_event <- function(dat, col_y, col_n) {
   return(grouped_data)
 }
 
+#' Estimate beta-binomial dispersion (phi) per event using glmmTMB
 #' @export
+#' @examples
+#' \dontrun{
+#' splitcnts <- read.table("bipartition.internal.exoncnt.combined.txt",
+#'                         header = TRUE, row.names = NULL)
+#' grouped_data <- grase::group_by_event(splitcnts, "diff", "n")
+#' phi_result <- grase::phi_estimate_glmmTMB(grouped_data[[1]])
+#' phi_result
+#' }
 phi_estimate_glmmTMB <- function(dd) {
     gene  <- unique(dd$gene)
     event <- unique(dd$event)
@@ -47,7 +64,14 @@ phi_estimate_glmmTMB <- function(dd) {
 
 
 
+#' Moderate phi estimates on the log scale using empirical Bayes shrinkage
 #' @export
+#' @examples
+#' \dontrun{
+#' phi_df <- read.table("phi.glmmtmb.txt", header = TRUE, row.names = NULL)
+#' phi_table <- grase::moderate_phi_log_scale(phi_df)
+#' head(phi_table[, c("gene", "event", "phi", "phi_mod", "w")])
+#' }
 moderate_phi_log_scale <- function(phi_table, trimming_limit = 1e+10) {
   # 1. Basic Cleaning
   # Remove non-positive phis before log transformation
@@ -105,7 +129,20 @@ moderate_phi_log_scale <- function(phi_table, trimming_limit = 1e+10) {
 #' @param trimming_limit upper bound on phi before log-transform (default 1e10)
 #' @return data.frame with all events in baseMean_df and columns
 #'         z, var_z, z_trend, w, z_mod, phi_mod
+#' Moderate phi estimates using a trend-based loess prior over baseMean
 #' @export
+#' @examples
+#' \dontrun{
+#' phi_df <- read.table("phi.glmmtmb.txt", header = TRUE, row.names = NULL)
+#' splitcnts <- read.table("bipartition.internal.exoncnt.combined.txt",
+#'                         header = TRUE, row.names = NULL)
+#' baseMean_df <- dplyr::summarise(
+#'   dplyr::group_by(splitcnts, gene, event),
+#'   baseMean = mean(n, na.rm = TRUE), .groups = "drop"
+#' )
+#' phi_table <- grase::moderate_phi_trend(phi_df, baseMean_df)
+#' head(phi_table[, c("gene", "event", "baseMean", "phi_mod")])
+#' }
 moderate_phi_trend <- function(phi_df, baseMean_df, span = 0.5,
                                trimming_limit = 1e+10) {
   # -- Step 1: prepare phi estimates --
@@ -169,7 +206,16 @@ moderate_phi_trend <- function(phi_df, baseMean_df, span = 0.5,
 
 # --- DM Estimation & Moderation (NEW) ---
 
+#' Estimate Dirichlet-Multinomial precision per event using VGAM
 #' @export
+#' @examples
+#' \dontrun{
+#' splitcnts <- read.table("multinomial.exoncnt.combined.txt",
+#'                         header = TRUE, row.names = NULL)
+#' grouped_counts <- dplyr::group_split(dplyr::group_by(splitcnts, gene, event))
+#' prec_result <- grase::prec_estimate_vgam(grouped_counts[[1]])
+#' prec_result
+#' }
 prec_estimate_vgam <- function(dd) {
     gene <- unique(dd$gene); event <- unique(dd$event)
     wide_df <- dd %>% dplyr::select(sample, groups, type, count) %>% pivot_wider(names_from = type, values_from = count, values_fill = 0)
@@ -187,7 +233,14 @@ prec_estimate_vgam <- function(dd) {
 }
 
 
+#' Moderate Dirichlet-Multinomial precision estimates using empirical Bayes shrinkage
 #' @export
+#' @examples
+#' \dontrun{
+#' prec_table <- read.table("prec_dm.txt", header = TRUE, row.names = NULL)
+#' prec_table <- grase::moderate_prec_log_scale(prec_table)
+#' head(prec_table[, c("gene", "event", "log_prec", "log_prec_mod", "rho_mod")])
+#' }
 moderate_prec_log_scale <- function(prec_table) {
   # 1. Filter for robust estimation of the prior (ignore failed fits)
   # log_prec is logit(rho). Values like -2e6 are numerical garbage.
@@ -236,6 +289,17 @@ moderate_prec_log_scale <- function(prec_table) {
 
 # 1. Moderated glmmTMB Beta-Binomial with Prior
 #' @export
+#' @examples
+#' \dontrun{
+#' splitcnts <- read.table("bipartition.internal.exoncnt.combined.txt",
+#'                         header = TRUE, row.names = NULL)
+#' splitcnts$groups <- factor(splitcnts$groups)
+#' grouped_data <- grase::group_by_event(splitcnts, "diff", "n")
+#' prior_disp <- data.frame(prior = "normal(-1.5, 1.2)", class = "fixef_disp",
+#'                          coef = "", stringsAsFactors = FALSE)
+#' result <- grase::test_model_glmmTMB_with_prior(grouped_data[[1]], prior_disp, z_bar = -1.5)
+#' result
+#' }
 test_model_glmmTMB_with_prior <- function(dd, prior_disp, z_bar = NULL) {
     gene  <- unique(dd$gene)
     event <- unique(dd$event)
@@ -297,6 +361,18 @@ test_model_glmmTMB_with_prior <- function(dd, prior_disp, z_bar = NULL) {
 
 # 2. Moderated glmmTMB Beta-Binomial EB
 #' @export
+#' @examples
+#' \dontrun{
+#' splitcnts <- read.table("bipartition.internal.exoncnt.combined.txt",
+#'                         header = TRUE, row.names = NULL)
+#' phi_df <- read.table("phi.glmmtmb.txt", header = TRUE, row.names = NULL)
+#' phi_table <- grase::moderate_phi_log_scale(phi_df)
+#' splitcnts_eb <- dplyr::left_join(splitcnts, phi_table, by = c("gene", "event"))
+#' splitcnts_eb$groups <- factor(splitcnts_eb$groups)
+#' grouped_eb <- grase::group_by_event(splitcnts_eb, "diff", "n")
+#' result <- grase::test_model_glmmTMB_EB(grouped_eb[[1]])
+#' result
+#' }
 test_model_glmmTMB_EB <- function(dd) {
     gene  <- unique(dd$gene)
     event <- unique(dd$event)
@@ -337,6 +413,18 @@ test_model_glmmTMB_EB <- function(dd) {
 
 # 3. EB-moderated VGAM beta-binomial
 #' @export
+#' @examples
+#' \dontrun{
+#' splitcnts <- read.table("bipartition.internal.exoncnt.combined.txt",
+#'                         header = TRUE, row.names = NULL)
+#' phi_df <- read.table("phi.glmmtmb.txt", header = TRUE, row.names = NULL)
+#' phi_table <- grase::moderate_phi_log_scale(phi_df)
+#' splitcnts_eb <- dplyr::left_join(splitcnts, phi_table, by = c("gene", "event"))
+#' splitcnts_eb$groups <- factor(splitcnts_eb$groups)
+#' grouped_eb <- grase::group_by_event(splitcnts_eb, "diff", "n")
+#' result <- grase::test_model_vgam_EB_init(grouped_eb[[1]])
+#' result
+#' }
 test_model_vgam_EB_init <- function(dd) {
 
   ## per-gene moderated LRT in VGAM
@@ -405,7 +493,17 @@ test_model_vgam_EB_init <- function(dd) {
 
 
 # 3b. Wilcoxon Rank-Sum Test (Nonparametric)
+#' Test for differential exon usage using Wilcoxon rank-sum test
 #' @export
+#' @examples
+#' \dontrun{
+#' splitcnts <- read.table("bipartition.internal.exoncnt.combined.txt",
+#'                         header = TRUE, row.names = NULL)
+#' splitcnts$groups <- factor(splitcnts$groups)
+#' grouped_data <- grase::group_by_event(splitcnts, "diff", "n")
+#' result <- grase::test_model_wilcoxon(grouped_data[[1]])
+#' result
+#' }
 test_model_wilcoxon <- function(dd) {
     gene  <- unique(dd$gene)
     event <- unique(dd$event)
@@ -452,6 +550,18 @@ test_model_wilcoxon <- function(dd) {
 
 # 4. Moderated VGAM Dirichlet-Multinomial EB
 #' @export
+#' @examples
+#' \dontrun{
+#' splitcnts <- read.table("multinomial.exoncnt.combined.txt",
+#'                         header = TRUE, row.names = NULL)
+#' prec_table <- grase::moderate_prec_log_scale(
+#'   read.table("prec_dm.txt", header = TRUE, row.names = NULL)
+#' )
+#' splitcnts_eb <- dplyr::left_join(splitcnts, prec_table, by = c("gene", "event"))
+#' grouped_eb <- dplyr::group_split(dplyr::group_by(splitcnts_eb, gene, event))
+#' result <- grase::test_model_multinomial_vgam_EB(grouped_eb[[1]])
+#' result
+#' }
 test_model_multinomial_vgam_EB <- function(dd) {
     gene <- unique(dd$gene); event <- unique(dd$event)
     log_prec_mod <- dd$log_prec_mod[1]
@@ -506,6 +616,19 @@ test_model_multinomial_vgam_EB <- function(dd) {
 
 # Updated function for Wald tests in a Multinomial/Dirichlet-Multinomial setting
 #' @export
+#' @examples
+#' \dontrun{
+#' splitcnts <- read.table("multinomial.exoncnt.combined.txt",
+#'                         header = TRUE, row.names = NULL)
+#' prec_table <- grase::moderate_prec_log_scale(
+#'   read.table("prec_dm.txt", header = TRUE, row.names = NULL)
+#' )
+#' splitcnts_eb <- dplyr::left_join(splitcnts, prec_table, by = c("gene", "event"))
+#' grouped_eb <- dplyr::group_split(dplyr::group_by(splitcnts_eb, gene, event))
+#' result <- grase::test_model_multinomial_vgam_wald_EB(grouped_eb[[1]],
+#'                                                       shape0 = 1, rate0 = 1)
+#' result
+#' }
 test_model_multinomial_vgam_wald_EB <- function(dd, shape0, rate0, ref_option = NULL) {
     gene <- unique(dd$gene); event <- unique(dd$event)
     prec_mod <- dd$prec_mod[1]

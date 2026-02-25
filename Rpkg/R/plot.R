@@ -1,6 +1,11 @@
-#' Style and plot splicing graph
+#' Find the shortest edges in an igraph layout for curvature adjustment
 #' @export
-
+#' @examples
+#' \dontrun{
+#' g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+#' coords <- igraph::layout_with_sugiyama(g)$layout
+#' pairs <- grase::shortest_edges(g, coords)
+#' }
 shortest_edges <- function(g, coords) {
   nm <- igraph::V(g)$name
   D <- as.matrix(dist(coords))
@@ -134,6 +139,17 @@ style_and_plot <- function(g, gene, outdir) {
 
 #' Style and tx structure
 #' @export
+#' @examples
+#' \dontrun{
+#' library(SplicingGraphs)
+#' gr <- rtracklayer::import("ENSG00000000003.gtf")
+#' gr <- gr[!(rtracklayer::mcols(gr)$type %in% c("start_codon", "stop_codon"))]
+#' sg <- SplicingGraphs::SplicingGraphs(txdbmaker::makeTxDbFromGRanges(gr), min.ntx = 1)
+#' gene_edges <- as.data.frame(SplicingGraphs::sgedges(sg["ENSG00000000003.14"]))
+#' gene_nodes <- SplicingGraphs::sgnodes(sg["ENSG00000000003.14"])
+#' grase::plottx("ENSG00000000003.14", outdir = tempdir(),
+#'               gene_edges = gene_edges, gene_nodes = gene_nodes)
+#' }
 plottx <- function (gene, outdir, gene_edges, gene_nodes) {
 
   exon_edges <- gene_edges %>% dplyr::filter(ex_or_in %in% "ex")

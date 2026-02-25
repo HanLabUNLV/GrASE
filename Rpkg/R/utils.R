@@ -2,6 +2,10 @@
 
 #' Count items in comma-separated string
 #' @export
+#' @examples
+#' count_items("E001,E002,E003")
+#' count_items("")
+#' count_items("E001")
 count_items <- function(x) {
   if (x == "") return(0)
   length(stringr::str_split(x, ",")[[1]])

@@ -3,6 +3,19 @@
 
 #' Find reference exonic parts for multiple partitions (generalization of simple binary case)
 #' @export
+#' @examples
+#' \dontrun{
+#' g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+#' g <- grase::set_edge_names(g)
+#' ex_or_in_vec <- igraph::edge_attr(g, "ex_or_in")
+#' g_expart <- igraph::delete_edges(g, igraph::E(g)[ex_or_in_vec == "ex"])
+#' ref <- grase::find_reference_exonic_part_general(
+#'   source = "3", sink = "7",
+#'   ex_part_sets = list(character(0), character(0)),
+#'   tx_ex_part_sets = list(character(0), character(0)),
+#'   g_expart = g_expart
+#' )
+#' }
 find_reference_exonic_part_general <- function(source, sink, ex_part_sets, tx_ex_part_sets, g_expart) {
   ex_or_in_gexpart <- igraph::edge_attr(g_expart, "ex_or_in")
   names(ex_or_in_gexpart) <- igraph::edge_attr(g_expart, "name")
@@ -30,6 +43,14 @@ find_reference_exonic_part_general <- function(source, sink, ex_part_sets, tx_ex
 
 #' Find differential and reference exonic parts for multinomial partitions
 #' @export
+#' @examples
+#' \dontrun{
+#' g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+#' g <- grase::set_edge_names(g)
+#' result <- grase::multinomial_paths(
+#'   gene = "ENSG00000000003.14", g = g, sg = NULL, outdir = tempdir()
+#' )
+#' }
 find_diff_and_ref_exparts_general <- function(
     g, source, sink, groups, 
     parsed_partitions, parsed_paths, tx_ex_parts, 
@@ -144,6 +165,14 @@ find_diff_and_ref_exparts_general <- function(
 
 #' Compute diff exons from graph using multinomial partitions (each path as its own group)
 #' @export
+#' @examples
+#' \dontrun{
+#' g <- igraph::read_graph("ENSG00000000003.dexseq.graphml", format = "graphml")
+#' result <- grase::multinomial_paths(
+#'   gene = "ENSG00000000003.14", g = g, sg = NULL, outdir = tempdir(), max_path = 20
+#' )
+#' head(result[, c("gene", "source", "sink", "setdiff1", "setdiff2", "ref_ex_part")])
+#' }
 multinomial_paths <- function(gene, g, sg, outdir, max_path = 20, max_span = Inf, collapse_bubbles=FALSE) {
 
   multipaths_list <- list()
@@ -342,6 +371,17 @@ multinomial_paths <- function(gene, g, sg, outdir, max_path = 20, max_span = Inf
 #' @param row_list List of row-lists with variable multinomial columns
 #' @param max_paths Maximum number of paths to standardize to
 #' @export
+#' @examples
+#' row_list <- list(
+#'   list(gene="GENE1", source="3", sink="7", ref_ex_part="E001",
+#'        setdiff1="E002", transcripts1="TX1", path1="3-5-7",
+#'        setdiff2="E003", transcripts2="TX2", path2="3-6-7"),
+#'   list(gene="GENE1", source="3", sink="9", ref_ex_part="E004",
+#'        setdiff1="E005", transcripts1="TX1", path1="3-8-9",
+#'        setdiff2="",     transcripts2="TX3", path2="3-9")
+#' )
+#' df <- grase::standardize_multinomial_columns(row_list, max_paths = 2)
+#' colnames(df)
 standardize_multinomial_columns <- function(row_list, max_paths) {
   if (length(row_list) == 0) return(data.frame())
   
