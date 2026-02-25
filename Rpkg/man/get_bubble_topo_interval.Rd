@@ -7,10 +7,10 @@
 get_bubble_topo_interval(bubble, topo_idx)
 }
 \arguments{
-\item{g}{An \code{igraph} directed acyclic graph representing a gene splicing graph.}
+\item{bubble}{A single-row data frame (or \code{S4Vectors::DataFrame} row) representing one
+bubble, with at least columns \code{source} and \code{sink}.}
 
-\item{bubbles_df}{A data frame (or \code{S4Vectors::DataFrame}) of detected bubbles with
-at least columns \code{source} and \code{sink}.}
+\item{topo_idx}{A named integer vector mapping vertex names to their topological sort position.}
 }
 \description{
 Get topological interval for bubble

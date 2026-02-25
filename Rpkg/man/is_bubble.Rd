@@ -6,6 +6,14 @@
 \usage{
 is_bubble(txpathmat, i, j)
 }
+\arguments{
+\item{txpathmat}{A logical matrix of transcript paths (rows = transcripts,
+columns = nodes).}
+
+\item{i}{Integer. Column index of the candidate bubble source node.}
+
+\item{j}{Integer. Column index of the candidate bubble sink node.}
+}
 \description{
 copied from SplicingGraphs
 }

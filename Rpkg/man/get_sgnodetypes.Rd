@@ -7,6 +7,12 @@ copied from SplicingGraphs}
 \usage{
 get_sgnodetypes(txpathmat, check.matrix = FALSE)
 }
+\arguments{
+\item{txpathmat}{A logical matrix of transcript paths (rows = transcripts, columns = nodes).}
+
+\item{check.matrix}{Logical. If \code{TRUE}, validate that no node is simultaneously an exon
+start and an exon end. Default is \code{FALSE}.}
+}
 \description{
 identifies nodes that are exon starts and ends and marks them with 1 and 2 respectively.
 copied from SplicingGraphs

@@ -14,6 +14,21 @@ find_reference_exonic_part_simple(
   g_expart
 )
 }
+\arguments{
+\item{source}{Character string. Name of the source vertex of the bubble.}
+
+\item{sink}{Character string. Name of the sink vertex of the bubble.}
+
+\item{ex_part1_set}{Character vector. Exonic part edge names covered by partition 1.}
+
+\item{ex_part2_set}{Character vector. Exonic part edge names covered by partition 2.}
+
+\item{tx_ex_part1_set}{Character vector. Exonic part edge names covered by representative transcript of partition 1.}
+
+\item{tx_ex_part2_set}{Character vector. Exonic part edge names covered by representative transcript of partition 2.}
+
+\item{g_expart}{An \code{igraph} graph of exonic parts.}
+}
 \description{
 Find reference exonic part near bubble region between two partitions
 }

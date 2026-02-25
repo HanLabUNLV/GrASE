@@ -70,6 +70,12 @@ phi_estimate_glmmTMB <- function(dd) {
 
 
 #' Moderate phi estimates on the log scale using empirical Bayes shrinkage
+#' @param phi_table A data frame with columns \code{gene}, \code{event},
+#'   \code{phi}, and \code{var_phi}, as returned by
+#'   \code{phi_estimate_glmmTMB}.
+#' @param trimming_limit Numeric. Upper bound for \code{phi} values; rows with
+#'   \code{phi >= trimming_limit} are removed before shrinkage. Default is
+#'   \code{1e+10}.
 #' @export
 #' @examples
 #' \dontrun{
@@ -212,6 +218,9 @@ moderate_phi_trend <- function(phi_df, baseMean_df, span = 0.5,
 # --- DM Estimation & Moderation (NEW) ---
 
 #' Estimate Dirichlet-Multinomial precision per event using VGAM
+#' @param dd A data frame of exon count data for a single gene-event group,
+#'   with columns \code{gene}, \code{event}, \code{sample}, \code{groups},
+#'   \code{type}, and \code{count}.
 #' @export
 #' @examples
 #' \dontrun{
@@ -238,7 +247,11 @@ prec_estimate_vgam <- function(dd) {
 }
 
 
-#' Moderate Dirichlet-Multinomial precision estimates using empirical Bayes shrinkage
+#' Moderate Dirichlet-Multinomial precision estimates using empirical Bayes
+#' shrinkage
+#' @param prec_table A data frame with columns \code{gene}, \code{event},
+#'   \code{log_prec}, and \code{var_log_prec}, as returned by
+#'   \code{prec_estimate_vgam}.
 #' @export
 #' @examples
 #' \dontrun{

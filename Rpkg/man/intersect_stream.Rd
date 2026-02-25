@@ -6,6 +6,10 @@
 \usage{
 intersect_stream(lst)
 }
+\arguments{
+\item{lst}{A list of vectors. All elements are intersected
+together.}
+}
 \description{
 Intersect all elements in a list efficiently
 }

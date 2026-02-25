@@ -2,12 +2,19 @@
 % Please edit documentation in R/exontest_functions.R
 \name{moderate_prec_log_scale}
 \alias{moderate_prec_log_scale}
-\title{Moderate Dirichlet-Multinomial precision estimates using empirical Bayes shrinkage}
+\title{Moderate Dirichlet-Multinomial precision estimates using empirical Bayes
+shrinkage}
 \usage{
 moderate_prec_log_scale(prec_table)
 }
+\arguments{
+\item{prec_table}{A data frame with columns \code{gene}, \code{event},
+\code{log_prec}, and \code{var_log_prec}, as returned by
+\code{prec_estimate_vgam}.}
+}
 \description{
-Moderate Dirichlet-Multinomial precision estimates using empirical Bayes shrinkage
+Moderate Dirichlet-Multinomial precision estimates using empirical Bayes
+shrinkage
 }
 \examples{
 \dontrun{

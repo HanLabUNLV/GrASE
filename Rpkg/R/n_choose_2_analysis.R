@@ -120,6 +120,8 @@ find_diff_and_ref_exparts_pairwise <- function(
 }
 
 #' Generate all n-choose-2 combinations of path indices
+#' @param n_paths Integer. Number of paths to generate pair combinations from.
+#' @export
 generate_path_pairs <- function(n_paths) {
   if (n_paths < 2) return(list())
   

@@ -6,6 +6,12 @@
 \usage{
 from_exon_path_to_exonic_part_path(g, exonpath)
 }
+\arguments{
+\item{g}{An \code{igraph} directed acyclic graph representing a gene splicing graph.}
+
+\item{exonpath}{Integer vector. Sequence of edge indices (exon-level edges) forming a path
+through the splicing graph, as returned by \code{from_vpath_to_exon_path}.}
+}
 \description{
 Convert exon path to exonic part path
 }

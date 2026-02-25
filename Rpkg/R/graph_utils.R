@@ -213,6 +213,10 @@ set_txpath_to_vertex_attr <- function(g)
 
 
 #' add dexseq exonic part edges to igraph
+#' @param g An `igraph` directed acyclic graph representing a gene splicing
+#'   graph.
+#' @param gff A character vector of lines read from a DEXSeq GFF annotation
+#'   file (e.g., as returned by \code{readLines}).
 #' @export
 #' @examples
 #' \dontrun{
@@ -322,6 +326,8 @@ set_edge_names <- function(g) {
 
 
 #' convert vertex path to exon path
+#' @param g An `igraph` directed acyclic graph representing a gene splicing graph.
+#' @param vpath Character vector. Sequence of vertex names forming a path through the splicing graph.
 #' @export
 #' @examples
 #' \dontrun{
@@ -338,6 +344,9 @@ from_vpath_to_exon_path_simple <- function(g, vpath) {
 
 
 #' convert edge path (by name) to exonic part path
+#' @param g An `igraph` directed acyclic graph representing a gene splicing graph.
+#' @param epath Character vector. Sequence of edge names (as set by \code{set_edge_names}) forming
+#'   an exon-level path through the splicing graph.
 #' @export
 #' @examples
 #' \dontrun{
@@ -400,6 +409,8 @@ from_epath_to_expart_path_simple <- function(g, epath) {
 
 
 #' Convert vertex path to exon path
+#' @param g An `igraph` directed acyclic graph representing a gene splicing graph.
+#' @param bubblepath Character vector. Sequence of vertex names forming a path through a bubble.
 #' @export
 #' @examples
 #' \dontrun{
@@ -432,6 +443,9 @@ from_vpath_to_exon_path <- function(g, bubblepath) {
 }
 
 #' Convert exon path to exonic part path
+#' @param g An `igraph` directed acyclic graph representing a gene splicing graph.
+#' @param exonpath Integer vector. Sequence of edge indices (exon-level edges) forming a path
+#'   through the splicing graph, as returned by \code{from_vpath_to_exon_path}.
 #' @export
 #' @examples
 #' \dontrun{
@@ -505,7 +519,7 @@ is_proper_subset <- function(a, b) {
 }
 
 #' Create subset relation graph from sets
-#' @param paths A named list of integer or character vectors representing sets (e.g., exonic part paths).
+#' @param sets A named list of integer or character vectors representing sets (e.g., exonic part paths).
 #' @export
 #' @examples
 #' sets <- list("1" = c(1L, 2L), "2" = c(1L, 2L, 3L), "3" = c(4L, 5L))

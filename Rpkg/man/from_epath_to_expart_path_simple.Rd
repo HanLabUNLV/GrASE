@@ -6,6 +6,12 @@
 \usage{
 from_epath_to_expart_path_simple(g, epath)
 }
+\arguments{
+\item{g}{An \code{igraph} directed acyclic graph representing a gene splicing graph.}
+
+\item{epath}{Character vector. Sequence of edge names (as set by \code{set_edge_names}) forming
+an exon-level path through the splicing graph.}
+}
 \description{
 convert edge path (by name) to exonic part path
 }

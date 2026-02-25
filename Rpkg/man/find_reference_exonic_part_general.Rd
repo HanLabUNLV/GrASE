@@ -12,6 +12,17 @@ find_reference_exonic_part_general(
   g_expart
 )
 }
+\arguments{
+\item{source}{Character string. Name of the source vertex of the bubble.}
+
+\item{sink}{Character string. Name of the sink vertex of the bubble.}
+
+\item{ex_part_sets}{A list of character vectors, one per partition, each containing exonic part edge names for that partition.}
+
+\item{tx_ex_part_sets}{A list of character vectors, one per partition, each containing exonic part edge names covered by the representative transcript.}
+
+\item{g_expart}{An \code{igraph} graph of exonic parts.}
+}
 \description{
 Find reference exonic parts for multiple partitions (generalization of simple binary case)
 }

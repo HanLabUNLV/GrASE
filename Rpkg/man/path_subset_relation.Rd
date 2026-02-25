@@ -7,7 +7,7 @@
 path_subset_relation(sets)
 }
 \arguments{
-\item{paths}{A named list of integer or character vectors representing sets (e.g., exonic part paths).}
+\item{sets}{A named list of integer or character vectors representing sets (e.g., exonic part paths).}
 }
 \description{
 Create subset relation graph from sets

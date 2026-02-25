@@ -6,6 +6,11 @@
 \usage{
 from_vpath_to_exon_path_simple(g, vpath)
 }
+\arguments{
+\item{g}{An \code{igraph} directed acyclic graph representing a gene splicing graph.}
+
+\item{vpath}{Character vector. Sequence of vertex names forming a path through the splicing graph.}
+}
 \description{
 convert vertex path to exon path
 }

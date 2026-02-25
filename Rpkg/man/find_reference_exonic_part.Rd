@@ -14,6 +14,21 @@ find_reference_exonic_part(
   g
 )
 }
+\arguments{
+\item{source}{Character string. Name of the source vertex of the bubble.}
+
+\item{sink}{Character string. Name of the sink vertex of the bubble.}
+
+\item{ex_part1_set}{Integer vector. Edge indices of exonic parts covered by partition 1.}
+
+\item{ex_part2_set}{Integer vector. Edge indices of exonic parts covered by partition 2.}
+
+\item{tx_ex_part1_set}{Integer vector. Edge indices of exonic parts covered by representative transcript of partition 1.}
+
+\item{tx_ex_part2_set}{Integer vector. Edge indices of exonic parts covered by representative transcript of partition 2.}
+
+\item{g}{An \code{igraph} directed acyclic graph representing a gene splicing graph.}
+}
 \description{
 Find reference exonic part near bubble region (legacy version)
 }

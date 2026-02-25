@@ -5,7 +5,8 @@
 #' the data from Gencode, import it into R, process it and build the `TxDb`
 #' object.
 #'
-#' @param version A `character(1)` with the Gencode version number.
+#' @param gtf_file A `character(1)` with the path to a local Gencode GTF annotation file
+#'   (e.g., \code{"path/to/gencode.v31.annotation.gtf.gz"}).
 #' @param genome A `character(1)` with the human genome version number. Valid
 #' options are `'hg38'` or `'hg19'`.
 #' @param chrs A `character()` vector with the chromosome (contig) names to
@@ -53,6 +54,7 @@ gencode_txdb <- function( gtf_file, genome = c('hg19','hg38') ,
 }
 
 
+#' @param version A `character(1)` with the Gencode version number.
 #' @export
 #' @rdname gencode_txdb
 #' @return A `character(1)` with the URL for the GTF Gencode file of interest.

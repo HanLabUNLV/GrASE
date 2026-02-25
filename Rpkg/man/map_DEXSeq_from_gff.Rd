@@ -6,6 +6,13 @@
 \usage{
 map_DEXSeq_from_gff(g, gff)
 }
+\arguments{
+\item{g}{An \code{igraph} directed acyclic graph representing a gene splicing
+graph.}
+
+\item{gff}{A character vector of lines read from a DEXSeq GFF annotation
+file (e.g., as returned by \code{readLines}).}
+}
 \description{
 add dexseq exonic part edges to igraph
 }

@@ -5,6 +5,12 @@
  
 
 #' Build transcript-path logical matrix from index lists
+#' @param g An `igraph` directed acyclic graph representing a gene splicing
+#'   graph.
+#' @param txpath_vertex_list A named list of character vectors, one per
+#'   transcript, giving the vertex names visited by that transcript. If
+#'   \code{g} already has transcript vertex attributes set (via
+#'   \code{set_txpath_to_vertex_attr}), this argument is unused.
 #' @export
 #' @examples
 #' \dontrun{
@@ -37,6 +43,9 @@ make_matrix_from_txpath_igraph <- function(g, txpath_vertex_list) {
 
 #' identifies nodes that are exon starts and ends and marks them with 1 and 2 respectively.
 #' copied from SplicingGraphs
+#' @param txpathmat A logical matrix of transcript paths (rows = transcripts, columns = nodes).
+#' @param check.matrix Logical. If \code{TRUE}, validate that no node is simultaneously an exon
+#'   start and an exon end. Default is \code{FALSE}.
 #' @export
 #' @examples
 #' \dontrun{
@@ -70,6 +79,10 @@ get_sgnodetypes <- function (txpathmat, check.matrix = FALSE)
 }
 
 #' copied from SplicingGraphs
+#' @param txpathmat A logical matrix of transcript paths (rows = transcripts,
+#'   columns = nodes).
+#' @param i Integer. Column index of the candidate bubble source node.
+#' @param j Integer. Column index of the candidate bubble sink node.
 #' @export
 #' @examples
 #' \dontrun{
@@ -94,6 +107,11 @@ is_bubble <- function (txpathmat, i, j)
 
 
 #' copied from SplicingGraphs
+#' @param txpathmat A logical matrix of transcript paths (rows = transcripts, columns = nodes).
+#' @param sgnodetypes An integer vector of node types (1 = exon start, 2 = exon end) as returned by
+#'   \code{get_sgnodetypes}.
+#' @param i Integer. Column index of the bubble source (start) node in \code{txpathmat}.
+#' @param j Integer. Column index of the bubble sink (end) node in \code{txpathmat}.
 #' @export
 #' @examples
 #' \dontrun{
@@ -227,6 +245,9 @@ detect_bubbles_from_mat <- function (txpathmat)
 
 
 #' Get node types (exon start/end) from igraph splice graph
+#' @param g_tmp An `igraph` directed acyclic graph representing a gene splicing graph.
+#' @param check.graph Logical. If \code{TRUE}, validate that no vertex is simultaneously an exon
+#'   start and an exon end. Default is \code{FALSE}.
 #' @export
 #' @examples
 #' \dontrun{
@@ -284,6 +305,9 @@ bubble_paths_igraph <- function(g, v_start, v_end) {
 
 
 #' Get bubble variant partitions and paths from igraph splice graph
+#' @param g An `igraph` directed acyclic graph representing a gene splicing graph.
+#' @param v_start_idx Integer. Topological index of the bubble source vertex.
+#' @param v_end_idx Integer. Topological index of the bubble sink vertex.
 #' @export
 #' @examples
 #' \dontrun{
@@ -685,9 +709,9 @@ remove_symmetric_splits <- function(splits){
 }
 
 #' Get topological interval for bubble
-#' @param g An `igraph` directed acyclic graph representing a gene splicing graph.
-#' @param bubbles_df A data frame (or \code{S4Vectors::DataFrame}) of detected bubbles with
-#'   at least columns \code{source} and \code{sink}.
+#' @param bubble A single-row data frame (or \code{S4Vectors::DataFrame} row) representing one
+#'   bubble, with at least columns \code{source} and \code{sink}.
+#' @param topo_idx A named integer vector mapping vertex names to their topological sort position.
 #' @export
 #' @examples
 #' \dontrun{
@@ -705,6 +729,8 @@ get_bubble_topo_interval <- function(bubble, topo_idx) {
 }
 
 #' Get bubble depths from intervals
+#' @param intervals A list of integer vectors of length 2, each giving the
+#'   \code{c(source_idx, sink_idx)} topological positions of a bubble.
 #' @export
 #' @examples
 #' intervals <- list(c(1, 10), c(3, 7), c(12, 15))

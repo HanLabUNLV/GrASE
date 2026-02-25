@@ -6,6 +6,9 @@
 \usage{
 generate_path_pairs(n_paths)
 }
+\arguments{
+\item{n_paths}{Integer. Number of paths to generate pair combinations from.}
+}
 \description{
 Generate all n-choose-2 combinations of path indices
 }

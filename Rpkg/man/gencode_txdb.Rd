@@ -14,6 +14,9 @@ gencode_txdb(
 gencode_source_url(version = "34", genome = c("hg38", "hg19"))
 }
 \arguments{
+\item{gtf_file}{A \code{character(1)} with the path to a local Gencode GTF annotation file
+(e.g., \code{"path/to/gencode.v31.annotation.gtf.gz"}).}
+
 \item{genome}{A \code{character(1)} with the human genome version number. Valid
 options are \code{'hg38'} or \code{'hg19'}.}
 

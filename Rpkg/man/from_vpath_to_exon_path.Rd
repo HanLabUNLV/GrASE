@@ -6,6 +6,11 @@
 \usage{
 from_vpath_to_exon_path(g, bubblepath)
 }
+\arguments{
+\item{g}{An \code{igraph} directed acyclic graph representing a gene splicing graph.}
+
+\item{bubblepath}{Character vector. Sequence of vertex names forming a path through a bubble.}
+}
 \description{
 Convert vertex path to exon path
 }

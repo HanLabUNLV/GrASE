@@ -6,6 +6,15 @@
 \usage{
 make_matrix_from_txpath_igraph(g, txpath_vertex_list)
 }
+\arguments{
+\item{g}{An \code{igraph} directed acyclic graph representing a gene splicing
+graph.}
+
+\item{txpath_vertex_list}{A named list of character vectors, one per
+transcript, giving the vertex names visited by that transcript. If
+\code{g} already has transcript vertex attributes set (via
+\code{set_txpath_to_vertex_attr}), this argument is unused.}
+}
 \description{
 Build transcript-path logical matrix from index lists
 }

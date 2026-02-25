@@ -141,6 +141,13 @@ style_and_plot <- function(g, gene, outdir) {
 }
 
 #' Style and tx structure
+#' @param gene Character string. Gene identifier.
+#' @param outdir Character string. Path to output directory where the PDF plot
+#'   is written.
+#' @param gene_edges A data frame of splice graph edges for the gene, as
+#'   returned by \code{as.data.frame(SplicingGraphs::sgedges(...))}.
+#' @param gene_nodes A character vector of splice graph node names for the
+#'   gene, as returned by \code{SplicingGraphs::sgnodes(...)}.
 #' @export
 #' @examples
 #' \dontrun{

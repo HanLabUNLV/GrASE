@@ -6,6 +6,11 @@
 \usage{
 prec_estimate_vgam(dd)
 }
+\arguments{
+\item{dd}{A data frame of exon count data for a single gene-event group,
+with columns \code{gene}, \code{event}, \code{sample}, \code{groups},
+\code{type}, and \code{count}.}
+}
 \description{
 Estimate Dirichlet-Multinomial precision per event using VGAM
 }

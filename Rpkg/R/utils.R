@@ -14,6 +14,9 @@ count_items <- function(x) {
 }
 
 #' Intersect all elements in a list efficiently
+#' @param lst A list of vectors. All elements are intersected
+#'   together.
+#' @export
 intersect_stream <- function(lst) {
   if (length(lst) == 0L) return(vector(mode = "integer", length = 0))
   # sort by length so we intersect the smallest sets first

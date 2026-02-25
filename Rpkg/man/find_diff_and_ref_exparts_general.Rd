@@ -16,6 +16,25 @@ find_diff_and_ref_exparts_general(
   gene = gene
 )
 }
+\arguments{
+\item{g}{An \code{igraph} directed acyclic graph representing a gene splicing graph.}
+
+\item{source}{Character string. Name of the source vertex of the bubble.}
+
+\item{sink}{Character string. Name of the sink vertex of the bubble.}
+
+\item{groups}{A list of integer vectors, each giving the path indices belonging to one group.}
+
+\item{parsed_partitions}{A list of character vectors mapping each path index to its transcript names.}
+
+\item{parsed_paths}{A list of character vectors of internal vertex names for each path.}
+
+\item{tx_ex_parts}{A named list of exonic part edge names covered by each transcript.}
+
+\item{multipaths_list}{A list accumulating result rows; new rows are appended and returned.}
+
+\item{gene}{Character string. Gene identifier.}
+}
 \description{
 Find differential and reference exonic parts for multinomial partitions
 }

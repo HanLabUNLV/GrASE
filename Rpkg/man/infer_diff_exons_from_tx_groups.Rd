@@ -6,6 +6,17 @@
 \usage{
 infer_diff_exons_from_tx_groups(gene, g, tx_changed, tx_constant, outdir)
 }
+\arguments{
+\item{gene}{Character string. Gene identifier.}
+
+\item{g}{An \code{igraph} directed acyclic graph representing a gene splicing graph.}
+
+\item{tx_changed}{Character vector. Transcript IDs in the "changed" group.}
+
+\item{tx_constant}{Character vector. Transcript IDs in the "constant" group.}
+
+\item{outdir}{Character string. Path to output directory.}
+}
 \description{
 Infer differential exonic parts given two groups of transcripts (e.g. changed vs constant)
 }

@@ -6,6 +6,15 @@
 \usage{
 moderate_phi_log_scale(phi_table, trimming_limit = 1e+10)
 }
+\arguments{
+\item{phi_table}{A data frame with columns \code{gene}, \code{event},
+\code{phi}, and \code{var_phi}, as returned by
+\code{phi_estimate_glmmTMB}.}
+
+\item{trimming_limit}{Numeric. Upper bound for \code{phi} values; rows with
+\code{phi >= trimming_limit} are removed before shrinkage. Default is
+\code{1e+10}.}
+}
 \description{
 Moderate phi estimates on the log scale using empirical Bayes shrinkage
 }

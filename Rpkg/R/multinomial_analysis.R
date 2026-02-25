@@ -2,6 +2,11 @@
 
 
 #' Find reference exonic parts for multiple partitions (generalization of simple binary case)
+#' @param source Character string. Name of the source vertex of the bubble.
+#' @param sink Character string. Name of the sink vertex of the bubble.
+#' @param ex_part_sets A list of character vectors, one per partition, each containing exonic part edge names for that partition.
+#' @param tx_ex_part_sets A list of character vectors, one per partition, each containing exonic part edge names covered by the representative transcript.
+#' @param g_expart An `igraph` graph of exonic parts.
 #' @export
 #' @examples
 #' \dontrun{
@@ -42,6 +47,15 @@ find_reference_exonic_part_general <- function(source, sink, ex_part_sets, tx_ex
 }
 
 #' Find differential and reference exonic parts for multinomial partitions
+#' @param g An `igraph` directed acyclic graph representing a gene splicing graph.
+#' @param source Character string. Name of the source vertex of the bubble.
+#' @param sink Character string. Name of the sink vertex of the bubble.
+#' @param groups A list of integer vectors, each giving the path indices belonging to one group.
+#' @param parsed_partitions A list of character vectors mapping each path index to its transcript names.
+#' @param parsed_paths A list of character vectors of internal vertex names for each path.
+#' @param tx_ex_parts A named list of exonic part edge names covered by each transcript.
+#' @param multipaths_list A list accumulating result rows; new rows are appended and returned.
+#' @param gene Character string. Gene identifier.
 #' @export
 #' @examples
 #' \dontrun{

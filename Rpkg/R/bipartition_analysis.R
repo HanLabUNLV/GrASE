@@ -2,6 +2,13 @@
 
 
 #' Find reference exonic part near bubble region between two partitions
+#' @param source Character string. Name of the source vertex of the bubble.
+#' @param sink Character string. Name of the sink vertex of the bubble.
+#' @param ex_part1_set Character vector. Exonic part edge names covered by partition 1.
+#' @param ex_part2_set Character vector. Exonic part edge names covered by partition 2.
+#' @param tx_ex_part1_set Character vector. Exonic part edge names covered by representative transcript of partition 1.
+#' @param tx_ex_part2_set Character vector. Exonic part edge names covered by representative transcript of partition 2.
+#' @param g_expart An `igraph` graph of exonic parts.
 #' @export
 #' @examples
 #' \dontrun{
@@ -40,6 +47,13 @@ find_reference_exonic_part_simple <- function(source, sink, ex_part1_set, ex_par
 }
 
 #' Find reference exonic part near bubble region (legacy version)
+#' @param source Character string. Name of the source vertex of the bubble.
+#' @param sink Character string. Name of the sink vertex of the bubble.
+#' @param ex_part1_set Integer vector. Edge indices of exonic parts covered by partition 1.
+#' @param ex_part2_set Integer vector. Edge indices of exonic parts covered by partition 2.
+#' @param tx_ex_part1_set Integer vector. Edge indices of exonic parts covered by representative transcript of partition 1.
+#' @param tx_ex_part2_set Integer vector. Edge indices of exonic parts covered by representative transcript of partition 2.
+#' @param g An `igraph` directed acyclic graph representing a gene splicing graph.
 #' @export
 #' @examples
 #' \dontrun{
@@ -525,6 +539,11 @@ bipartition_paths <- function(gene, g, outdir, max_path = 15, max_span = Inf, co
 }
 
 #' Infer differential exonic parts given two groups of transcripts (e.g. changed vs constant)
+#' @param gene Character string. Gene identifier.
+#' @param g An `igraph` directed acyclic graph representing a gene splicing graph.
+#' @param tx_changed Character vector. Transcript IDs in the "changed" group.
+#' @param tx_constant Character vector. Transcript IDs in the "constant" group.
+#' @param outdir Character string. Path to output directory.
 #' @export
 #' @examples
 #' \dontrun{

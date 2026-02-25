@@ -6,6 +6,12 @@
 \usage{
 get_sgnodetypes_igraph(g_tmp, check.graph = FALSE)
 }
+\arguments{
+\item{g_tmp}{An \code{igraph} directed acyclic graph representing a gene splicing graph.}
+
+\item{check.graph}{Logical. If \code{TRUE}, validate that no vertex is simultaneously an exon
+start and an exon end. Default is \code{FALSE}.}
+}
 \description{
 Get node types (exon start/end) from igraph splice graph
 }

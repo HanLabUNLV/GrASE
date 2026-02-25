@@ -6,6 +6,13 @@
 \usage{
 get_bubble_variants_igraph(g, v_start_idx, v_end_idx)
 }
+\arguments{
+\item{g}{An \code{igraph} directed acyclic graph representing a gene splicing graph.}
+
+\item{v_start_idx}{Integer. Topological index of the bubble source vertex.}
+
+\item{v_end_idx}{Integer. Topological index of the bubble sink vertex.}
+}
 \description{
 Get bubble variant partitions and paths from igraph splice graph
 }

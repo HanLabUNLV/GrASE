@@ -6,6 +6,10 @@
 \usage{
 get_bubble_depths(intervals)
 }
+\arguments{
+\item{intervals}{A list of integer vectors of length 2, each giving the
+\code{c(source_idx, sink_idx)} topological positions of a bubble.}
+}
 \description{
 Get bubble depths from intervals
 }

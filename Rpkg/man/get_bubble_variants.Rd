@@ -6,6 +6,16 @@
 \usage{
 get_bubble_variants(txpathmat, sgnodetypes, i, j)
 }
+\arguments{
+\item{txpathmat}{A logical matrix of transcript paths (rows = transcripts, columns = nodes).}
+
+\item{sgnodetypes}{An integer vector of node types (1 = exon start, 2 = exon end) as returned by
+\code{get_sgnodetypes}.}
+
+\item{i}{Integer. Column index of the bubble source (start) node in \code{txpathmat}.}
+
+\item{j}{Integer. Column index of the bubble sink (end) node in \code{txpathmat}.}
+}
 \description{
 copied from SplicingGraphs
 }
