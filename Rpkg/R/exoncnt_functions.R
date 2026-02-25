@@ -1,6 +1,11 @@
 # Function to sum counts across columns for matching gene:exon keys
 # Function to compute column-wise sum for a gene's exons
 #' Sum exon counts for a comma-separated list of exon fragments
+#' @param count_col Character string. A comma-separated list of exon fragment identifiers
+#'   (e.g., \code{"E001,E003"}). An empty, \code{NA}, or \code{"NA"} value returns a row of
+#'   \code{NA_real_}.
+#' @param counts_df A data frame of exon counts with sample count columns followed by
+#'   \code{gene} and \code{exon} columns.
 #' @export
 #' @examples
 #' counts_df <- data.frame(
@@ -28,6 +33,15 @@ sum_exon_counts <- function(count_col, counts_df) {
 
 
 #' Write exon counts in long format for downstream statistical testing
+#' @param ref_counts_df A data frame of reference exonic part read counts with sample columns
+#'   and an \code{event} column.
+#' @param diff_counts_df A data frame of differential (alternative) exonic part read counts with
+#'   the same structure as \code{ref_counts_df}.
+#' @param events Character vector of event identifiers to include from the count data frames.
+#' @param gene_name Character string. Gene identifier used to construct the output file name.
+#' @param sampleinfo A named character vector mapping sample names to group labels.
+#' @param outfilesuffix Character string. Suffix appended to output file names.
+#' @param outdir Character string. Path to output directory.
 #' @export
 #' @examples
 #' \dontrun{
@@ -73,6 +87,13 @@ write_exoncnt_long <- function(ref_counts_df, diff_counts_df, events, gene_name,
 }
 
 #' Count exonic part reads for bipartition events
+#' @param bipartition_file Character string. Path to a bipartition results file (tab-separated,
+#'   as written by \code{bipartition_paths}).
+#' @param countmat A data frame or matrix of exon fragment read counts with sample columns
+#'   followed by \code{gene} and \code{exon} columns.
+#' @param sampleinfo A named character vector mapping sample names to group labels.
+#' @param outdir Character string. Path to output directory.
+#' @param outfilesuffix Character string. Suffix appended to output file names.
 #' @export
 #' @examples
 #' \dontrun{
@@ -164,6 +185,13 @@ count_bipartitions <- function(bipartition_file, countmat, sampleinfo, outdir, o
 # testable events (suffixed _s1 / _s2) instead of picking the higher-count side.
 # This lets the statistical test see both sides of each bipartition independently.
 #' Count exonic part reads for both setdiff1 and setdiff2 of bipartition events
+#' @param bipartition_file Character string. Path to a bipartition results file (tab-separated,
+#'   as written by \code{bipartition_paths}).
+#' @param countmat A data frame or matrix of exon fragment read counts with sample columns
+#'   followed by \code{gene} and \code{exon} columns.
+#' @param sampleinfo A named character vector mapping sample names to group labels.
+#' @param outdir Character string. Path to output directory.
+#' @param outfilesuffix Character string. Suffix appended to output file names.
 #' @export
 #' @examples
 #' \dontrun{
@@ -259,6 +287,12 @@ count_bipartitions_both <- function(bipartition_file, countmat, sampleinfo, outd
 
 
 #' Count exonic part reads for multinomial events
+#' @param multinomial_file Character string. Path to a multinomial results file (tab-separated,
+#'   as written by \code{multinomial_paths}).
+#' @param countmat A data frame or matrix of exon fragment read counts with sample columns
+#'   followed by \code{gene} and \code{exon} columns.
+#' @param sampleinfo A named character vector mapping sample names to group labels.
+#' @param outdir Character string. Path to output directory.
 #' @export
 #' @examples
 #' \dontrun{

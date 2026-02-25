@@ -6,6 +6,16 @@
 \usage{
 detect_bubbles_i_j(i, j, txpathmat, sgnodetypes)
 }
+\arguments{
+\item{i}{Integer. Column index of the bubble source (start) node in \code{txpathmat}.}
+
+\item{j}{Integer. Column index of the bubble sink (end) node in \code{txpathmat}.}
+
+\item{txpathmat}{A logical matrix of transcript paths (rows = transcripts, columns = nodes).}
+
+\item{sgnodetypes}{An integer vector of node types (1 = exon start, 2 = exon end) as returned by
+\code{get_sgnodetypes}.}
+}
 \description{
 bubble detection between i and j
 }

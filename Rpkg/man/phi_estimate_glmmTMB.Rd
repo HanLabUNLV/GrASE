@@ -6,6 +6,9 @@
 \usage{
 phi_estimate_glmmTMB(dd)
 }
+\arguments{
+\item{dd}{A data frame of exon count data.}
+}
 \description{
 Estimate beta-binomial dispersion (phi) per event using glmmTMB
 }

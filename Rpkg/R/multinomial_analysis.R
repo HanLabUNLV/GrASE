@@ -164,6 +164,16 @@ find_diff_and_ref_exparts_general <- function(
 }
 
 #' Compute diff exons from graph using multinomial partitions (each path as its own group)
+#' @param gene Character string. Gene identifier (e.g., Ensembl gene ID).
+#' @param g An `igraph` directed acyclic graph representing a gene splicing graph.
+#' @param sg Unused; retained for API compatibility. Pass \code{NULL}.
+#' @param outdir Character string. Path to output directory.
+#' @param max_path Integer. Maximum number of alternative paths in a bubble to process; bubbles
+#'   with more paths are skipped. Default is \code{20}.
+#' @param max_span Numeric. Maximum topological span (number of nodes between source and sink) of
+#'   a bubble to process; bubbles exceeding this are skipped. Default is \code{Inf}.
+#' @param collapse_bubbles Logical. Whether to collapse processed bubbles by removing redundant
+#'   paths from the graph. Default is \code{FALSE}.
 #' @export
 #' @examples
 #' \dontrun{

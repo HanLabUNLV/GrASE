@@ -6,6 +6,14 @@
 \usage{
 sum_exon_counts(count_col, counts_df)
 }
+\arguments{
+\item{count_col}{Character string. A comma-separated list of exon fragment identifiers
+(e.g., \code{"E001,E003"}). An empty, \code{NA}, or \code{"NA"} value returns a row of
+\code{NA_real_}.}
+
+\item{counts_df}{A data frame of exon counts with sample count columns followed by
+\code{gene} and \code{exon} columns.}
+}
 \description{
 Sum exon counts for a comma-separated list of exon fragments
 }

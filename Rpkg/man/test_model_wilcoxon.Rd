@@ -6,6 +6,9 @@
 \usage{
 test_model_wilcoxon(dd)
 }
+\arguments{
+\item{dd}{A data frame of exon count data.}
+}
 \description{
 Test for differential exon usage using Wilcoxon rank-sum test
 }

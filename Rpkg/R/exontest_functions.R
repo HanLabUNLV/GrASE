@@ -1,6 +1,10 @@
 # --- Data Preparation Functions ---
 
 #' Group exon count data by gene and event
+#' @param dat A data frame of exon count data.
+#' @param col_y Character string. Name of the column containing the count of reads supporting the
+#'   alternative splicing event (numerator).
+#' @param col_n Character string. Name of the column containing the total read count (denominator).
 #' @export
 #' @examples
 #' \dontrun{
@@ -22,6 +26,7 @@ group_by_event <- function(dat, col_y, col_n) {
 }
 
 #' Estimate beta-binomial dispersion (phi) per event using glmmTMB
+#' @param dd A data frame of exon count data.
 #' @export
 #' @examples
 #' \dontrun{
@@ -288,6 +293,13 @@ moderate_prec_log_scale <- function(prec_table) {
 # --- Moderated Testing Functions ---
 
 # 1. Moderated glmmTMB Beta-Binomial with Prior
+#' Test differential exon usage with a beta-binomial glmmTMB model using an empirical Bayes prior on dispersion.
+#' @param dd A data frame of exon count data.
+#' @param prior_disp A data frame specifying the glmmTMB prior on the dispersion parameter, with
+#'   columns \code{prior}, \code{class}, and \code{coef} (as produced by \code{glmmTMB::prior}).
+#' @param z_bar Numeric. The global empirical Bayes log-phi estimate used as a fixed-dispersion
+#'   fallback when the prior-based model does not converge. Pass \code{NULL} to disable the
+#'   fallback. Default is \code{NULL}.
 #' @export
 #' @examples
 #' \dontrun{
@@ -360,6 +372,8 @@ test_model_glmmTMB_with_prior <- function(dd, prior_disp, z_bar = NULL) {
 
 
 # 2. Moderated glmmTMB Beta-Binomial EB
+#' Test differential exon usage with a beta-binomial glmmTMB model using empirical Bayes fixed dispersion.
+#' @param dd A data frame of exon count data.
 #' @export
 #' @examples
 #' \dontrun{
@@ -412,6 +426,8 @@ test_model_glmmTMB_EB <- function(dd) {
 
 
 # 3. EB-moderated VGAM beta-binomial
+#' Test differential exon usage with a VGAM beta-binomial model initialized from empirical Bayes dispersion.
+#' @param dd A data frame of exon count data.
 #' @export
 #' @examples
 #' \dontrun{
@@ -494,6 +510,7 @@ test_model_vgam_EB_init <- function(dd) {
 
 # 3b. Wilcoxon Rank-Sum Test (Nonparametric)
 #' Test for differential exon usage using Wilcoxon rank-sum test
+#' @param dd A data frame of exon count data.
 #' @export
 #' @examples
 #' \dontrun{
@@ -549,6 +566,8 @@ test_model_wilcoxon <- function(dd) {
 
 
 # 4. Moderated VGAM Dirichlet-Multinomial EB
+#' Test differential exon usage with a VGAM Dirichlet-multinomial model using empirical Bayes fixed precision.
+#' @param dd A data frame of exon count data.
 #' @export
 #' @examples
 #' \dontrun{
@@ -615,6 +634,14 @@ test_model_multinomial_vgam_EB <- function(dd) {
 
 
 # Updated function for Wald tests in a Multinomial/Dirichlet-Multinomial setting
+#' Test differential exon usage with Wald tests in a VGAM Dirichlet-multinomial model using empirical Bayes precision.
+#' @param dd A data frame of exon count data.
+#' @param shape0 Numeric. Shape parameter of the Gamma prior on precision (currently unused in the
+#'   fixed-precision implementation; retained for API compatibility).
+#' @param rate0 Numeric. Rate parameter of the Gamma prior on precision (currently unused in the
+#'   fixed-precision implementation; retained for API compatibility).
+#' @param ref_option Character string or \code{NULL}. Name of the reference isoform/exon-part
+#'   category. If \code{NULL} or not found in the data, the first available option is used.
 #' @export
 #' @examples
 #' \dontrun{

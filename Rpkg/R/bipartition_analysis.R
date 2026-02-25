@@ -72,6 +72,20 @@ find_reference_exonic_part <- function(source, sink, ex_part1_set, ex_part2_set,
 }
 
 #' Find differential and reference exonic parts for binary splits
+#' @param g An `igraph` directed acyclic graph representing a gene splicing graph.
+#' @param source Character string. Name of the bubble source vertex.
+#' @param sink Character string. Name of the bubble sink vertex.
+#' @param split A list with elements \code{group1} and \code{group2}, each a character vector of
+#'   path indices forming one side of the binary partition.
+#' @param parsed_partitions A list of character vectors mapping each path index to its transcript names.
+#' @param parsed_paths A list of character vectors of internal vertex names for each path.
+#' @param tx_ex_parts A named list of exonic part edge names covered by each transcript.
+#' @param bipartitions_df A data frame accumulating results; new rows are appended and returned.
+#' @param gene Character string. Gene identifier (e.g., Ensembl gene ID).
+#' @param g_exon Optional precomputed \code{igraph} with only exon-level edges (no \code{ex_part} edges).
+#' @param g_expart Optional precomputed \code{igraph} with only exonic-part edges (no \code{ex} edges).
+#' @param ex_or_in_gexpart Optional named character vector of edge types on \code{g_expart}.
+#' @param dexseq_frag Optional named character vector of DEXSeq fragment labels on \code{g_expart}.
 #' @export
 #' @examples
 #' \dontrun{
@@ -171,6 +185,10 @@ find_diff_and_ref_exparts_for_split <- function(g, source, sink, split, parsed_p
 }
 
 #' Compute diff exons from graph and splicing structure for specific transcripts
+#' @param gene Character string. Gene identifier (e.g., Ensembl gene ID).
+#' @param g An `igraph` directed acyclic graph representing a gene splicing graph.
+#' @param tx_ids Character vector of transcript IDs to compare against all other transcripts.
+#' @param outdir Character string. Path to output directory.
 #' @export
 #' @examples
 #' \dontrun{
@@ -245,6 +263,9 @@ diff_exons_between_tx <- function(gene, g, tx_ids, outdir) {
 }
 
 #' Compute diff exons with one-vs-rest approach for each partition
+#' @param gene Character string. Gene identifier (e.g., Ensembl gene ID).
+#' @param g An `igraph` directed acyclic graph representing a gene splicing graph.
+#' @param outdir Character string. Path to output directory.
 #' @export
 #' @examples
 #' \dontrun{
@@ -308,6 +329,15 @@ diff_exons_gene_ovr <- function(gene, g, outdir) {
 #' Compute diff exons from graph using binary partitions
 #' For each bubble, find all valid binary partitions of paths, then find diff exons for each partition.
 #' Optionally collapse bubbles with redundant paths.
+#' @param gene Character string. Gene identifier (e.g., Ensembl gene ID).
+#' @param g An `igraph` directed acyclic graph representing a gene splicing graph.
+#' @param outdir Character string. Path to output directory.
+#' @param max_path Integer. Maximum number of alternative paths in a bubble to process; bubbles
+#'   with more paths are skipped. Default is \code{15}.
+#' @param max_span Numeric. Maximum topological span (number of nodes between source and sink) of
+#'   a bubble to process; bubbles exceeding this are skipped. Default is \code{Inf}.
+#' @param collapse_bubbles Logical. Whether to collapse processed bubbles by removing redundant
+#'   paths from the graph. Default is \code{FALSE}.
 #' @export
 #' @examples
 #' \dontrun{

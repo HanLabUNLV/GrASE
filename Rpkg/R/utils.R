@@ -1,6 +1,8 @@
 # Common utility functions
 
 #' Count items in comma-separated string
+#' @param x Character string. A comma-separated list of items (e.g., \code{"E001,E002,E003"}).
+#'   An empty string returns \code{0}.
 #' @export
 #' @examples
 #' count_items("E001,E002,E003")

@@ -20,6 +20,34 @@ find_diff_and_ref_exparts_for_split(
   dexseq_frag = NULL
 )
 }
+\arguments{
+\item{g}{An \code{igraph} directed acyclic graph representing a gene splicing graph.}
+
+\item{source}{Character string. Name of the bubble source vertex.}
+
+\item{sink}{Character string. Name of the bubble sink vertex.}
+
+\item{split}{A list with elements \code{group1} and \code{group2}, each a character vector of
+path indices forming one side of the binary partition.}
+
+\item{parsed_partitions}{A list of character vectors mapping each path index to its transcript names.}
+
+\item{parsed_paths}{A list of character vectors of internal vertex names for each path.}
+
+\item{tx_ex_parts}{A named list of exonic part edge names covered by each transcript.}
+
+\item{bipartitions_df}{A data frame accumulating results; new rows are appended and returned.}
+
+\item{gene}{Character string. Gene identifier (e.g., Ensembl gene ID).}
+
+\item{g_exon}{Optional precomputed \code{igraph} with only exon-level edges (no \code{ex_part} edges).}
+
+\item{g_expart}{Optional precomputed \code{igraph} with only exonic-part edges (no \code{ex} edges).}
+
+\item{ex_or_in_gexpart}{Optional named character vector of edge types on \code{g_expart}.}
+
+\item{dexseq_frag}{Optional named character vector of DEXSeq fragment labels on \code{g_expart}.}
+}
 \description{
 Find differential and reference exonic parts for binary splits
 }

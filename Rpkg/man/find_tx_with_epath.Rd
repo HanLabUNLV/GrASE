@@ -6,6 +6,14 @@
 \usage{
 find_tx_with_epath(g, trans, edges_list)
 }
+\arguments{
+\item{g}{An \code{igraph} directed acyclic graph representing a gene splicing graph.}
+
+\item{trans}{Character vector of transcript names (edge attribute names on \code{g}).}
+
+\item{edges_list}{A list of character vectors, where each vector contains edge names
+(as returned by \code{set_edge_names}) defining an exon path through the splicing graph.}
+}
 \description{
 Find transcripts that use given edge paths
 }

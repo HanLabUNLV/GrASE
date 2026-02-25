@@ -6,6 +6,9 @@
 \usage{
 detect_bubbles_from_mat(txpathmat)
 }
+\arguments{
+\item{txpathmat}{A logical matrix of transcript paths (rows = transcripts, columns = nodes).}
+}
 \description{
 Main bubble detection from matrix
 }

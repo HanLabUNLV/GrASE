@@ -16,6 +16,27 @@ find_diff_and_ref_exparts_pairwise(
   gene = gene
 )
 }
+\arguments{
+\item{g}{An \code{igraph} directed acyclic graph representing a gene splicing graph.}
+
+\item{source}{Character string. Name of the bubble source vertex.}
+
+\item{sink}{Character string. Name of the bubble sink vertex.}
+
+\item{path_pairs}{A list of integer vectors of length 2, each specifying a pair of path indices
+to compare.}
+
+\item{parsed_partitions}{A list of character vectors mapping each path index to its transcript
+names.}
+
+\item{parsed_paths}{A list of character vectors of internal vertex names for each path.}
+
+\item{tx_ex_parts}{A named list of exonic part edge names covered by each transcript.}
+
+\item{pairwise_list}{A list accumulating result rows; new entries are appended and returned.}
+
+\item{gene}{Character string. Gene identifier (e.g., Ensembl gene ID).}
+}
 \description{
 Find differential and reference exonic parts for pairwise combinations
 }

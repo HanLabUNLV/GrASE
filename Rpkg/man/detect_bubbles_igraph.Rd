@@ -6,6 +6,9 @@
 \usage{
 detect_bubbles_igraph(g)
 }
+\arguments{
+\item{g}{An \code{igraph} directed acyclic graph representing a gene splicing graph.}
+}
 \description{
 Main bubble detection from igraph splice graph
 }

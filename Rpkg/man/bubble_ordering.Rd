@@ -6,6 +6,13 @@
 \usage{
 bubble_ordering(g, bubbles_df)
 }
+\arguments{
+\item{g}{An \code{igraph} directed acyclic graph representing a gene splicing graph.}
+
+\item{bubbles_df}{A data frame (or \code{S4Vectors::DataFrame}) of detected bubbles as
+returned by \code{detect_bubbles_igraph}, with columns \code{source}, \code{sink},
+\code{n}, \code{partitions}, and \code{paths}.}
+}
 \description{
 Order bubbles by topological depth
 }

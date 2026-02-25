@@ -6,6 +6,17 @@
 \usage{
 detect_bubbles_i_j_igraph(v_start_idx, v_end_idx, g, v_start_name, v_end_name)
 }
+\arguments{
+\item{v_start_idx}{Integer. Topological index of the bubble source vertex in \code{g}.}
+
+\item{v_end_idx}{Integer. Topological index of the bubble sink vertex in \code{g}.}
+
+\item{g}{An \code{igraph} directed acyclic graph representing a gene splicing graph.}
+
+\item{v_start_name}{Character string. Name of the bubble source vertex.}
+
+\item{v_end_name}{Character string. Name of the bubble sink vertex.}
+}
 \description{
 bubble detection between v_start and v_end
 }

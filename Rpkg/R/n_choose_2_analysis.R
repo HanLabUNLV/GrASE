@@ -2,6 +2,17 @@
 
 
 #' Find differential and reference exonic parts for pairwise combinations
+#' @param g An `igraph` directed acyclic graph representing a gene splicing graph.
+#' @param source Character string. Name of the bubble source vertex.
+#' @param sink Character string. Name of the bubble sink vertex.
+#' @param path_pairs A list of integer vectors of length 2, each specifying a pair of path indices
+#'   to compare.
+#' @param parsed_partitions A list of character vectors mapping each path index to its transcript
+#'   names.
+#' @param parsed_paths A list of character vectors of internal vertex names for each path.
+#' @param tx_ex_parts A named list of exonic part edge names covered by each transcript.
+#' @param pairwise_list A list accumulating result rows; new entries are appended and returned.
+#' @param gene Character string. Gene identifier (e.g., Ensembl gene ID).
 #' @export
 #' @examples
 #' \dontrun{
@@ -12,8 +23,8 @@
 #' )
 #' }
 find_diff_and_ref_exparts_pairwise <- function(
-    g, source, sink, path_pairs, 
-    parsed_partitions, parsed_paths, tx_ex_parts, 
+    g, source, sink, path_pairs,
+    parsed_partitions, parsed_paths, tx_ex_parts,
     pairwise_list, gene=gene) {
   
   # Setup graph components
@@ -122,6 +133,10 @@ generate_path_pairs <- function(n_paths) {
 }
 
 #' Convert pairwise analysis results to standardized data frame
+#' @param pairwise_list A list of row-lists produced by \code{find_diff_and_ref_exparts_pairwise},
+#'   each containing fields \code{gene}, \code{source}, \code{sink}, \code{path1_idx},
+#'   \code{path2_idx}, \code{ref_ex_part}, \code{setdiff1}, \code{setdiff2},
+#'   \code{transcripts1}, \code{transcripts2}, \code{path1}, and \code{path2}.
 #' @export
 #' @examples
 #' pairwise_list <- list(
@@ -164,6 +179,16 @@ standardize_pairwise_columns <- function(pairwise_list) {
 }
 
 #' Compute diff exons from graph using n-choose-2 pairwise analysis
+#' @param gene Character string. Gene identifier (e.g., Ensembl gene ID).
+#' @param g An `igraph` directed acyclic graph representing a gene splicing graph.
+#' @param sg Unused; retained for API compatibility. Pass \code{NULL}.
+#' @param outdir Character string. Path to output directory.
+#' @param max_path Integer. Maximum number of alternative paths in a bubble to process; bubbles
+#'   with more paths are skipped. Default is \code{20}.
+#' @param max_span Numeric. Maximum topological span (number of nodes between source and sink) of
+#'   a bubble to process; bubbles exceeding this are skipped. Default is \code{Inf}.
+#' @param collapse_bubbles Logical. Whether to collapse processed bubbles by removing redundant
+#'   paths from the graph. Default is \code{FALSE}.
 #' @export
 #' @examples
 #' \dontrun{

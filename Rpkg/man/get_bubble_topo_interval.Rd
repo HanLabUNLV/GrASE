@@ -6,6 +6,12 @@
 \usage{
 get_bubble_topo_interval(bubble, topo_idx)
 }
+\arguments{
+\item{g}{An \code{igraph} directed acyclic graph representing a gene splicing graph.}
+
+\item{bubbles_df}{A data frame (or \code{S4Vectors::DataFrame}) of detected bubbles with
+at least columns \code{source} and \code{sink}.}
+}
 \description{
 Get topological interval for bubble
 }

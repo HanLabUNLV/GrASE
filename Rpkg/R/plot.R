@@ -1,4 +1,7 @@
 #' Find the shortest edges in an igraph layout for curvature adjustment
+#' @param g An `igraph` directed acyclic graph representing a gene splicing graph.
+#' @param coords A numeric matrix of layout coordinates with one row per vertex (as returned by
+#'   igraph layout functions such as \code{igraph::layout_with_sugiyama}).
 #' @export
 #' @examples
 #' \dontrun{

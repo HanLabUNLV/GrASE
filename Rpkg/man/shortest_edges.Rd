@@ -6,6 +6,12 @@
 \usage{
 shortest_edges(g, coords)
 }
+\arguments{
+\item{g}{An \code{igraph} directed acyclic graph representing a gene splicing graph.}
+
+\item{coords}{A numeric matrix of layout coordinates with one row per vertex (as returned by
+igraph layout functions such as \code{igraph::layout_with_sugiyama}).}
+}
 \description{
 Find the shortest edges in an igraph layout for curvature adjustment
 }

@@ -6,6 +6,9 @@
 \usage{
 set_edge_names(g)
 }
+\arguments{
+\item{g}{An \code{igraph} directed acyclic graph representing a gene splicing graph.}
+}
 \description{
 Set edge names
 }

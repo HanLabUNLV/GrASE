@@ -6,6 +6,11 @@
 \usage{
 is_proper_subset(a, b)
 }
+\arguments{
+\item{a}{A vector. The candidate subset.}
+
+\item{b}{A vector. The candidate superset.}
+}
 \description{
 Check if set a is a proper subset of b
 }

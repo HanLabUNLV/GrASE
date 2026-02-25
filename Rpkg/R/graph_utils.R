@@ -4,6 +4,9 @@
 
 
 #' Convert splicingGraph to igraph
+#' @param geneID Character string. Gene identifier (e.g., Ensembl gene ID).
+#' @param gene_sg A \code{SplicingGraphs} object subsetted to the gene of interest.
+#' @param gene_graph A \code{GRanges} or data frame of splice graph edges for the gene.
 #' @export
 #' @examples
 #' \dontrun{
@@ -113,6 +116,7 @@ SG2igraph <- function(geneID,  gene_sg, gene_graph) {
 
 
 #' get transcript names from igraph edge attributes
+#' @param g An `igraph` directed acyclic graph representing a gene splicing graph.
 #' @export
 #' @examples
 #' \dontrun{
@@ -129,6 +133,10 @@ transcripts_from_igraph <- function(g) {
 
 
 #' Generate transcript-paths from igraph edge attributes
+#' @param g An `igraph` directed acyclic graph representing a gene splicing graph.
+#' @param type Character string. Edge type to use for path extraction; either
+#'   \code{"exon"} (default) to use exon-level edges or \code{"ex_part"} to use
+#'   exonic-part edges.
 #' @export
 #' @examples
 #' \dontrun{
@@ -179,6 +187,7 @@ txpath_from_edgeattr <- function(g, type="exon") {
 
 
 #' Set transcript paths as vertex attributes on an igraph splice graph
+#' @param g An `igraph` directed acyclic graph representing a gene splicing graph.
 #' @export
 #' @examples
 #' \dontrun{
@@ -291,6 +300,7 @@ map_DEXSeq_from_gff <- function(g, gff) {
 
 
 #' Set edge names
+#' @param g An `igraph` directed acyclic graph representing a gene splicing graph.
 #' @export
 #' @examples
 #' \dontrun{
@@ -487,11 +497,15 @@ from_exon_path_to_exonic_part_path <- function(g, exonpath) {
 
 
 #' Check if set a is a proper subset of b
+#' @param a A vector. The candidate subset.
+#' @param b A vector. The candidate superset.
+#' @export
 is_proper_subset <- function(a, b) {
   length(a) < length(b) && all(a %in% b)
 }
 
 #' Create subset relation graph from sets
+#' @param paths A named list of integer or character vectors representing sets (e.g., exonic part paths).
 #' @export
 #' @examples
 #' sets <- list("1" = c(1L, 2L), "2" = c(1L, 2L, 3L), "3" = c(4L, 5L))
@@ -520,6 +534,9 @@ path_subset_relation <- function(sets) {
 
 
 #' Check if edge is in transcript path
+#' @param g An `igraph` directed acyclic graph representing a gene splicing graph.
+#' @param trans Character vector of transcript names (edge attribute names on \code{g}).
+#' @param e Integer. Edge index to query.
 #' @export
 #' @examples
 #' \dontrun{
@@ -534,6 +551,10 @@ edge_in_txpath <- function(g, trans, e){
 }
 
 #' Find transcripts that use given edge paths
+#' @param g An `igraph` directed acyclic graph representing a gene splicing graph.
+#' @param trans Character vector of transcript names (edge attribute names on \code{g}).
+#' @param edges_list A list of character vectors, where each vector contains edge names
+#'   (as returned by \code{set_edge_names}) defining an exon path through the splicing graph.
 #' @export
 #' @examples
 #' \dontrun{

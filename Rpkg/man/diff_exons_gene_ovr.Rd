@@ -6,6 +6,13 @@
 \usage{
 diff_exons_gene_ovr(gene, g, outdir)
 }
+\arguments{
+\item{gene}{Character string. Gene identifier (e.g., Ensembl gene ID).}
+
+\item{g}{An \code{igraph} directed acyclic graph representing a gene splicing graph.}
+
+\item{outdir}{Character string. Path to output directory.}
+}
 \description{
 Compute diff exons with one-vs-rest approach for each partition
 }

@@ -6,6 +6,15 @@
 \usage{
 diff_exons_between_tx(gene, g, tx_ids, outdir)
 }
+\arguments{
+\item{gene}{Character string. Gene identifier (e.g., Ensembl gene ID).}
+
+\item{g}{An \code{igraph} directed acyclic graph representing a gene splicing graph.}
+
+\item{tx_ids}{Character vector of transcript IDs to compare against all other transcripts.}
+
+\item{outdir}{Character string. Path to output directory.}
+}
 \description{
 Compute diff exons from graph and splicing structure for specific transcripts
 }

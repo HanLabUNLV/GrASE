@@ -12,6 +12,19 @@ count_bipartitions_both(
   outfilesuffix
 )
 }
+\arguments{
+\item{bipartition_file}{Character string. Path to a bipartition results file (tab-separated,
+as written by \code{bipartition_paths}).}
+
+\item{countmat}{A data frame or matrix of exon fragment read counts with sample columns
+followed by \code{gene} and \code{exon} columns.}
+
+\item{sampleinfo}{A named character vector mapping sample names to group labels.}
+
+\item{outdir}{Character string. Path to output directory.}
+
+\item{outfilesuffix}{Character string. Suffix appended to output file names.}
+}
 \description{
 Count exonic part reads for both setdiff1 and setdiff2 of bipartition events
 }

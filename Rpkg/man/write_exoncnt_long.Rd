@@ -14,6 +14,23 @@ write_exoncnt_long(
   outdir
 )
 }
+\arguments{
+\item{ref_counts_df}{A data frame of reference exonic part read counts with sample columns
+and an \code{event} column.}
+
+\item{diff_counts_df}{A data frame of differential (alternative) exonic part read counts with
+the same structure as \code{ref_counts_df}.}
+
+\item{events}{Character vector of event identifiers to include from the count data frames.}
+
+\item{gene_name}{Character string. Gene identifier used to construct the output file name.}
+
+\item{sampleinfo}{A named character vector mapping sample names to group labels.}
+
+\item{outfilesuffix}{Character string. Suffix appended to output file names.}
+
+\item{outdir}{Character string. Path to output directory.}
+}
 \description{
 Write exon counts in long format for downstream statistical testing
 }

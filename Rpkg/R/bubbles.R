@@ -146,6 +146,11 @@ get_bubble_variants <- function (txpathmat, sgnodetypes, i, j)
 
 
 #' bubble detection between i and j
+#' @param i Integer. Column index of the bubble source (start) node in \code{txpathmat}.
+#' @param j Integer. Column index of the bubble sink (end) node in \code{txpathmat}.
+#' @param txpathmat A logical matrix of transcript paths (rows = transcripts, columns = nodes).
+#' @param sgnodetypes An integer vector of node types (1 = exon start, 2 = exon end) as returned by
+#'   \code{get_sgnodetypes}.
 #' @export
 #' @examples
 #' \dontrun{
@@ -183,6 +188,7 @@ detect_bubbles_i_j <- function(i, j, txpathmat, sgnodetypes)
 }
 
 #' Main bubble detection from matrix
+#' @param txpathmat A logical matrix of transcript paths (rows = transcripts, columns = nodes).
 #' @export
 #' @examples
 #' \dontrun{
@@ -253,6 +259,9 @@ get_sgnodetypes_igraph <- function (g_tmp, check.graph=FALSE)
 
 
 #' Get all simple paths through a bubble in an igraph splice graph
+#' @param g An `igraph` directed acyclic graph representing a gene splicing graph.
+#' @param v_start Character string. Name of the bubble source (start) vertex.
+#' @param v_end Character string. Name of the bubble sink (end) vertex.
 #' @export
 #' @examples
 #' \dontrun{
@@ -439,6 +448,11 @@ get_bubble_variants_igraph <- function(g, v_start_idx, v_end_idx) {
 
 
 #' bubble detection between v_start and v_end
+#' @param v_start_idx Integer. Topological index of the bubble source vertex in \code{g}.
+#' @param v_end_idx Integer. Topological index of the bubble sink vertex in \code{g}.
+#' @param g An `igraph` directed acyclic graph representing a gene splicing graph.
+#' @param v_start_name Character string. Name of the bubble source vertex.
+#' @param v_end_name Character string. Name of the bubble sink vertex.
 #' @export
 #' @examples
 #' \dontrun{
@@ -479,6 +493,7 @@ detect_bubbles_i_j_igraph <- function(v_start_idx, v_end_idx, g, v_start_name, v
 
 
 #' Main bubble detection from igraph splice graph
+#' @param g An `igraph` directed acyclic graph representing a gene splicing graph.
 #' @export
 #' @examples
 #' \dontrun{
@@ -530,6 +545,8 @@ detect_bubbles_igraph <- function (g)
 # --- Partition enumeration and bubble ordering ---
 
 #' Generate valid binary partitions from DAG
+#' @param dag An `igraph` directed acyclic graph where nodes represent paths and edges
+#'   represent proper subset relationships between path exonic parts.
 #' @export
 #' @examples
 #' dag <- igraph::graph_from_edgelist(
@@ -582,6 +599,8 @@ valid_partitions <- function(dag) {
 }
 
 #' Generate valid partition indices from DAG
+#' @param dag An `igraph` directed acyclic graph where nodes represent paths and edges
+#'   represent proper subset relationships between path exonic parts.
 #' @export
 #' @examples
 #' dag <- igraph::graph_from_edgelist(
@@ -632,6 +651,8 @@ valid_partitions_idx <- function(dag) {
 }
 
 #' Remove symmetric splits (where group1/group2 are swapped)
+#' @param splits A list of split objects, each with \code{group1} and \code{group2} character
+#'   vectors naming the partitioned paths.
 #' @export
 #' @examples
 #' splits <- list(
@@ -664,6 +685,9 @@ remove_symmetric_splits <- function(splits){
 }
 
 #' Get topological interval for bubble
+#' @param g An `igraph` directed acyclic graph representing a gene splicing graph.
+#' @param bubbles_df A data frame (or \code{S4Vectors::DataFrame}) of detected bubbles with
+#'   at least columns \code{source} and \code{sink}.
 #' @export
 #' @examples
 #' \dontrun{
@@ -705,6 +729,10 @@ get_bubble_depths <- function(intervals) {
 }
 
 #' Order bubbles by topological depth
+#' @param g An `igraph` directed acyclic graph representing a gene splicing graph.
+#' @param bubbles_df A data frame (or \code{S4Vectors::DataFrame}) of detected bubbles as
+#'   returned by \code{detect_bubbles_igraph}, with columns \code{source}, \code{sink},
+#'   \code{n}, \code{partitions}, and \code{paths}.
 #' @export
 #' @examples
 #' \dontrun{

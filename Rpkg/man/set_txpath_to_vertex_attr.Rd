@@ -6,6 +6,9 @@
 \usage{
 set_txpath_to_vertex_attr(g)
 }
+\arguments{
+\item{g}{An \code{igraph} directed acyclic graph representing a gene splicing graph.}
+}
 \description{
 Set transcript paths as vertex attributes on an igraph splice graph
 }

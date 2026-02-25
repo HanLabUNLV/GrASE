@@ -6,6 +6,10 @@
 \usage{
 valid_partitions(dag)
 }
+\arguments{
+\item{dag}{An \code{igraph} directed acyclic graph where nodes represent paths and edges
+represent proper subset relationships between path exonic parts.}
+}
 \description{
 Generate valid binary partitions from DAG
 }

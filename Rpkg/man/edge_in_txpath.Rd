@@ -6,6 +6,13 @@
 \usage{
 edge_in_txpath(g, trans, e)
 }
+\arguments{
+\item{g}{An \code{igraph} directed acyclic graph representing a gene splicing graph.}
+
+\item{trans}{Character vector of transcript names (edge attribute names on \code{g}).}
+
+\item{e}{Integer. Edge index to query.}
+}
 \description{
 Check if edge is in transcript path
 }

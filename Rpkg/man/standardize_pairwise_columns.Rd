@@ -6,6 +6,12 @@
 \usage{
 standardize_pairwise_columns(pairwise_list)
 }
+\arguments{
+\item{pairwise_list}{A list of row-lists produced by \code{find_diff_and_ref_exparts_pairwise},
+each containing fields \code{gene}, \code{source}, \code{sink}, \code{path1_idx},
+\code{path2_idx}, \code{ref_ex_part}, \code{setdiff1}, \code{setdiff2},
+\code{transcripts1}, \code{transcripts2}, \code{path1}, and \code{path2}.}
+}
 \description{
 Convert pairwise analysis results to standardized data frame
 }

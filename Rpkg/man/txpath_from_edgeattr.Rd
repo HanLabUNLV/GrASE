@@ -6,6 +6,13 @@
 \usage{
 txpath_from_edgeattr(g, type = "exon")
 }
+\arguments{
+\item{g}{An \code{igraph} directed acyclic graph representing a gene splicing graph.}
+
+\item{type}{Character string. Edge type to use for path extraction; either
+\code{"exon"} (default) to use exon-level edges or \code{"ex_part"} to use
+exonic-part edges.}
+}
 \description{
 Generate transcript-paths from igraph edge attributes
 }

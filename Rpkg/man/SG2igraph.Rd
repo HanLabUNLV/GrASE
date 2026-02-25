@@ -6,6 +6,13 @@
 \usage{
 SG2igraph(geneID, gene_sg, gene_graph)
 }
+\arguments{
+\item{geneID}{Character string. Gene identifier (e.g., Ensembl gene ID).}
+
+\item{gene_sg}{A \code{SplicingGraphs} object subsetted to the gene of interest.}
+
+\item{gene_graph}{A \code{GRanges} or data frame of splice graph edges for the gene.}
+}
 \description{
 Convert splicingGraph to igraph
 }

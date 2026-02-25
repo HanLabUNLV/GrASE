@@ -3,6 +3,17 @@
 ###########################################################
 
 #' pvalueAdjustment function
+#' @param res A data frame of test results containing at least a \code{pvalue} column and,
+#'   when \code{independentFiltering = TRUE}, a \code{baseMean} column.
+#' @param independentFiltering Logical. Whether to perform independent filtering to increase
+#'   the number of discoveries.
+#' @param filter Numeric vector used as the independent filter statistic. If missing and
+#'   \code{independentFiltering = TRUE}, defaults to \code{res$baseMean}.
+#' @param theta Numeric vector of quantile thresholds for the independent filter. If missing,
+#'   a sequence from the fraction of zeros up to 0.95 is used.
+#' @param alpha Numeric. The significance level for the independent filtering optimization.
+#' @param pAdjustMethod Character string. The p-value adjustment method passed to
+#'   \code{p.adjust} (e.g., \code{"BH"}, \code{"bonferroni"}).
 #' @export
 #' @examples
 #' \dontrun{

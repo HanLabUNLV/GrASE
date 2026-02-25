@@ -6,6 +6,14 @@
 \usage{
 group_by_event(dat, col_y, col_n)
 }
+\arguments{
+\item{dat}{A data frame of exon count data.}
+
+\item{col_y}{Character string. Name of the column containing the count of reads supporting the
+alternative splicing event (numerator).}
+
+\item{col_n}{Character string. Name of the column containing the total read count (denominator).}
+}
 \description{
 Group exon count data by gene and event
 }

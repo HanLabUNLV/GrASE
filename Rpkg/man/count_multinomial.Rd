@@ -6,6 +6,17 @@
 \usage{
 count_multinomial(multinomial_file, countmat, sampleinfo, outdir)
 }
+\arguments{
+\item{multinomial_file}{Character string. Path to a multinomial results file (tab-separated,
+as written by \code{multinomial_paths}).}
+
+\item{countmat}{A data frame or matrix of exon fragment read counts with sample columns
+followed by \code{gene} and \code{exon} columns.}
+
+\item{sampleinfo}{A named character vector mapping sample names to group labels.}
+
+\item{outdir}{Character string. Path to output directory.}
+}
 \description{
 Count exonic part reads for multinomial events
 }

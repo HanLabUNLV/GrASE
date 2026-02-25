@@ -15,6 +15,22 @@ bipartition_paths(
   collapse_bubbles = FALSE
 )
 }
+\arguments{
+\item{gene}{Character string. Gene identifier (e.g., Ensembl gene ID).}
+
+\item{g}{An \code{igraph} directed acyclic graph representing a gene splicing graph.}
+
+\item{outdir}{Character string. Path to output directory.}
+
+\item{max_path}{Integer. Maximum number of alternative paths in a bubble to process; bubbles
+with more paths are skipped. Default is \code{15}.}
+
+\item{max_span}{Numeric. Maximum topological span (number of nodes between source and sink) of
+a bubble to process; bubbles exceeding this are skipped. Default is \code{Inf}.}
+
+\item{collapse_bubbles}{Logical. Whether to collapse processed bubbles by removing redundant
+paths from the graph. Default is \code{FALSE}.}
+}
 \description{
 Compute diff exons from graph using binary partitions
 For each bubble, find all valid binary partitions of paths, then find diff exons for each partition.

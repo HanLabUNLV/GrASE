@@ -6,6 +6,9 @@
 \usage{
 transcripts_from_igraph(g)
 }
+\arguments{
+\item{g}{An \code{igraph} directed acyclic graph representing a gene splicing graph.}
+}
 \description{
 get transcript names from igraph edge attributes
 }

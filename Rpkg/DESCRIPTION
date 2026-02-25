@@ -29,9 +29,7 @@ Suggests:
 Config/testthat/edition: 3
 VignetteBuilder: knitr
 Imports:
-    AnnotationDbi,
     GenomeInfoDb,
-    GenomicFeatures,
     IRanges,
     MatrixGenerics,
     S4Vectors,
@@ -39,7 +37,6 @@ Imports:
     VGAM,
     dplyr,
     glmmTMB,
-    gtools,
     igraph,
     rtracklayer,
     stringr,

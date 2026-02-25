@@ -6,6 +6,10 @@
 \usage{
 count_items(x)
 }
+\arguments{
+\item{x}{Character string. A comma-separated list of items (e.g., \code{"E001,E002,E003"}).
+An empty string returns \code{0}.}
+}
 \description{
 Count items in comma-separated string
 }

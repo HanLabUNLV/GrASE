@@ -6,6 +6,13 @@
 \usage{
 bubble_paths_igraph(g, v_start, v_end)
 }
+\arguments{
+\item{g}{An \code{igraph} directed acyclic graph representing a gene splicing graph.}
+
+\item{v_start}{Character string. Name of the bubble source (start) vertex.}
+
+\item{v_end}{Character string. Name of the bubble sink (end) vertex.}
+}
 \description{
 Get all simple paths through a bubble in an igraph splice graph
 }

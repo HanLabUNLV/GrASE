@@ -6,6 +6,10 @@
 \usage{
 remove_symmetric_splits(splits)
 }
+\arguments{
+\item{splits}{A list of split objects, each with \code{group1} and \code{group2} character
+vectors naming the partitioned paths.}
+}
 \description{
 Remove symmetric splits (where group1/group2 are swapped)
 }
