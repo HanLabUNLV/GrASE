@@ -252,36 +252,6 @@ map_DEXSeq_from_gff <- function(g, gff) {
 }
 
 
-#' Generate dictionary that translates between node IDs and positions
-#'
-#' @param sg A SplicingGraph object
-#' @return A named vector mapping node IDs to genomic positions
-#' @export
-dict_node2pos <- function(sg, gene) {
-  old_opts <- options(scipen = 999)  # Temporarily increase penalty for scientific notation
-  on.exit(options(old_opts))         # Restore original options on function exit
-  
-  edges_by_gene <- SplicingGraphs::sgedgesByGene(sg)
-
-  if (SplicingGraphs::strand(sg) == '+') {
-    node2pos1 <- cbind(edges_by_gene[[gene]]$to, rtracklayer::end(edges_by_gene[[gene]]) + 1)
-    node2pos2 <- cbind(edges_by_gene[[gene]]$from, rtracklayer::start(edges_by_gene[[gene]]))
-  } else {
-    node2pos1 <- cbind(edges_by_gene[[gene]]$from, rtracklayer::end(edges_by_gene[[gene]]) + 1)
-    node2pos2 <- cbind(edges_by_gene[[gene]]$to, rtracklayer::start(edges_by_gene[[gene]]))
-  }
-
-  node2pos <- rbind(node2pos1, node2pos2)
-  node2pos <- unique(node2pos[order(node2pos[, 1]), ])
-  rownames(node2pos) <- node2pos[, 1]
-  node2pos <- node2pos[, 2] 
-  node2pos['R'] <- 'R'
-  node2pos['L'] <- 'L' 
-
-  return(node2pos)
-}
-
-
 
 #' Set edge names
 #' @export
@@ -359,39 +329,6 @@ from_epath_to_expart_path_simple <- function(g, epath) {
 
 
 
-
-#' convert vertex path to exon path
-#' @export
-from_vpath_to_edge_path_simple <- function(g, bubblepath) {
-  
-  n <- length(bubblepath)
-  if (n < 2) return(integer(0))
-
-  # Prepare a list of length n-1
-  edge_blocks <- vector("list", n - 1L)
-  sg_ids       <- igraph::vertex_attr(g, "sg_id")
-  names(sg_ids) <- igraph::vertex_attr(g, "name")
-
-  for (i in 1:(n - 1)) {
-    v1   <- bubblepath[i]
-    v2   <- bubblepath[i + 1L]
-    if (igraph::are_adjacent(g, v1, v2)) {
-      eid <- igraph::get_edge_ids(g, vp =c(v1, v2))
-      edge_blocks[[i]]<- igraph::edge_attr(g, "name", index = eid)
-    }
-    else {
-      # find all internal vertices for this exon edge
-      id1      <- which(sg_ids == sg_ids[v1])
-      id2      <- which(sg_ids == sg_ids[v2])
-      sub_sg   <- sg_ids[seq(min(id1, id2), max(id1, id2))]
-
-      # collect all ex_part edges across each adjacent sg pair
-      eid <- igraph::E(g, path=names(sub_sg))
-      edge_blocks[[i]]<- igraph::edge_attr(g, "name", index = eid)
-    }
-  } 
-  unlist(edge_blocks, use.names = FALSE)
-}
 
 
 
@@ -477,4 +414,55 @@ from_exon_path_to_exonic_part_path <- function(g, exonpath) {
 }
 
 
+#' Check if set a is a proper subset of b
+is_proper_subset <- function(a, b) {
+  length(a) < length(b) && all(a %in% b)
+}
 
+#' Create subset relation graph from sets
+#' @export
+path_subset_relation <- function(sets) {
+  n <- length(sets)
+  if (n == 0) return(igraph::graph.empty())
+
+  # Create adjacency list
+  edges <- c()
+  for (i in 1:(n-1)) {
+    for (j in (i+1):n) {
+      if (is_proper_subset(sets[[i]], sets[[j]])) {
+        edges <- c(edges, i, j)
+      } else if (is_proper_subset(sets[[j]], sets[[i]])) {
+        edges <- c(edges, j, i)
+      }
+    }
+  }
+
+  g <- igraph::graph(edges, n = n, directed = TRUE)
+  igraph::V(g)$name <- names(sets) %||% as.character(1:n)
+  g
+}
+
+
+#' Check if edge is in transcript path
+#' @export
+edge_in_txpath <- function(g, trans, e){
+   sapply(igraph::edge_attr(g)[trans], `[`, e)
+}
+
+#' Find transcripts that use given edge paths
+#' @export
+find_tx_with_epath <- function(g, trans, edges_list) {
+  eid = as.integer(igraph::E(g))
+  names(eid) = igraph::edge_attr(g, "name")
+  tx_to_update = list()
+  for (edges in edges_list) {
+    epath_name = paste0(edges, collapse = ",")
+    tx_to_update[[epath_name]] <- list()
+    for (e in edges) {
+      log_debug(e)
+      tx_to_update[[epath_name]] <- append(tx_to_update[[epath_name]], list(trans[grase::edge_in_txpath(g, trans, eid[e])]))
+    }
+    names(tx_to_update[[epath_name]]) = edges
+  }
+  tx_to_update
+}

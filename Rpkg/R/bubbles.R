@@ -373,64 +373,6 @@ get_bubble_variants_igraph <- function(g, v_start_idx, v_end_idx) {
 
 
 
-get_bubble_variants_igraph_himem <- function (g, v_start, v_end) 
-{
-  attrs <- igraph::vertex_attr_names(g)
-  excluded <- c("name", "position", "sg_id", "id")
-  trans <- setdiff(attrs, excluded)
-
-  v_names = igraph::V(g)$name
-  txbase <- unlist(igraph::vertex_attr(g, index=v_start)[trans]) & unlist(igraph::vertex_attr(g, index=v_end)[trans])
-  txbase_names <- trans[txbase] 
-  internal_nodes = igraph::V(g)[v_names[(as.integer(v_start)+1):(as.integer(v_end)-1)]]$name    # high_mem
- 
-  for (n in internal_nodes) { 
-    tx_internal = unlist(igraph::vertex_attr(g, index=n)[trans])      # high_mem
-    if (all(tx_internal >= txbase))
-      return (list())
-  } 
-
-  bubble_submat <- igraph::vertex_attr(g, index=internal_nodes)[txbase_names]  
-  if (length(bubble_submat) == 0)
-    return (list())
-  bubble_submat <- matrix(unlist(bubble_submat), nrow=length(bubble_submat), byrow=TRUE)
-  rownames(bubble_submat) = txbase_names
-  colnames(bubble_submat) = internal_nodes
-  bubble_submat <- bubble_submat[, colSums(bubble_submat) != 0L, drop = FALSE] # only keep nodes that are present in txbase
-  if (length(bubble_submat) == 0)
-    return (list())
-
-  bubble_submat <- bubble_submat+0
-  bubble_submat_colnames = colnames(bubble_submat)
-  row_strs   <- apply(bubble_submat, 1, paste, collapse = "")
-  patterns <- unique(row_strs)
-
-  partitions = lapply(seq_len(length(patterns)), function(i) names(row_strs[row_strs == patterns[i]]))
-  names(partitions) = patterns
-  paths = lapply(seq_len(nrow(bubble_submat)), 
-        function(i) bubble_submat_colnames[bubble_submat[i, ]==1])
-  names(paths) = row_strs
-  paths_unique <- paths[ !duplicated(paths) ]
-
-  list(partition = partitions, path = paths_unique)
-}
-
-
-#' @export
-get_bubble_variants_igraph_slow <- function (g, bubble_paths, v_start, v_end) 
-{
-  internal_paths = lapply(bubble_paths, function(x) { x[2:(length(x)-1)] }) # get rid of first and last (source and sink)
-
-  partitions = list()
-  txbase <- trans[unlist(igraph::vertex_attr(g, index=v_start)[trans]) & unlist(igraph::vertex_attr(g, index=v_end)[trans])]
-  for (path in internal_paths) {
-    tx_pass = igraph::vertex_attr(g, index=path)[txbase]
-    tx_pass = names(which(unlist(tx_pass)))   
-    partitions = append(partitions, list(tx_pass))
-  } 
-  list(partition = partitions, path = internal_paths)
-}
-
 
 #' bubble detection between v_start and v_end
 #' @export
@@ -501,10 +443,218 @@ detect_bubbles_igraph <- function (g)
       ans_paths <- c(ans_paths, retval$ans_paths)
     }
   }
-  S4Vectors::DataFrame(source = ans_source, sink = ans_sink, n = ans_d, 
+  S4Vectors::DataFrame(source = ans_source, sink = ans_sink, n = ans_d,
     partitions = ans_partitions, paths = ans_paths
     )
 }
 
 
+# --- Partition enumeration and bubble ordering ---
+
+#' Generate valid binary partitions from DAG
+#' @export
+valid_partitions <- function(dag) {
+  nodes <- igraph::V(dag)$name
+  n     <- length(nodes)
+
+  # get a topological ordering of dag
+  topo <- igraph::topo_sort(dag, mode = "out")$name
+
+  # for each node, precompute its direct predecessors in dag
+  preds <- lapply(topo, function(v) {
+    igraph::neighbors(dag, v, mode = "in")$name
+  })
+  names(preds) <- topo
+
+  valid_splits <- vector("list", 0)
+  split_idx    <- 1L
+
+  # recursively build for downward-closed sets (lower sets) in dag
+  recurse <- function(i, current_set) {
+    if (i > n) {
+      k <- length(current_set)
+      if (k > 0 && k < n) {
+        valid_splits[[split_idx]] <<- list(
+          group1 = sort(current_set),
+          group2 = sort(setdiff(nodes, current_set))
+        )
+        split_idx <<- split_idx + 1L
+      }
+      return()
+    }
+
+    v <- topo[i]
+    # Include v only if all its subset-predecessors are already in the set
+    if (all(preds[[v]] %in% current_set)) {
+      recurse(i + 1L, c(current_set, v))
+    }
+    # Also consider skipping v
+    recurse(i + 1L, current_set)
+  }
+
+  recurse(1L, character(0))
+  valid_splits
+}
+
+#' Generate valid partition indices from DAG
+#' @export
+valid_partitions_idx <- function(dag) {
+  nodes <- igraph::V(dag)$name
+  n     <- length(nodes)
+
+  # get a topological ordering of dag
+  topo <- igraph::topo_sort(dag, mode = "out")$name
+
+  # for each node, precompute its direct predecessors in dag
+  preds <- lapply(topo, function(v) {
+    igraph::neighbors(dag, v, mode = "in")$name
+  })
+  names(preds) <- topo
+
+  valid_splits <- vector("list", 0)
+  split_idx    <- 1L
+
+  # recursively build for downward-closed sets (lower sets) in dag
+  recurse <- function(i, current_set) {
+    if (i > n) {
+      k <- length(current_set)
+      if (k > 0 && k < n) {
+        current_idx <- which(nodes %in% current_set)
+        valid_splits[[split_idx]] <<- current_idx
+        split_idx <<- split_idx + 1L
+      }
+      return()
+    }
+
+    v <- topo[i]
+    # Include v only if all its subset-predecessors are already in the set
+    if (all(preds[[v]] %in% current_set)) {
+      recurse(i + 1L, c(current_set, v))
+    }
+    # Also consider skipping v
+    recurse(i + 1L, current_set)
+  }
+
+  recurse(1L, character(0))
+  valid_splits
+}
+
+#' Remove symmetric splits (where group1/group2 are swapped)
+#' @export
+remove_symmetric_splits <- function(splits){
+  unique_splits <- list()
+  for (split in splits) {
+    # Canonicalize by ensuring group1 has smaller first element
+    if (length(split$group1) > 0 && length(split$group2) > 0) {
+      if (split$group1[1] > split$group2[1]) {
+        split <- list(group1 = split$group2, group2 = split$group1)
+      }
+    }
+
+    # Check if we've seen this split before
+    is_duplicate <- any(sapply(unique_splits, function(existing) {
+      identical(existing$group1, split$group1) && identical(existing$group2, split$group2)
+    }))
+
+    if (!is_duplicate) {
+      unique_splits[[length(unique_splits) + 1]] <- split
+    }
+  }
+  unique_splits
+}
+
+#' Get topological interval for bubble
+#' @export
+get_bubble_topo_interval <- function(bubble, topo_idx) {
+  source_idx <- topo_idx[bubble$source]
+  sink_idx <- topo_idx[bubble$sink]
+  c(source_idx, sink_idx)
+}
+
+#' Get bubble depths from intervals
+#' @export
+get_bubble_depths <- function(intervals) {
+  depths <- integer(length(intervals))
+  for (i in seq_along(intervals)) {
+    interval <- intervals[[i]]
+    depth <- 0
+    for (j in seq_along(intervals)) {
+      if (i != j) {
+        other_interval <- intervals[[j]]
+        if (other_interval[1] >= interval[1] && other_interval[2] <= interval[2]) {
+          depth <- depth + 1
+        }
+      }
+    }
+    depths[i] <- depth
+  }
+  depths
+}
+
+#' Order bubbles by topological depth
+#' @export
+bubble_ordering <- function(g, bubbles_df) {
+  topo <- igraph::topo_sort(g, mode = "out")
+  topo_idx <- setNames(seq_along(topo), topo$name)
+
+  intervals <- lapply(1:nrow(bubbles_df), function(i) {
+    get_bubble_topo_interval(bubbles_df[i,], topo_idx)
+  })
+
+  depths <- get_bubble_depths(intervals)
+  bubbles_df$depth <- depths
+  bubbles_df[order(depths, decreasing = TRUE),]
+}
+
+#' Order bubbles innermost-first for correct collapsing
+#'
+#' Orders bubbles by span ascending (smallest/innermost first), then by
+#' source position ascending as tiebreaker. This ensures inner bubbles are
+#' processed and collapsed before the outer bubbles that contain them.
+#' @param g An igraph splicing graph
+#' @param bubbles_df A data frame of detected bubbles
+#' @return The reordered bubbles_df with added columns: source_idx, sink_idx, span, num_paths
+#' @export
+bubble_ordering4 <- function(g, bubbles_df) {
+  if (nrow(bubbles_df) == 0) return(bubbles_df)
+
+  topo <- igraph::topo_sort(g, mode = "out")
+  topo_idx <- setNames(seq_along(topo), topo$name)
+
+  # Calculate metrics for each bubble
+  bubbles_df$source_idx <- topo_idx[bubbles_df$source]
+  bubbles_df$sink_idx <- topo_idx[bubbles_df$sink]
+  bubbles_df$span <- bubbles_df$sink_idx - bubbles_df$source_idx
+
+  # Count number of paths per bubble
+  bubbles_df$num_paths <- sapply(bubbles_df$paths, function(paths_str) {
+    length(strsplit(paths_str, "\\},\\{"))
+  })
+
+  # Order by span ascending (innermost first), then by source position ascending
+  bubbles_df[order(bubbles_df$span, bubbles_df$source_idx),]
+}
+
+#' Update transcript paths after collapsing a bubble
+#'
+#' After removing edges from a collapsed bubble, reassign the affected
+#' transcripts to the kept paths by setting edge attributes.
+#' @param g An igraph splicing graph
+#' @param tx_list List of transcript groups to update (from find_tx_with_epath)
+#' @param epath Edge paths to keep (list of edge name vectors)
+#' @return The updated igraph graph
+#' @export
+update_txpaths_after_bubble_collapse2 <- function(g, tx_list, epath) {
+  eid = as.integer(igraph::E(g))
+  names(eid) = igraph::edge_attr(g, "name")
+  for (idx in 1:length(tx_list)) {
+    tx_to_update = tx_list[[idx]][[1]]
+    for (e in epath) {
+      for (tx in tx_to_update) {
+        igraph::edge_attr(g, tx, index = eid[e]) <- TRUE
+      }
+    }
+  }
+  return (g)
+}
 

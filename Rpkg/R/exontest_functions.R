@@ -46,48 +46,6 @@ phi_estimate_glmmTMB <- function(dd) {
 }
 
 
-## per-gene/event phi_hat and var_phi from VGAM
-# DO NOT USE THIS FUNCTION
-# VGAM's delta method over 1/rho^2 will always exaggerate variance when phi is large.
-# converting VGAM variance to log(phi) scale before using delta method doesn't fix the issue of unstable estimate of variance
-#' @export
-bb_phi_estimate_VGAM <- function(dd) {
-
-  gene  <- unique(dd$gene)
-  event <- unique(dd$event)
-  dd <- dd[dd$n > 0, ]
-  if (nrow(dd) < 2) return(NULL)
-
-  m_init <- tryCatch(
-    vglm(cbind(y, n - y) ~ 1, family = VGAM::betabinomial, data = dd),
-    error = function(e) NULL
-  )
-  if (is.null(m_init)) return(NULL)
-
-  cf <- Coef(m_init)
-  rho_hat <- as.numeric(cf[2])
-  phi_hat <- (1 / rho_hat) - 1    #phi on original scale
-
-  vc <- tryCatch(vcov(m_init), error = function(e) NULL)
-  if (is.null(vc) || nrow(vc) < 2 || ncol(vc) < 2) return(NULL)
-
-  var_rho <- as.numeric(vc[2, 2])
-
-  # --- convert variance to log(phi) scale ---
-  dlogphi_drho <- -1 / (rho_hat * (1 - rho_hat))    # derivative d log(phi) / d rho
-  var_log_phi  <- (dlogphi_drho^2) * var_rho       # delta method
-
-  # --- convert to phi scale ---
-  var_phi <- (phi_hat^2) * var_log_phi
-
-  data.frame(
-    gene    = gene,
-    event   = event,
-    phi_hat = phi_hat,
-    var_phi = var_phi
-  )
-}
-
 
 #' @export
 moderate_phi_log_scale <- function(phi_table, trimming_limit = 1e+10) {

@@ -1,20 +1,4 @@
 
-.onLoad <- function(libname, pkgname) {
-  op <- options()
-  op.my_package <- list(
-    my_package.debug = FALSE
-  )
-  toset <- !(names(op.my_package) %in% names(op))
-  if (any(toset)) options(op.my_package[toset])
-}
-
-log_debug <- function(msg) {
-  if (getOption("my_package.debug", default = FALSE)) {
-    message("[DEBUG] ", msg)
-  }
-}
-
-
 parse_dexseq_frag_str <- function(frag_str) {
   if (length(frag_str) > 1) {
     log_debug(frag_str)
