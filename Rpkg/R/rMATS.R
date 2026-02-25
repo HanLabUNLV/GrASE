@@ -1,5 +1,3 @@
-library(igraph)
-library(dplyr)
 
 .onLoad <- function(libname, pkgname) {
   op <- options()
@@ -210,15 +208,15 @@ if (length(diff2_vlists[[1]]) == 0) {
     rmats_new_df <- rmats_df
     rmats_new_df[c("DexseqFragment", "DexseqRefFrag", "bipartID")] <- NA
   } else {
-    rmats2dex_df <- tibble(ID = names(rmats2dex), 
+    rmats2dex_df <- dplyr::tibble(ID = names(rmats2dex), 
                       DexseqFragment = sapply(rmats2dex, function(x) paste(sort(unique(x)), collapse = ",")),
                       DexseqRefFrag = sapply(rmats2dex_ref, function(x) paste(sort(unique(x)), collapse = ","))
                   )
-    rmats2bipart_df <- tibble(ID = names(rmats2bipart), 
+    rmats2bipart_df <- dplyr::tibble(ID = names(rmats2bipart), 
                       bipartID = sapply(rmats2bipart, function(x) paste(sort(unique(x)), collapse = ",")),
                   )
-    rmats_new_df <- left_join(rmats_df, rmats2dex_df, by = "ID") 
-    rmats_new_df <- left_join(rmats_new_df, rmats2bipart_df, by = "ID") 
+    rmats_new_df <- dplyr::left_join(rmats_df, rmats2dex_df, by = "ID") 
+    rmats_new_df <- dplyr::left_join(rmats_new_df, rmats2bipart_df, by = "ID") 
   }
 
   #out2 <- file.path(grase_output_dir, paste0("combined.fromGTF.", eventType, ".txt"))
@@ -449,15 +447,15 @@ map_rMATS_event_full_fragment <- function(g, rmats_df, eventType, gene, gff_path
     rmats_new_df <- rmats_df
     rmats_new_df[c("DexseqFragment", "DexseqRefFrag", "bipartID")] <- NA
   } else {
-    rmats2dex_df <- tibble(ID = names(rmats2dex), 
+    rmats2dex_df <- dplyr::tibble(ID = names(rmats2dex), 
                       DexseqFragment = sapply(rmats2dex, function(x) paste(unique(x), collapse = ",")),
                       DexseqRefFrag = sapply(rmats2dex_ref, function(x) paste(unique(x), collapse = ","))
                 )
-    rmats2bipart_df <- tibble(ID = names(rmats2bipart),
+    rmats2bipart_df <- dplyr::tibble(ID = names(rmats2bipart),
                       bipartID = sapply(rmats2bipart, function(x) paste(sort(unique(x)), collapse = ",")),
                   )
-    rmats_new_df <- left_join(rmats_df, rmats2dex_df, by = "ID")
-    rmats_new_df <- left_join(rmats_new_df, rmats2bipart_df, by = "ID")
+    rmats_new_df <- dplyr::left_join(rmats_df, rmats2dex_df, by = "ID")
+    rmats_new_df <- dplyr::left_join(rmats_new_df, rmats2bipart_df, by = "ID")
   }
   #out2 <- file.path(grase_output_dir, paste0("combined.fromGTF.", eventType, ".txt"))
   #write.table(rmats_new_df, file = out2, sep = "\t", row.names = FALSE, col.names = FALSE, append = TRUE, quote = FALSE)

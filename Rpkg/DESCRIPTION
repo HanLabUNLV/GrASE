@@ -1,19 +1,40 @@
 Package: grase
-Title: What the Package Does (One Line, Title Case)
-Version: 0.0.0.9000
-Authors@R: 
-    person("First", "Last", , "first.last@example.com", role = c("aut", "cre"))
-Description: What the package does (one paragraph).
-License: `use_mit_license()`, `use_gpl3_license()` or friends to pick a
-    license
+Title: Graph of Alternative Splice Junctions and Exonic Parts
+Version: 0.99.0
+Authors@R:
+    person("Mira", "Han", , "mira.han@unlv.edu", role = c("aut", "cre"),
+           comment = c(ORCID = "0000-0002-0488-1170"))
+Description: GrASE bridges the gap between splice-junction-based differential
+    splicing tools and exon-fragment-based tools by constructing splicing graphs from transcript annotations.
+    The package represents each gene as a directed acyclic graph of splice
+    junctions and exonic parts, enumerates transcript paths through the
+    graph, and identifies "bubbles" (alternative splicing events) as
+    subgraphs between shared source and sink nodes. It supports binary
+    (bipartition) and multinomial groupings of transcript paths, tests for
+    differential exon usage with beta-binomial and generalized linear mixed
+    models, and maps results between the two analysis frameworks to provide
+    a unified view of alternative splicing.
+License: GPL (>= 3)
+URL: https://github.com/HanLabUNLV/GrASE
+BugReports: https://github.com/HanLabUNLV/GrASE/issues
+biocViews: AlternativeSplicing, RNASeq, DifferentialSplicing,
+    GraphAndNetwork, Transcriptomics, GeneExpression
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
 Imports:
-  igraph,
-  rtracklayer,
-  GenomicFeatures,
-  SplicingGraphs,
-  stringr,
-  dplyr,
-  txdbmaker
+    AnnotationDbi,
+    GenomeInfoDb,
+    GenomicFeatures,
+    IRanges,
+    MatrixGenerics,
+    S4Vectors,
+    SplicingGraphs,
+    VGAM,
+    dplyr,
+    glmmTMB,
+    gtools,
+    igraph,
+    rtracklayer,
+    stringr,
+    txdbmaker
