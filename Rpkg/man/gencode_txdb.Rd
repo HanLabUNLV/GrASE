@@ -34,21 +34,12 @@ the data from Gencode, import it into R, process it and build the \code{TxDb}
 object.
 }
 \examples{
-
-## Start from scratch if you want:
 \dontrun{
-txdb_v31_hg19_chr21 <- gencode_txdb("31", "hg19", chrs = "chr21")
+## Build from a local GTF file:
+txdb <- gencode_txdb("path/to/gencode.v31.annotation.gtf.gz",
+    genome = "hg19", chrs = "chr21")
+txdb
 }
-
-## or read in the txdb object for hg19 chr21 from this package
-txdb_v31_hg19_chr21 <- AnnotationDbi::loadDb(
-    system.file("extdata", "txdb_v31_hg19_chr21.sqlite",
-        package = "GenomicState"
-    )
-)
-
-## Explore the result
-txdb_v31_hg19_chr21
 
 ## Locate the GTF file for Gencode version 31 for hg19
 gencode_source_url(version = "31", genome = "hg19")

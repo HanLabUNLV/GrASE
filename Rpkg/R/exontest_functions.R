@@ -13,11 +13,11 @@ group_by_event <- function(dat, col_y, col_n) {
   dat$y <- dat[[col_y]]
   dat$n <- dat[[col_n]]
   dat <- dat[!is.na(dat$n),]
-  dat <- dat %>% add_count(gene, event, name="n_samples")
-  dat <- dat %>% filter(n_samples > 4)
+  dat <- dat %>% dplyr::add_count(gene, event, name="n_samples")
+  dat <- dat %>% dplyr::filter(n_samples > 4)
   grouped_data <- dat %>%
-    group_by(gene, event) %>%
-    group_split()
+    dplyr::group_by(gene, event) %>%
+    dplyr::group_split()
   return(grouped_data)
 }
 

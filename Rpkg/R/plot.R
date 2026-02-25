@@ -172,7 +172,7 @@ plottx <- function (gene, outdir, gene_edges, gene_nodes) {
   points(x, y+0*2, cex=3, col="black")
   text(x,y,labels=c("R",1:(length(gene_nodes)-2),"L"))
 
-  iArrows <- igraph:::igraph.Arrows
+  iArrows <- igraph_arrows
 
   for(i in 1:nrow(gene_edges)) {
     #exons
@@ -219,4 +219,71 @@ plottx <- function (gene, outdir, gene_edges, gene_nodes) {
   grDevices::dev.off()
   return(0)
 
+}
+
+# Adapted from igraph:::igraph.Arrows (igraph package, GPL >= 2)
+# https://github.com/igraph/rigraph
+igraph_arrows <- function(x1, y1, x2, y2, code = 2, size = 1,
+    width = 1.2/4/par("cin")[2], open = TRUE, sh.adj = 0.1,
+    sh.lwd = 1, sh.col = par("fg"), sh.lty = 1, h.col = sh.col,
+    h.col.bo = sh.col, h.lwd = sh.lwd, h.lty = sh.lty, curved = FALSE) {
+  n <- length(x1)
+  recycle <- function(x) rep(x, length.out = n)
+  x1 <- recycle(x1); y1 <- recycle(y1)
+  x2 <- recycle(x2); y2 <- recycle(y2)
+  size <- recycle(size); width <- recycle(width); curved <- recycle(curved)
+  sh.lwd <- recycle(sh.lwd); sh.col <- recycle(sh.col); sh.lty <- recycle(sh.lty)
+  h.col <- recycle(h.col); h.col.bo <- recycle(h.col.bo)
+  h.lwd <- recycle(h.lwd); h.lty <- recycle(h.lty)
+  uin <- 1/xyinch()
+  label_x <- numeric(n)
+  label_y <- numeric(n)
+  for (i in seq_len(n)) {
+    cin <- size[i] * par("cin")[2]
+    w <- width[i] * (1.2/4/cin)
+    delta <- sqrt(h.lwd[i]) * par("cin")[2] * 0.005
+    x <- sqrt(seq(0, cin^2, length.out = floor(35 * cin) + 2))
+    x.arr <- c(-rev(x), -x)
+    wx2 <- w * x^2
+    y.arr <- c(-rev(wx2 + delta), wx2 + delta)
+    deg.arr <- c(atan2(y.arr, x.arr), NA)
+    r.arr <- c(sqrt(x.arr^2 + y.arr^2), NA)
+    theta1 <- atan2((y1[i] - y2[i]) * uin[2], (x1[i] - x2[i]) * uin[1])
+    theta2 <- atan2((y2[i] - y1[i]) * uin[2], (x2[i] - x1[i]) * uin[1])
+    r.seg <- cin * sh.adj
+    x1d <- y1d <- x2d <- y2d <- 0
+    if (code %in% c(1, 3)) { x2d <- r.seg * cos(theta2)/uin[1]; y2d <- r.seg * sin(theta2)/uin[2] }
+    if (code %in% c(2, 3)) { x1d <- r.seg * cos(theta1)/uin[1]; y1d <- r.seg * sin(theta1)/uin[2] }
+    sx1 <- x1[i] + x1d; sy1 <- y1[i] + y1d
+    sx2 <- x2[i] + x2d; sy2 <- y2[i] + y2d
+    if (!curved[i]) {
+      segments(sx1, sy1, sx2, sy2, lwd = sh.lwd[i], col = sh.col[i], lty = sh.lty[i])
+      phi <- atan2(y1[i] - y2[i], x1[i] - x2[i])
+      r <- sqrt((x1[i] - x2[i])^2 + (y1[i] - y2[i])^2)
+      label_x[i] <- x2[i] + 2/3 * r * cos(phi)
+      label_y[i] <- y2[i] + 2/3 * r * sin(phi)
+    } else {
+      lambda <- if (is.numeric(curved)) curved[i] else 0.5
+      midx <- (x1[i] + x2[i])/2; midy <- (y1[i] + y2[i])/2
+      spx <- midx - lambda * 1/2 * (sy2 - sy1)
+      spy <- midy + lambda * 1/2 * (sx2 - sx1)
+      spl <- xspline(x = c(sx1, spx, sx2), y = c(sy1, spy, sy2), shape = 1, draw = FALSE)
+      lines(spl, lwd = sh.lwd[i], col = sh.col[i], lty = sh.lty[i])
+      label_x[i] <- spl$x[round(2/3 * length(spl$x))]
+      label_y[i] <- spl$y[round(2/3 * length(spl$y))]
+      if (code %in% c(2, 3)) { x1[i] <- spl$x[round(3/4 * length(spl$x))]; y1[i] <- spl$y[round(3/4 * length(spl$y))] }
+      if (code %in% c(1, 3)) { x2[i] <- spl$x[round(1/4 * length(spl$x))]; y2[i] <- spl$y[round(1/4 * length(spl$y))] }
+    }
+    draw_arrowhead <- function(px, py, theta) {
+      px2 <- rep(px, length(deg.arr)); py2 <- rep(py, length(deg.arr))
+      ttheta <- rep(theta, length(deg.arr)) + deg.arr
+      xhead <- px2 + r.arr * cos(ttheta)/uin[1]
+      yhead <- py2 + r.arr * sin(ttheta)/uin[2]
+      if (open) { lines(xhead, yhead, lwd = h.lwd[i], col = h.col.bo[i], lty = h.lty[i]) }
+      else { polygon(xhead, yhead, col = h.col[i], lwd = h.lwd[i], border = h.col.bo[i], lty = h.lty[i]) }
+    }
+    if (code %in% c(2, 3)) draw_arrowhead(x2[i], y2[i], atan2((y2[i] - y1[i]) * uin[2], (x2[i] - x1[i]) * uin[1]))
+    if (code %in% c(1, 3)) draw_arrowhead(x1[i], y1[i], atan2((y1[i] - y2[i]) * uin[2], (x1[i] - x2[i]) * uin[1]))
+  }
+  list(lab.x = label_x, lab.y = label_y)
 }

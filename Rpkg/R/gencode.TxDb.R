@@ -18,21 +18,12 @@
 #' <https://github.com/LieberInstitute/brainflowprobes/blob/master/data-raw/create_sysdata.R>
 #'
 #' @examples
-#'
-#' ## Start from scratch if you want:
 #' \dontrun{
-#' txdb_v31_hg19_chr21 <- gencode_txdb("31", "hg19", chrs = "chr21")
+#' ## Build from a local GTF file:
+#' txdb <- gencode_txdb("path/to/gencode.v31.annotation.gtf.gz",
+#'     genome = "hg19", chrs = "chr21")
+#' txdb
 #' }
-#'
-#' ## or read in the txdb object for hg19 chr21 from this package
-#' txdb_v31_hg19_chr21 <- AnnotationDbi::loadDb(
-#'     system.file("extdata", "txdb_v31_hg19_chr21.sqlite",
-#'         package = "GenomicState"
-#'     )
-#' )
-#'
-#' ## Explore the result
-#' txdb_v31_hg19_chr21
 
 gencode_txdb <- function( gtf_file, genome = c('hg19','hg38') , 
     chrs = paste0("chr", c(seq_len(22), "X", "Y", "M"))) {
@@ -56,23 +47,8 @@ gencode_txdb <- function( gtf_file, genome = c('hg19','hg38') ,
     #     chrominfo = Seqinfo(genome="hg19")
     # )
 
-    message(paste(Sys.time(), "preparing metadata"))
-    metadata <- GenomicFeatures:::.prepareGFFMetadata(
-        file = gtf_file,
-        dataSource = NA, organism = "Homo sapiens",
-        taxonomyId = NA, miRBaseBuild = NA, metadata = NULL
-    )
-
     message(paste(Sys.time(), "building the txdb object"))
-    gr <- GenomicFeatures:::.tidy_seqinfo(
-        gr = gencode_gtf,
-        circ_seqs = GenomicFeatures::DEFAULT_CIRC_SEQS,
-        chrominfo = GenomeInfoDb::Seqinfo(genome = genome)
-    )
-
-    ## Prune again since GenomeInfoDb::Seqinfo() will return many seqlevels
-    gr <- GenomeInfoDb::keepSeqlevels(gr, chrs, pruning.mode = "coarse")
-    txdb <- GenomicFeatures::makeTxDbFromGRanges(gr, metadata = metadata)
+    txdb <- txdbmaker::makeTxDbFromGRanges(gencode_gtf)
     return(txdb)
 }
 
