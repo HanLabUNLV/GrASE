@@ -174,8 +174,8 @@ find_diff_and_ref_exparts_for_split <- function(g, source, sink, split, parsed_p
         ex_part2_set = ex_part2_intersect, 
         tx_ex_part1_set = tx_ex_part1, 
         tx_ex_part2_set = tx_ex_part2, 
-        g = g_expart 
-      ) 
+        g_expart = g_expart
+      )
  
       ref_ex_part_set <- unique(unlist(c(ref_ex_part$common, ref_ex_part$source, ref_ex_part$sink)))
       ref_frag <- sort(as.numeric(dexseq_frag[ref_ex_part_set]))

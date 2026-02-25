@@ -40,4 +40,5 @@ Imports:
     igraph,
     rtracklayer,
     stringr,
+    tidyr,
     txdbmaker

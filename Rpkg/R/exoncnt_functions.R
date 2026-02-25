@@ -107,7 +107,7 @@ write_exoncnt_long <- function(ref_counts_df, diff_counts_df, events, gene_name,
 #' )
 #' }
 count_bipartitions <- function(bipartition_file, countmat, sampleinfo, outdir, outfilesuffix) {
-  bipartitions <- as.data.frame(read_tsv(bipartition_file, col_types = cols(.default = "c")))  # Reads columns as characters
+  bipartitions <- utils::read.table(bipartition_file, header = TRUE, sep = "\t", stringsAsFactors = FALSE, colClasses = "character")  # Reads columns as characters
   bipartitions$event = rownames(bipartitions)
   bipartitions <- bipartitions[!(is.na(bipartitions$setdiff1) & is.na(bipartitions$setdiff2)),]
   if (length(bipartitions) == 0) { return (0) }
@@ -205,7 +205,7 @@ count_bipartitions <- function(bipartition_file, countmat, sampleinfo, outdir, o
 #' )
 #' }
 count_bipartitions_both <- function(bipartition_file, countmat, sampleinfo, outdir, outfilesuffix) {
-  bipartitions <- as.data.frame(read_tsv(bipartition_file, col_types = cols(.default = "c")))
+  bipartitions <- utils::read.table(bipartition_file, header = TRUE, sep = "\t", stringsAsFactors = FALSE, colClasses = "character")
   bipartitions$event = rownames(bipartitions)
   bipartitions <- bipartitions[!(is.na(bipartitions$setdiff1) & is.na(bipartitions$setdiff2)), ]
   if (nrow(bipartitions) == 0) { return(0) }
@@ -306,7 +306,7 @@ count_bipartitions_both <- function(bipartition_file, countmat, sampleinfo, outd
 #' }
 count_multinomial <- function(multinomial_file, countmat, sampleinfo, outdir) {
   # 1. Load the definitions file
-  multi_df <- as.data.frame(read_tsv(multinomial_file, col_types = cols(.default = "c")))
+  multi_df <- utils::read.table(multinomial_file, header = TRUE, sep = "\t", stringsAsFactors = FALSE, colClasses = "character")
   if (nrow(multi_df) == 0) return(0)
   
   # Ensure events are uniquely identified by their row names/indices

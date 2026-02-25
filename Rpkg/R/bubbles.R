@@ -489,12 +489,12 @@ detect_bubbles_i_j_igraph <- function(v_start_idx, v_end_idx, g, v_start_name, v
 {
   
     #bubble_paths = bubble_paths_igraph(g, v_start, v_end)
-    log_debug(paste("check", v_start, v_end))
+    log_debug(paste("check", v_start_name, v_end_name))
     bubble_variants <- grase::get_bubble_variants_igraph(g, v_start_idx, v_end_idx)
     bubble_d <- length(bubble_variants$partition)
-    if (bubble_d <= 1L) 
-        return (NULL)
-    log_debug(paste("bubble", v_start, v_end))
+    if (bubble_d <= 1L)
+        return(NULL)
+    log_debug(paste("bubble", v_start_name, v_end_name))
     ans_source <- v_start_name
     ans_sink <- v_end_name
     ans_d <- bubble_d
