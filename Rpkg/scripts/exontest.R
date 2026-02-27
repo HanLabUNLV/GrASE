@@ -27,8 +27,10 @@ option_list = list(
               help="count dir that contains the count and split files by gene", metavar="character"),
   make_option(c("-s", "--splittype"), type="character", 
               help="split type: bipartition or multinomial or n_choose_2", metavar="character"),
-  make_option(c("-p", "--phi"), type="character", 
+  make_option(c("-p", "--phi"), type="character",
               help="filename for phi estimates", metavar="character"),
+  make_option(c("--prec"), type="character", default=NULL,
+              help="filename for precision estimates (multinomial models)", metavar="character"),
   make_option(c("-m", "--model"), type="character", 
               help="model name", metavar="character"),
   make_option(c("--cond1"), type="character",
@@ -61,6 +63,7 @@ if (!is.null(opt$splittype)) {
 if (!is.null(opt$phi)) {
   phifile = opt$phi
 }
+prec_file <- if (!is.null(opt$prec)) opt$prec else "prec_dm.txt"
 if (!is.null(opt$model)) {
   model = opt$model 
 }
@@ -101,6 +104,9 @@ if (file.exists(exoncnt_master)) {
 # Global Precision Estimation
 if (model == 'glmmTMB_prior' || model == 'glmmTMB_fixedEB' || model == 'VGAM_MLE_EB_init') {
 
+  if (is.null(opt$phi)) stop("--phi is required for model '", model, "'")
+  if (!is.null(opt$prec)) warning("--prec is not used for model '", model, "' and will be ignored")
+
   if (file.exists(paste0(outdir,'/', phifile))) {
     phi_df <- read.table(paste0(outdir,'/', phifile), header=TRUE, row.names=NULL)
   } else {
@@ -111,9 +117,10 @@ if (model == 'glmmTMB_prior' || model == 'glmmTMB_fixedEB' || model == 'VGAM_MLE
     #cl <- makeCluster(30, outfile='phi.glmmtmb.log')
     #clusterEvalQ(cl, library(glmmTMB))
     #clusterExport(cl, varlist = c("phi_estimate_glmmTMB", "grouped_data"), envir = environment())
+    phi_progress_file <- paste0(outdir, "/phi_progress.log")
     phi_list <- mclapply(grouped_data, function(dd) {
     #phi_list <- parLapply(cl, grouped_data, function(dd) {
-      withCallingHandlers(
+      result <- withCallingHandlers(
         tryCatch({
           phi_estimate_glmmTMB(dd)
         }, error = function(e) {
@@ -131,6 +138,9 @@ if (model == 'glmmTMB_prior' || model == 'glmmTMB_fixedEB' || model == 'VGAM_MLE
           invokeRestart("muffleWarning")
         }
       )
+      cat(sprintf("%s\t%s\n", dd$gene[1], dd$event[1]),
+          file = phi_progress_file, append = TRUE)
+      result
     #})
     }, mc.cores = 32)
     #stopCluster(cl)
@@ -138,17 +148,35 @@ if (model == 'glmmTMB_prior' || model == 'glmmTMB_fixedEB' || model == 'VGAM_MLE
     rm(phi_list)
     write.table(phi_df, file=paste0(outdir,'/', phifile), quote=FALSE, sep="\t", row.names = FALSE)
   }
-} else if (model == 'DM_EB' || model == 'DM_Wald_EB') {
-  # DM Moderation Pipeline (NEW)
-  # group_by_event on counts instead of diff/n for DM
-  prec_file = 'prec_dm.txt'
+} else if (model == 'multinomial_vgam_EB' || model == 'multinomial_vgam_wald_EB') {
+  # Multinomial VGAM Moderation Pipeline
+  # group_by_event on counts instead of diff/n for multinomial
+  if (is.null(opt$prec)) stop("--prec is required for model '", model, "'")
+  if (!is.null(opt$phi)) warning("--phi is not used for model '", model, "' and will be ignored")
+
   if (file.exists(paste0(outdir,'/', prec_file))) {
     prec_table <- read.table(paste0(outdir,'/', prec_file), header=TRUE, row.names=NULL)
   } else {
     grouped_counts <- splitcnts %>% group_by(gene, event) %>% group_split()
     #cl <- makeCluster(30); clusterEvalQ(cl, {library(VGAM); library(tidyverse)})
     #clusterExport(cl, "prec_estimate_vgam")
-    prec_list <- mclapply(grouped_counts, prec_estimate_vgam, mc.cores=32) 
+    n_total <- length(grouped_counts)
+    progress_file <- paste0(outdir, "/prec_progress.log")
+    prec_list <- mclapply(grouped_counts, function(dd) {
+      result <- tryCatch(
+        prec_estimate_vgam(dd),
+        error = function(e) {
+          msg <- sprintf("[%s] ERROR gene=%s event=%s (PID %d): %s\n",
+                         format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
+                         dd$gene[1], dd$event[1], Sys.getpid(), conditionMessage(e))
+          cat(msg, file = "multinomial.prec.errors.log", append = TRUE)
+          NULL
+        }
+      )
+      cat(sprintf("%s\t%s\n", dd$gene[1], dd$event[1]),
+          file = progress_file, append = TRUE)
+      result
+    }, mc.cores=32)
     #prec_list <- parLapply(cl, grouped_counts, prec_estimate_vgam)
     #stopCluster(cl)
     prec_table <- moderate_prec_log_scale(bind_rows(Filter(Negate(is.null), prec_list)))
@@ -278,7 +306,7 @@ if (model == 'glmmTMB_prior') {
   # a separate large object alive through the fork.
   baseMean_df <- bind_rows(lapply(grouped_data_eb, function(dd)
     data.frame(gene = dd$gene[1], event = dd$event[1],
-               baseMean = mean(dd$n, na.rm = TRUE),
+               baseMean = mean(dd$y, na.rm = TRUE),
                stringsAsFactors = FALSE)))
   results <- results %>% left_join(baseMean_df, by = c("gene", "event"))
 
@@ -333,7 +361,7 @@ if (model == 'glmmTMB_prior') {
   write.table(results, file=out_resultfile, quote=FALSE, sep="\t", row.names = FALSE)
 
 
-} else if (model == 'DM_EB') {
+} else if (model == 'multinomial_vgam_EB') {
 
   splitcnts_eb <- splitcnts %>%
     left_join(prec_table, by = c("gene", "event"))
@@ -346,7 +374,14 @@ if (model == 'glmmTMB_prior') {
   res_dm <- mclapply(grouped_eb, function(dd) {
   #res_dm <- parLapply(cl, grouped_eb, function(dd) {
     tryCatch(
-      test_model_multinomial_vgam_EB(dd), error=function(e) NULL
+      test_model_multinomial_vgam_EB(dd),
+      error = function(e) {
+        msg <- sprintf("[%s] ERROR gene=%s event=%s (PID %d): %s\n",
+                       format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
+                       dd$gene[1], dd$event[1], Sys.getpid(), conditionMessage(e))
+        cat(msg, file = "multinomial_vgam_EB.errors.log", append = TRUE)
+        NULL
+      }
     )
   }, mc.cores = 32)
   #stopCluster(cl)
@@ -360,23 +395,7 @@ if (model == 'glmmTMB_prior') {
 
   write.table(results, file=out_resultfile, sep="\t", quote=F, row.names = FALSE)
 
-} else if (model == 'DM_Wald_EB') {                                                                                            
-
-  # DM Moderation Pipeline (Same as DM_EB)
-  prec_file = 'prec_dm.txt'
-  if (file.exists(paste0(outdir,'/', prec_file))) {
-    prec_table <- read.table(paste0(outdir,'/', prec_file), header=TRUE, row.names=NULL)
-  } else {
-    grouped_counts <- splitcnts %>% group_by(gene, event) %>% group_split()
-    #cl <- makeCluster(30); clusterEvalQ(cl, {library(VGAM); library(tidyverse)})
-    #clusterExport(cl, "prec_estimate_vgam")
-    prec_list <- mclapply(grouped_counts, prec_estimate_vgam, mc.cores = 32)
-    #prec_list <- parLapply(cl, grouped_counts, prec_estimate_vgam)
-    #stopCluster(cl)
-    prec_table <- moderate_prec_log_scale(bind_rows(Filter(Negate(is.null), prec_list)))
-    rm(prec_list)
-    write.table(prec_table, paste0(outdir,'/', prec_file), sep="\t", quote=F, row.names = FALSE)
-  }
+} else if (model == 'multinomial_vgam_wald_EB') {
 
   splitcnts_eb <- splitcnts %>%
     left_join(prec_table, by = c("gene", "event"))
@@ -388,8 +407,14 @@ if (model == 'glmmTMB_prior') {
   res_dm <- mclapply(grouped_eb, function(dd) {
   #res_wald <- parLapply(cl, grouped_eb, function(dd) {
     tryCatch({
-      test_model_multinomial_vgam_wald_EB(dd) 
-    }, error = function(e) NULL)
+      test_model_multinomial_vgam_wald_EB(dd)
+    }, error = function(e) {
+      msg <- sprintf("[%s] ERROR gene=%s event=%s (PID %d): %s\n",
+                     format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
+                     dd$gene[1], dd$event[1], Sys.getpid(), conditionMessage(e))
+      cat(msg, file = "multinomial_vgam_wald_EB.errors.log", append = TRUE)
+      NULL
+    })
   #})
   }, mc.cores = 32)
   #stopCluster(cl)
@@ -429,9 +454,36 @@ if (model == 'glmmTMB_prior') {
 
   write.table(results, file=out_resultfile, quote=FALSE, sep="\t", row.names = FALSE)
 
+} else if (model == 'glmmTMB_no_prior') {
+  if (!exists("grouped_data")) {
+    grouped_data <- group_by_event(splitcnts, 'diff', 'n')
+  }
+
+  result_list <- mclapply(grouped_data, function(dd) {
+    tryCatch({
+      suppressMessages(test_model_glmmTMB_without_prior(dd))
+    }, error = function(e) {
+      msg <- sprintf("[%s] ERROR gene=%s event=%s (PID %d): %s\n",
+                     format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
+                     dd$gene[1], dd$event[1], Sys.getpid(), conditionMessage(e))
+      cat(msg, file = "glmmtmb_noprior.errors.log", append = TRUE)
+      NULL
+    })
+  }, mc.cores = 32)
+
+  results <- bind_rows(Filter(Negate(is.null), result_list))
+
+  if (exists("pvalueAdjustment") && nrow(results) > 0) {
+    results$pvalue <- results$p.value
+    results <- pvalueAdjustment(results, independentFiltering=FALSE, theta=NULL, alpha=0.05, pAdjustMethod="BH")
+    results$pvalue <- NULL
+  }
+
+  write.table(results, file=out_resultfile, quote=FALSE, sep="\t", row.names = FALSE)
+
 } else {
   print ("model misspecified")
-  print ("choose between glmmTMB_prior, glmmTMB_fixedEB, VGAM_MLE_EB_init, DM_EB, DM_Wald_EB, wilcoxon")
+  print ("choose between glmmTMB_prior, glmmTMB_no_prior, glmmTMB_fixedEB, VGAM_MLE_EB_init, multinomial_vgam_EB, multinomial_vgam_wald_EB, wilcoxon")
 
 }
 

@@ -234,14 +234,16 @@ prec_estimate_vgam <- function(dd) {
     gene <- unique(dd$gene); event <- unique(dd$event)
     wide_df <- dd %>% dplyr::select(sample, groups, type, count) %>% pivot_wider(names_from = type, values_from = count, values_fill = 0)
     Y <- as.matrix(wide_df[, setdiff(names(wide_df), c("sample", "groups"))])
+    wide_df <- wide_df[rowSums(Y) > 0, ]
+    Y <- Y[rowSums(Y) > 0, , drop = FALSE]
     if (nrow(Y) < 2 || ncol(Y) < 2) return(NULL)
+    if (sum(colSums(Y) > 0) < 2) return(NULL)
 
-    m_init <- tryCatch(vglm(Y ~ 1, dirmultinomial, data = wide_df), error = function(e) NULL)
-    if (is.null(m_init)) return(NULL)
+    m_init <- vglm(Y ~ 1, dirmultinomial, data = wide_df)
 
     log_prec_hat <- as.numeric(coef(m_init)[ncol(Y)])
-    vc <- tryCatch(vcov(m_init), error = function(e) NULL)
-    if (is.null(vc) || nrow(vc) < ncol(Y)) return(NULL)
+    vc <- vcov(m_init)
+    if (nrow(vc) < ncol(Y)) return(NULL)
 
     return(data.frame(gene = gene, event = event, log_prec = log_prec_hat, var_log_prec = vc[ncol(Y), ncol(Y)]))
 }
@@ -330,14 +332,15 @@ test_model_glmmTMB_with_prior <- function(dd, prior_disp, z_bar = NULL) {
     event <- unique(dd$event)
     dd <- dd[dd$n > 0, ]
     if (nrow(dd) < 2 || length(unique(dd$groups)) < 2) return(NULL)
+    if (mean(dd$y) == 0) return(NULL)
 
     # Models include 'priors' for empirical Bayes moderation
     m1 <- tryCatch(
-      glmmTMB(cbind(y, n - y) ~ groups, data = dd, family = glmmTMB::betabinomial(link="logit"), priors = prior_disp, REML=TRUE),
+      glmmTMB(cbind(y, n - y) ~ groups, data = dd, family = glmmTMB::betabinomial(link="logit"), priors = prior_disp, REML=FALSE),
       error = function(e) NULL
     )
     m0 <- tryCatch(
-      glmmTMB(cbind(y, n - y) ~ 1, data = dd, family = glmmTMB::betabinomial(link="logit"), priors = prior_disp, REML=TRUE),
+      glmmTMB(cbind(y, n - y) ~ 1, data = dd, family = glmmTMB::betabinomial(link="logit"), priors = prior_disp, REML=FALSE),
       error = function(e) NULL
     )
 
@@ -384,6 +387,50 @@ test_model_glmmTMB_with_prior <- function(dd, prior_disp, z_bar = NULL) {
 
 
 
+# 1b. glmmTMB Beta-Binomial without prior (for comparison)
+#' Test differential exon usage with a beta-binomial glmmTMB model, no prior on dispersion.
+#' Intended for comparison with \code{test_model_glmmTMB_with_prior}.
+#' @param dd A data frame of exon count data.
+#' @export
+#' @examples
+#' \dontrun{
+#' splitcnts <- read.table("bipartition.internal.exoncnt.combined.txt",
+#'                         header = TRUE, row.names = NULL)
+#' splitcnts$groups <- factor(splitcnts$groups)
+#' grouped_data <- grase::group_by_event(splitcnts, "diff", "n")
+#' result <- grase::test_model_glmmTMB_without_prior(grouped_data[[1]])
+#' result
+#' }
+test_model_glmmTMB_without_prior <- function(dd) {
+    gene  <- unique(dd$gene)
+    event <- unique(dd$event)
+    dd <- dd[dd$n > 0, ]
+    if (nrow(dd) < 2 || length(unique(dd$groups)) < 2) return(NULL)
+    if (mean(dd$y) == 0) return(NULL)
+
+    m1 <- tryCatch(
+      glmmTMB(cbind(y, n - y) ~ groups, data = dd,
+              family = glmmTMB::betabinomial(link = "logit")),
+      error = function(e) NULL
+    )
+    m0 <- tryCatch(
+      glmmTMB(cbind(y, n - y) ~ 1, data = dd,
+              family = glmmTMB::betabinomial(link = "logit")),
+      error = function(e) NULL
+    )
+
+    if (!is.null(m1) && !is.na(logLik(m1)) && !is.null(m0) && !is.na(logLik(m0))) {
+        LR <- 2 * (logLik(m1) - logLik(m0))
+        pval <- pchisq(as.numeric(LR), df = 1, lower.tail = FALSE)
+        eff_size <- fixef(m1)$cond[2]
+        return(data.frame(gene = gene, event = event, LRT = as.numeric(LR),
+                          p.value = pval, model = "betabinomial_glmmTMB_no_prior",
+                          phi = sigma(m1), effect_size = eff_size))
+    }
+    return(NULL)
+}
+
+
 # 2. Moderated glmmTMB Beta-Binomial EB
 #' Test differential exon usage with a beta-binomial glmmTMB model using empirical Bayes fixed dispersion.
 #' @param dd A data frame of exon count data.
@@ -405,6 +452,7 @@ test_model_glmmTMB_EB <- function(dd) {
     event <- unique(dd$event)
     dd <- dd[dd$n > 0, ]
     if (nrow(dd) < 2 || length(unique(dd$groups)) < 2) return(NULL)
+    if (mean(dd$y) == 0) return(NULL)
 
     target_log_phi <- dd$z_mod[1]
     if (is.na(target_log_phi)) return(NULL)
@@ -461,7 +509,8 @@ test_model_vgam_EB_init <- function(dd) {
   event <- unique(dd$event)
   dd <- dd[dd$n > 0, ]
   if (nrow(dd) < 2 || length(unique(dd$groups)) < 2) return(NULL)
-  
+  if (mean(dd$y) == 0) return(NULL)
+
   phi_mod <- dd$phi_mod[1]
   if (is.na(phi_mod)) return(NULL)
 
@@ -540,9 +589,10 @@ test_model_wilcoxon <- function(dd) {
     
     # Filter valid rows
     dd <- dd[dd$n > 0, ]
-    
+
     # Ensure there are enough samples and both groups are present
     if (nrow(dd) < 2 || length(unique(dd$groups)) < 2) return(NULL)
+    if (mean(dd$y) == 0) return(NULL)
     
     # Calculate proportions
     dd$prop <- dd$y / dd$n
@@ -605,6 +655,7 @@ test_model_multinomial_vgam_EB <- function(dd) {
     Y <- Y[rowSums(Y) > 0, , drop = FALSE]
     
     if (nrow(Y) < 2 || length(unique(wide_df$groups)) < 2) return(NULL)
+    if (sum(colSums(Y) > 0) < 2) return(NULL)
 
     # --- Fix rho using Offset and Constraints ---
     K <- ncol(Y) # Number of predictors = Number of categories (K-1 probs + 1 rho)
@@ -698,7 +749,7 @@ test_model_multinomial_vgam_wald_EB <- function(dd, shape0, rate0, ref_option = 
     Y <- Y[valid_rows, , drop = FALSE]
     
     if (nrow(Y) < 2 || length(unique(wide_df$groups)) < 2 || ncol(Y) < 2) return(NULL)
-
+    if (sum(colSums(Y) > 0) < 2) return(NULL)
 
     # 3. Fix rho using Offset and Constraints
     K <- ncol(Y)
