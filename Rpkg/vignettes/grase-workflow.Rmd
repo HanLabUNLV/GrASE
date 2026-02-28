@@ -334,7 +334,7 @@ Rscript scripts/exontest.R \
 | `--phi` | Filename for cached phi estimates (created on first run, reused thereafter) |
 | `--model` | Statistical model (see table above) |
 | `--cond1`, `--cond2` | Condition labels; the coefficient is cond1 − cond2 |
-| `--phi_trend` | Use a loess trend (log(phi) ~ log(baseMean)) as the EB target instead of the global mean |
+| `--use_phi_loess` | Use a loess trend (log(phi) ~ log(baseMean)) as the EB target instead of the global mean |
 | `--independent_filtering` | Apply DESeq2-style independent filtering on baseMean before BH correction |
 | `--pseudocount` | Integer pseudocount added to ref reads when ref == 0 (useful for all-or-nothing switches) |
 
@@ -414,7 +414,7 @@ Rscript scripts/compare_rmats_grase.R \
 - `glmmTMB_prior` is the recommended default. It uses a global MAP prior to regularise
   per-event overdispersion estimates, which stabilises results for low-coverage events.
 - `glmmTMB_fixedEB` is similar but applies frequentist Empirical Bayes shrinkage. Use
-  `--phi_trend` with this model when read depth varies widely across events.
+  `--use_phi_loess` with this model when read depth varies widely across events.
 - `VGAM_MLE_EB_init` can be useful as a cross-check since it uses a different optimiser.
 - `wilcoxon` requires no distributional assumptions and no phi file; it is useful as a
   non-parametric sanity check.

@@ -22,7 +22,7 @@ Rscript scripts/exoncnt.R -c ~/GrASE_simulation/DEXSeq/count_files  -t multinomi
 Rscript scripts/exoncnt.R -c ~/GrASE_simulation/DEXSeq/count_files  -t n_choose_2  --cond1=group1 --cond2=group2 -a internal -i ~/GrASE_simulation/n_choose_2.filtered  -o ~/GrASE_simulation/n_choose_2.internal.counts
 Rscript scripts/exoncnt.R -c ~/GrASE_simulation/DEXSeq/count_files  -t n_choose_2  --cond1=group1 --cond2=group2 -a TSS -i ~/GrASE_simulation/n_choose_2.filtered  -o ~/GrASE_simulation/n_choose_2.TSSTTS.counts
 
-# test for different usage of alternative paths
+# test for different usage of alternative paths (bipartition)
 # glmmTMB_noprior
 Rscript scripts/exontest.R --file=bipartition.internal.exoncnt.combined.txt --outdir="~/GrASE_simulation/bipartition.test" --countdir="~/GrASE_simulation/bipartition.internal.counts/" --splittype=bipartition --model=glmmTMB_no_prior --cond1='group1' --cond2='group2' &> bipart.internal.glmmTMB_noprior.log 
 Rscript scripts/exontest.R --file=bipartition.TSSTTS.exoncnt.combined.txt --outdir="~/GrASE_simulation/bipartition.test" --countdir="~/GrASE_simulation/bipartition.TSSTTS.counts/" --splittype=bipartition --model=glmmTMB_no_prior --cond1='group1' --cond2='group2' &>  bipart.TSSTTS.glmmTMB_noprior.log 
@@ -41,7 +41,7 @@ Rscript scripts/exontest.R --file=bipartition.internal.exoncnt.combined.txt --ou
 Rscript scripts/exontest.R --file=bipartition.TSSTTS.exoncnt.combined.txt --outdir="~/GrASE_simulation/bipartition.test" --countdir="~/GrASE_simulation/bipartition.TSSTTS.counts/" --splittype=bipartition --phi=phi.glmmtmb.TSSTTS.txt --model=wilcoxon --cond1='group1' --cond2='group2' &>  bipart.TSSTTS.wilcoxon.log 
 
 
-# test for different usage of alternative paths
+# test for different usage of alternative paths (n_choose_2)
 # glmmTMB_prior
 Rscript scripts/exontest.R --file=n_choose_2.internal.exoncnt.combined.txt --outdir="~/GrASE_simulation/n_choose_2.test" --countdir="~/GrASE_simulation/n_choose_2.internal.counts/" --splittype=n_choose_2 --phi=phi.glmmtmb.internal.txt --model=glmmTMB_prior --cond1='group1' --cond2='group2' &> nc2.internal.glmmTMB_prior.log 
 Rscript scripts/exontest.R --file=n_choose_2.TSSTTS.exoncnt.combined.txt --outdir="~/GrASE_simulation/n_choose_2.test" --countdir="~/GrASE_simulation/n_choose_2.TSSTTS.counts/" --splittype=n_choose_2 --phi=phi.glmmtmb.TSSTTS.txt --model=glmmTMB_prior --cond1='group1' --cond2='group2' &>  nc2.TSSTTS.glmmTMB_prior.log 
@@ -57,12 +57,22 @@ Rscript scripts/exontest.R --file=n_choose_2.TSSTTS.exoncnt.combined.txt --outdi
 
 
 # test for different usage of alternative paths (multinomial)
+# multinomial_dm_direct
+Rscript scripts/exontest.R --file=multinomial.internal.exoncnt.combined.txt --outdir="~/GrASE_simulation/multinomial.dm" --countdir="~/GrASE_simulation/multinomial.internal.counts/" --splittype=multinomial --prec=prec_multinomial.internal.txt --model=multinomial_dm_EB --cond1='group1' --cond2='group2' &> multinomial.internal.multinomial_dm_EB.log
+Rscript scripts/exontest.R --file=multinomial.TSSTTS.exoncnt.combined.txt --outdir="~/GrASE_simulation/multinomial.dm" --countdir="~/GrASE_simulation/multinomial.TSSTTS.counts/" --splittype=multinomial --prec=prec_multinomial.TSSTTS.txt --model=multinomial_dm_EB --cond1='group1' --cond2='group2' &> multinomial.TSSTTS.multinomial_dm_EB.log
 # multinomial_vgam_EB
-Rscript scripts/exontest.R --file=multinomial.internal.exoncnt.combined.txt --outdir="~/GrASE_simulation/multinomial.test" --countdir="~/GrASE_simulation/multinomial.internal.counts/" --splittype=multinomial --prec=prec_multinomial.internal.txt --model=multinomial_vgam_EB --cond1='group1' --cond2='group2' &> multinomial.internal.multinomial_vgam_EB.log
-Rscript scripts/exontest.R --file=multinomial.TSSTTS.exoncnt.combined.txt --outdir="~/GrASE_simulation/multinomial.test" --countdir="~/GrASE_simulation/multinomial.TSSTTS.counts/" --splittype=multinomial --prec=prec_multinomial.TSSTTS.txt --model=multinomial_vgam_EB --cond1='group1' --cond2='group2' &>  multinomial.TSSTTS.multinomial_vgam_EB.log
+#Rscript scripts/exontest.R --file=multinomial.internal.exoncnt.combined.txt --outdir="~/GrASE_simulation/multinomial.test" --countdir="~/GrASE_simulation/multinomial.internal.counts/" --splittype=multinomial --prec=prec_multinomial.internal.txt --model=multinomial_vgam_EB --cond1='group1' --cond2='group2' &> multinomial.internal.multinomial_vgam_EB.log
+#Rscript scripts/exontest.R --file=multinomial.TSSTTS.exoncnt.combined.txt --outdir="~/GrASE_simulation/multinomial.test" --countdir="~/GrASE_simulation/multinomial.TSSTTS.counts/" --splittype=multinomial --prec=prec_multinomial.TSSTTS.txt --model=multinomial_vgam_EB --cond1='group1' --cond2='group2' &>  multinomial.TSSTTS.multinomial_vgam_EB.log
 # multinomial_vgam_wald_EB
-Rscript scripts/exontest.R --file=multinomial.internal.exoncnt.combined.txt --outdir="~/GrASE_simulation/multinomial.test" --countdir="~/GrASE_simulation/multinomial.internal.counts/" --splittype=multinomial --prec=prec_multinomial.internal.txt --model=multinomial_vgam_wald_EB --cond1='group1' --cond2='group2' &> multinomial.internal.multinomial_vgam_wald_EB.log
-Rscript scripts/exontest.R --file=multinomial.TSSTTS.exoncnt.combined.txt --outdir="~/GrASE_simulation/multinomial.test" --countdir="~/GrASE_simulation/multinomial.TSSTTS.counts/" --splittype=multinomial --prec=prec_multinomial.TSSTTS.txt --model=multinomial_vgam_wald_EB --cond1='group1' --cond2='group2' &>  multinomial.TSSTTS.multinomial_vgam_wald_EB.log
+#Rscript scripts/exontest.R --file=multinomial.internal.exoncnt.combined.txt --outdir="~/GrASE_simulation/multinomial.test" --countdir="~/GrASE_simulation/multinomial.internal.counts/" --splittype=multinomial --prec=prec_multinomial.internal.txt --model=multinomial_vgam_wald_EB --cond1='group1' --cond2='group2' &> multinomial.internal.multinomial_vgam_wald_EB.log
+#Rscript scripts/exontest.R --file=multinomial.TSSTTS.exoncnt.combined.txt --outdir="~/GrASE_simulation/multinomial.test" --countdir="~/GrASE_simulation/multinomial.TSSTTS.counts/" --splittype=multinomial --prec=prec_multinomial.TSSTTS.txt --model=multinomial_vgam_wald_EB --cond1='group1' --cond2='group2' &>  multinomial.TSSTTS.multinomial_vgam_wald_EB.log
+
+
+
+
+
+
+
 
 
 

@@ -37,12 +37,16 @@ option_list = list(
               help="condition 1 name (Group 1 - Group 2)", metavar="character"),
   make_option(c("--cond2"), type="character",
               help="condition 2 name (Reference Group)", metavar="character"),
-  make_option(c("--phi_trend"), action="store_true", default=FALSE,
+  make_option(c("--use_phi_loess"), action="store_true", default=FALSE,
               help="use loess phi trend (log(phi) ~ log(baseMean)) as EB shrinkage target instead of global mean"),
   make_option(c("--independent_filtering"), action="store_true", default=FALSE,
               help="use DESeq2-style independent filtering (filter on baseMean) before BH FDR correction"),
   make_option(c("--pseudocount"), type="integer", default=0L,
-              help="pseudocount added to diff (ref reads) and n (total) before testing; enables detection of all-or-nothing switches when ref coverage is zero [default: 0]")
+              help="pseudocount added to diff (ref reads) and n (total) before testing; enables detection of all-or-nothing switches when ref coverage is zero [default: 0]"),
+  make_option(c("--prec_subsample_n"), type="integer", default=NULL,
+              help="number of events to subsample for DM precision estimation (multinomial models); NULL uses all events [default: NULL]", metavar="integer"),
+  make_option(c("--use_prec_loess"), action="store_true", default=FALSE,
+              help="use loess prec trend (log(prec) ~ log(baseMean)) as EB shrinkage target instead of global mean (multinomial models)")
 );
  
 opt_parser = OptionParser(option_list=option_list);
@@ -63,7 +67,9 @@ if (!is.null(opt$splittype)) {
 if (!is.null(opt$phi)) {
   phifile = opt$phi
 }
-prec_file <- if (!is.null(opt$prec)) opt$prec else "prec_dm.txt"
+if (!is.null(opt$prec)) {
+  prec_file = opt$prec
+}
 if (!is.null(opt$model)) {
   model = opt$model 
 }
@@ -73,9 +79,11 @@ if (!is.null(opt$cond1)) {
 if (!is.null(opt$cond2)) {
   cond2 = opt$cond2
 }
-phi_trend    <- isTRUE(opt$phi_trend)
-indep_filter <- isTRUE(opt$independent_filtering)
-pseudocount  <- as.integer(opt$pseudocount)
+phi_trend        <- isTRUE(opt$use_phi_loess)
+indep_filter     <- isTRUE(opt$independent_filtering)
+pseudocount      <- as.integer(opt$pseudocount)
+prec_subsample_n <- if (!is.null(opt$prec_subsample_n)) as.integer(opt$prec_subsample_n) else NULL
+prec_trend       <- isTRUE(opt$use_prec_loess)
 if (!dir.exists(outdir)) {
   dir.create(outdir, recursive = TRUE)
 }
@@ -148,23 +156,43 @@ if (model == 'glmmTMB_prior' || model == 'glmmTMB_fixedEB' || model == 'VGAM_MLE
     rm(phi_list)
     write.table(phi_df, file=paste0(outdir,'/', phifile), quote=FALSE, sep="\t", row.names = FALSE)
   }
-} else if (model == 'multinomial_vgam_EB' || model == 'multinomial_vgam_wald_EB') {
+} else if (model == 'multinomial_plugin_dm_EB' || model == 'multinomial_vgam_EB' || model == 'multinomial_vgam_wald_EB') {
   # Multinomial VGAM Moderation Pipeline
   # group_by_event on counts instead of diff/n for multinomial
   if (is.null(opt$prec)) stop("--prec is required for model '", model, "'")
   if (!is.null(opt$phi)) warning("--phi is not used for model '", model, "' and will be ignored")
 
+  # baseMean per event: mean total count per sample across all types
+  baseMean_df_all <- splitcnts %>%
+    group_by(gene, event, sample) %>%
+    summarise(total = sum(count), .groups = "drop") %>%
+    group_by(gene, event) %>%
+    summarise(baseMean = mean(total), .groups = "drop")
+
   if (file.exists(paste0(outdir,'/', prec_file))) {
-    prec_table <- read.table(paste0(outdir,'/', prec_file), header=TRUE, row.names=NULL)
+    prec_raw <- read.table(paste0(outdir,'/', prec_file), header=TRUE, row.names=NULL)
+    if (prec_trend) {
+      prec_table <- moderate_prec_trend(prec_raw, baseMean_df_all)
+    } else {
+      prec_table <- moderate_prec_log_scale(prec_raw)
+    }
   } else {
     grouped_counts <- splitcnts %>% group_by(gene, event) %>% group_split()
-    #cl <- makeCluster(30); clusterEvalQ(cl, {library(VGAM); library(tidyverse)})
-    #clusterExport(cl, "prec_estimate_vgam")
-    n_total <- length(grouped_counts)
+    n_events <- length(grouped_counts)
+
+    # Subsample events for faster precision estimation if requested
+    if (!is.null(prec_subsample_n) && prec_subsample_n < n_events) {
+      message(sprintf("Subsampling %d of %d events for prec estimation.", prec_subsample_n, n_events))
+      subsample_idx <- sample(n_events, prec_subsample_n)
+      grouped_counts_prec <- grouped_counts[subsample_idx]
+    } else {
+      grouped_counts_prec <- grouped_counts
+    }
+
     progress_file <- paste0(outdir, "/prec_progress.log")
-    prec_list <- mclapply(grouped_counts, function(dd) {
+    prec_list <- mclapply(grouped_counts_prec, function(dd) {
       result <- tryCatch(
-        prec_estimate_vgam(dd),
+        prec_estimate_plugin_dm(dd),
         error = function(e) {
           msg <- sprintf("[%s] ERROR gene=%s event=%s (PID %d): %s\n",
                          format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
@@ -177,12 +205,19 @@ if (model == 'glmmTMB_prior' || model == 'glmmTMB_fixedEB' || model == 'VGAM_MLE
           file = progress_file, append = TRUE)
       result
     }, mc.cores=32)
-    #prec_list <- parLapply(cl, grouped_counts, prec_estimate_vgam)
-    #stopCluster(cl)
-    prec_table <- moderate_prec_log_scale(bind_rows(Filter(Negate(is.null), prec_list)))
+    prec_raw <- bind_rows(Filter(Negate(is.null), prec_list))
     rm(prec_list)
-    write.table(prec_table, paste0(outdir,'/', prec_file), sep="\t", quote=F, row.names = FALSE)
+    write.table(prec_raw, paste0(outdir,'/', prec_file), sep="\t", quote=F, row.names = FALSE)
+
+    if (prec_trend) {
+      prec_table <- moderate_prec_trend(prec_raw, baseMean_df_all)
+    } else {
+      prec_table <- moderate_prec_log_scale(prec_raw)
+    }
   }
+  prec_mod_file <- sub("\\.([^.]+)$", ".moderated.\\1", prec_file)
+  write.table(prec_table, paste0(outdir, '/', prec_mod_file), sep="\t", quote=FALSE, row.names=FALSE)
+  rm(baseMean_df_all)
 }
 
 # Per Gene Model Estimation
@@ -262,6 +297,8 @@ if (model == 'glmmTMB_prior') {
     z_bar <- median(phi_table$z, na.rm = TRUE)
     splitcnts_eb$z_mod[is.na(splitcnts_eb$z_mod)] <- z_bar
   }
+  phi_mod_file <- sub("\\.([^.]+)$", ".moderated.\\1", phifile)
+  write.table(phi_table, file=paste0(outdir, '/', phi_mod_file), sep="\t", quote=FALSE, row.names=FALSE)
   grouped_data_eb <- group_by_event(splitcnts_eb, 'diff', 'n')
   #grouped_data_eb <- grouped_data_eb[1:10]
 
@@ -322,6 +359,8 @@ if (model == 'glmmTMB_prior') {
 
   ## Empirical Bayes hyperparameters: prior mean and variance
   phi_table <- moderate_phi_log_scale(phi_df)
+  phi_mod_file <- sub("\\.([^.]+)$", ".moderated.\\1", phifile)
+  write.table(phi_table, file=paste0(outdir, '/', phi_mod_file), sep="\t", quote=FALSE, row.names=FALSE)
   splitcnts_eb <- splitcnts %>%
     left_join(phi_table, by = c("gene", "event"))
   ## Events with no phi estimate are fully shrunk to the global prior mean
@@ -361,25 +400,37 @@ if (model == 'glmmTMB_prior') {
   write.table(results, file=out_resultfile, quote=FALSE, sep="\t", row.names = FALSE)
 
 
-} else if (model == 'multinomial_vgam_EB') {
+} else if (model == 'multinomial_plugin_dm_EB' || model == 'multinomial_vgam_EB') {
 
   splitcnts_eb <- splitcnts %>%
     left_join(prec_table, by = c("gene", "event"))
+  # Fill NAs for events not covered by prec estimation (subsampled run, no prec_trend)
+  if (any(is.na(splitcnts_eb$log_prec_mod))) {
+    fallback_log  <- median(prec_table$log_prec_mod, na.rm = TRUE)
+    fallback_prec <- exp(fallback_log)
+    fallback_rho  <- pmax(pmin(1 / (1 + fallback_prec), 1 - 1e-6), 1e-6)
+    na_rows <- is.na(splitcnts_eb$log_prec_mod)
+    splitcnts_eb$log_prec_mod[na_rows] <- fallback_log
+    splitcnts_eb$prec_mod[na_rows]     <- fallback_prec
+    splitcnts_eb$rho_mod[na_rows]      <- fallback_rho
+  }
   grouped_eb <- splitcnts_eb %>% group_by(gene, event) %>% group_split()
-  #grouped_eb <- group_by_event(splitcnts_eb, 'diff', 'n')
 
-  # Run DM EB
-  #cl <- makeCluster(40); clusterEvalQ(cl, {library(VGAM); library(tidyverse)})
-  #clusterExport(cl, "test_model_multinomial_vgam_EB")
+  test_fn <- if (model == 'multinomial_plugin_dm_EB') {
+    test_model_multinomial_plugin_dm_EB
+  } else {
+    test_model_multinomial_vgam_EB
+  }
+  err_log <- paste0(model, ".errors.log")
+
   res_dm <- mclapply(grouped_eb, function(dd) {
-  #res_dm <- parLapply(cl, grouped_eb, function(dd) {
     tryCatch(
-      test_model_multinomial_vgam_EB(dd),
+      test_fn(dd),
       error = function(e) {
         msg <- sprintf("[%s] ERROR gene=%s event=%s (PID %d): %s\n",
                        format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
                        dd$gene[1], dd$event[1], Sys.getpid(), conditionMessage(e))
-        cat(msg, file = "multinomial_vgam_EB.errors.log", append = TRUE)
+        cat(msg, file = err_log, append = TRUE)
         NULL
       }
     )
@@ -399,6 +450,16 @@ if (model == 'glmmTMB_prior') {
 
   splitcnts_eb <- splitcnts %>%
     left_join(prec_table, by = c("gene", "event"))
+  # Fill NAs for events not covered by prec estimation (subsampled run, no prec_trend)
+  if (any(is.na(splitcnts_eb$log_prec_mod))) {
+    fallback_log  <- median(prec_table$log_prec_mod, na.rm = TRUE)
+    fallback_prec <- exp(fallback_log)
+    fallback_rho  <- pmax(pmin(1 / (1 + fallback_prec), 1 - 1e-6), 1e-6)
+    na_rows <- is.na(splitcnts_eb$log_prec_mod)
+    splitcnts_eb$log_prec_mod[na_rows] <- fallback_log
+    splitcnts_eb$prec_mod[na_rows]     <- fallback_prec
+    splitcnts_eb$rho_mod[na_rows]      <- fallback_rho
+  }
   grouped_eb <- splitcnts_eb %>% group_by(gene, event) %>% group_split()
 
   # Run DM Wald EB
@@ -428,6 +489,7 @@ if (model == 'glmmTMB_prior') {
 
   write.table(wald_results_df, file=out_resultfile, sep="\t", quote=FALSE, row.names = FALSE)
 } else if (model == 'wilcoxon') {
+  if (!is.null(opt$phi)) warning("--phi is not used for model '", model, "' and will be ignored")
   if (!exists("grouped_data")) {
     grouped_data <- group_by_event(splitcnts, 'diff', 'n')
   }
@@ -455,6 +517,7 @@ if (model == 'glmmTMB_prior') {
   write.table(results, file=out_resultfile, quote=FALSE, sep="\t", row.names = FALSE)
 
 } else if (model == 'glmmTMB_no_prior') {
+  if (!is.null(opt$phi)) warning("--phi is not used for model '", model, "' and will be ignored")
   if (!exists("grouped_data")) {
     grouped_data <- group_by_event(splitcnts, 'diff', 'n')
   }
@@ -483,7 +546,7 @@ if (model == 'glmmTMB_prior') {
 
 } else {
   print ("model misspecified")
-  print ("choose between glmmTMB_prior, glmmTMB_no_prior, glmmTMB_fixedEB, VGAM_MLE_EB_init, multinomial_vgam_EB, multinomial_vgam_wald_EB, wilcoxon")
+  print ("choose between glmmTMB_prior, glmmTMB_no_prior, glmmTMB_fixedEB, VGAM_MLE_EB_init, multinomial_plugin_dm_EB, multinomial_vgam_EB, multinomial_vgam_wald_EB, wilcoxon")
 
 }
 

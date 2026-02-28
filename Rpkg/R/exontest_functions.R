@@ -201,7 +201,7 @@ moderate_phi_trend <- function(phi_df, baseMean_df, span = 0.5,
   result <- all_events %>%
     left_join(phi_est %>% select(gene, event, z, var_z), by = c("gene", "event"))
 
-  # Events without a phi estimate get w = 0 → fully shrunk to the trend
+  # Events without a phi estimate get w = 0 fully shrunk to the trend
   result$w <- ifelse(
     is.na(result$var_z), 0,
     tau2_z / (tau2_z + result$var_z)
@@ -246,6 +246,94 @@ prec_estimate_vgam <- function(dd) {
     if (nrow(vc) < ncol(Y)) return(NULL)
 
     return(data.frame(gene = gene, event = event, log_prec = log_prec_hat, var_log_prec = vc[ncol(Y), ncol(Y)]))
+}
+
+
+#' Estimate Dirichlet-Multinomial precision per event via direct 1-D grid log-likelihood optimization
+#'
+#' Drop-in replacement for \code{prec_estimate_vgam} that avoids the full VGAM
+#' IRLS call.  Under the intercept-only model the MLE of the proportion vector
+#' is \eqn{\hat\pi_j = \sum_i y_{ij} / \sum_{ij} y_{ij}}, so precision
+#' estimation reduces to a one-dimensional optimization over \eqn{\log\alpha}.
+#' Variance is obtained from the analytical observed Fisher information at the
+#' MLE.  uses only base R (\code{lgamma},
+#' \code{trigamma}, \code{optimize}).
+#'
+#' @param dd A data frame for a single gene-event group with columns
+#'   \code{gene}, \code{event}, \code{sample}, \code{groups}, \code{type},
+#'   and \code{count}.
+#' @return A one-row data frame with columns \code{gene}, \code{event},
+#'   \code{log_prec} (log-scale MLE of the DM precision \eqn{\alpha}), and
+#'   \code{var_log_prec} (estimated variance of \code{log_prec}), or
+#'   \code{NULL} on failure.
+#' @export
+#' @examples
+#' \dontrun{
+#' splitcnts <- read.table("multinomial.exoncnt.combined.txt",
+#'                         header = TRUE, row.names = NULL)
+#' grouped_counts <- dplyr::group_split(dplyr::group_by(splitcnts, gene, event))
+#' prec_result <- grase::prec_estimate_plugin_dm(grouped_counts[[1]])
+#' prec_result
+#' }
+prec_estimate_plugin_dm <- function(dd) {
+    gene <- unique(dd$gene); event <- unique(dd$event)
+
+    # --- 1. Build count matrix Y (same guards as prec_estimate_vgam) ---
+    wide_df <- dd %>%
+        dplyr::select(sample, groups, type, count) %>%
+        pivot_wider(names_from = type, values_from = count, values_fill = 0)
+    Y <- as.matrix(wide_df[, setdiff(names(wide_df), c("sample", "groups"))])
+    wide_df <- wide_df[rowSums(Y) > 0, ]
+    Y <- Y[rowSums(Y) > 0, , drop = FALSE]
+    if (nrow(Y) < 2 || ncol(Y) < 2) return(NULL)
+    if (sum(colSums(Y) > 0) < 2) return(NULL)
+
+    # --- 2. Closed-form MLE of proportions under null model ---
+    pi_hat <- colSums(Y) / sum(Y)   # length-K vector
+    n_i    <- rowSums(Y)             # per-sample totals
+    N      <- nrow(Y)
+
+    # --- 3. DM log-likelihood as a function of log(alpha) ---
+    # ll = N*lgamma(alpha) - sum_i lgamma(n_i + alpha)
+    #    + sum_j [ sum_i lgamma(y_ij + alpha*pi_j) - N*lgamma(alpha*pi_j) ]
+    dm_ll <- function(log_alpha) {
+        alpha    <- exp(log_alpha)
+        alpha_pi <- alpha * pi_hat                           # K-vector
+        row_terms <- N * lgamma(alpha) - sum(lgamma(n_i + alpha))
+        mat_terms <- sum(lgamma(sweep(Y, 2, alpha_pi, "+")) -
+                         matrix(lgamma(alpha_pi), nrow = N, ncol = ncol(Y), byrow = TRUE))
+        row_terms + mat_terms
+    }
+
+    # --- 4. 1-D maximisation; interval covers alpha in [4.5e-5, 1.6e5] ---
+    opt <- tryCatch(
+        optimize(dm_ll, interval = c(-10, 12), maximum = TRUE),
+        error = function(e) NULL
+    )
+    if (is.null(opt)) return(NULL)
+
+    log_alpha_hat <- opt$maximum
+    alpha_hat     <- exp(log_alpha_hat)
+    alpha_pi      <- alpha_hat * pi_hat
+
+    # --- 5. Analytical second derivative at the MLE ---
+    # d2ll/dalpha2 = N*trigamma(alpha) - sum_i trigamma(n_i + alpha)
+    #              + sum_j pi_j^2 * [ sum_i trigamma(y_ij + alpha*pi_j)
+    #                                 - N * trigamma(alpha*pi_j) ]
+    d2_dalpha2 <- N * trigamma(alpha_hat) - sum(trigamma(n_i + alpha_hat)) +
+                  sum(pi_hat^2 * (colSums(trigamma(sweep(Y, 2, alpha_pi, "+"))) -
+                                  N * trigamma(alpha_pi)))
+
+    # Log-scale: d2ll/d(log alpha)^2 ~= alpha^2 * d2ll/dalpha2  (gradient ~ 0 at MLE)
+    d2_dlogalpha2 <- alpha_hat^2 * d2_dalpha2
+
+    # var_log_prec = 1 / (- d2ll/d(log alpha)^2)
+    if (!is.finite(d2_dlogalpha2) || d2_dlogalpha2 >= 0) return(NULL)
+    var_log_prec <- 1 / (-d2_dlogalpha2)
+    if (!is.finite(var_log_prec) || var_log_prec <= 0) return(NULL)
+
+    data.frame(gene = gene, event = event,
+               log_prec = log_alpha_hat, var_log_prec = var_log_prec)
 }
 
 
@@ -301,6 +389,97 @@ moderate_prec_log_scale <- function(prec_table) {
   prec_table$rho_mod <- pmax(pmin(rho_mod, 1 - 1e-6), 1e-6)
 
   return(prec_table)
+}
+
+
+#' Trend-based Dirichlet-Multinomial precision moderation
+#'
+#' Fits a loess curve of \code{log(prec) ~ log(baseMean)} on events that have
+#' precision estimates, then uses the trend as the shrinkage target instead of
+#' the global mean.  Events without a precision estimate (non-convergent fit or
+#' not in the estimation subsample) are fully shrunk to the trend prediction
+#' (weight = 0).
+#'
+#' @param prec_df     data.frame with columns \code{gene}, \code{event},
+#'   \code{log_prec}, \code{var_log_prec}, as returned by
+#'   \code{prec_estimate_vgam}.
+#' @param baseMean_df data.frame with columns \code{gene}, \code{event},
+#'   \code{baseMean} covering ALL events (not just those with prec estimates).
+#' @param span loess span parameter (default 0.5).
+#' @return data.frame with one row per event in \code{baseMean_df} and columns
+#'   \code{gene}, \code{event}, \code{baseMean}, \code{z_trend}, \code{w_prec},
+#'   \code{log_prec_mod}, \code{prec_mod}, \code{rho_mod}.
+#' @export
+#' @examples
+#' \dontrun{
+#' prec_df <- read.table("prec_dm.txt", header = TRUE, row.names = NULL)
+#' splitcnts <- read.table("multinomial.internal.exoncnt.combined.txt",
+#'                         header = TRUE, row.names = NULL)
+#' baseMean_df <- splitcnts %>%
+#'   dplyr::group_by(gene, event, sample) %>%
+#'   dplyr::summarise(total = sum(count), .groups = "drop") %>%
+#'   dplyr::group_by(gene, event) %>%
+#'   dplyr::summarise(baseMean = mean(total), .groups = "drop")
+#' prec_table <- grase::moderate_prec_trend(prec_df, baseMean_df)
+#' head(prec_table[, c("gene", "event", "baseMean", "log_prec_mod", "rho_mod")])
+#' }
+moderate_prec_trend <- function(prec_df, baseMean_df, span = 0.5) {
+  # -- Step 1: prepare valid precision estimates --
+  valid     <- abs(prec_df$log_prec) < 50 & prec_df$var_log_prec < 1000
+  prec_est  <- prec_df[valid, ] %>%
+    left_join(baseMean_df, by = c("gene", "event")) %>%
+    filter(!is.na(baseMean) & baseMean > 0)
+  prec_est$log_bm <- log(prec_est$baseMean)
+
+  # -- Step 2: fit loess trend on the most reliable estimates --
+  # Exclude noisy top 10% by sampling variance
+  var_thresh <- quantile(prec_est$var_log_prec, 0.9, na.rm = TRUE)
+  reliable   <- is.finite(prec_est$log_prec) &
+                !is.na(prec_est$var_log_prec) &
+                prec_est$var_log_prec < var_thresh
+  z_bar <- median(prec_est$log_prec[reliable], na.rm = TRUE)
+
+  trend_fit <- NULL
+  if (sum(reliable, na.rm = TRUE) >= 10) {
+    trend_fit <- loess(log_prec ~ log_bm, data = prec_est[reliable, ], span = span)
+  }
+
+  # -- Step 3: predict trend for ALL events --
+  all_events <- baseMean_df %>%
+    mutate(log_bm = log(pmax(baseMean, 1)))
+
+  if (!is.null(trend_fit)) {
+    all_events$z_trend <- predict(trend_fit, newdata = all_events)
+    # Fall back to global median for out-of-range extrapolation
+    all_events$z_trend[is.na(all_events$z_trend)] <- z_bar
+  } else {
+    all_events$z_trend <- z_bar
+  }
+
+  # -- Step 4: estimate biological variance tau^2 --
+  typical_var <- median(prec_est$var_log_prec, na.rm = TRUE)
+  s2          <- var(prec_est$log_prec, na.rm = TRUE)
+  tau2        <- max(s2 - typical_var, 0)
+
+  # -- Step 5: join estimates onto all events and compute shrinkage weights --
+  result <- all_events %>%
+    left_join(prec_est %>% select(gene, event, log_prec, var_log_prec),
+              by = c("gene", "event"))
+
+  # Events without an estimate (w=0) are fully shrunk to the trend
+  result$w_prec <- ifelse(
+    is.na(result$var_log_prec), 0,
+    tau2 / (tau2 + result$var_log_prec)
+  )
+  result$w_prec[!is.finite(result$w_prec)] <- 0
+
+  result$log_prec_mod <- result$w_prec * result$log_prec +
+                         (1 - result$w_prec) * result$z_trend
+  result$prec_mod     <- exp(result$log_prec_mod)
+  rho_mod             <- 1 / (1 + result$prec_mod)
+  result$rho_mod      <- pmax(pmin(rho_mod, 1 - 1e-6), 1e-6)
+
+  return(result)
 }
 
 
@@ -628,6 +807,97 @@ test_model_wilcoxon <- function(dd) {
 }
 
 
+# 4b. Direct DM LRT with fixed EB precision (fast, no VGAM)
+#' Test differential exon usage with a direct Dirichlet-multinomial LRT using empirical Bayes fixed precision.
+#'
+#' Drop-in replacement for \code{test_model_multinomial_vgam_EB} that avoids VGAM entirely.
+#' When precision is fixed (EB-moderated), the MLE of the proportion vector under each model
+#' has a closed form (empirical marginal counts), so both null and alternative log-likelihoods
+#' can be evaluated directly without iterative fitting.
+#'
+#' @param dd A data frame of exon count data with columns \code{gene}, \code{event},
+#'   \code{sample}, \code{groups}, \code{type}, \code{count}, \code{log_prec_mod}.
+#' @return A one-row data frame with columns \code{gene}, \code{event}, \code{LRT},
+#'   \code{p.value}, \code{model}, \code{effect_size}, or \code{NULL} on failure.
+#' @export
+#' @examples
+#' \dontrun{
+#' splitcnts <- read.table("multinomial.exoncnt.combined.txt",
+#'                         header = TRUE, row.names = NULL)
+#' prec_table <- grase::moderate_prec_log_scale(
+#'   read.table("prec_dm.txt", header = TRUE, row.names = NULL)
+#' )
+#' splitcnts_eb <- dplyr::left_join(splitcnts, prec_table, by = c("gene", "event"))
+#' grouped_eb <- dplyr::group_split(dplyr::group_by(splitcnts_eb, gene, event))
+#' result <- grase::test_model_multinomial_plugin_dm_EB(grouped_eb[[1]])
+#' result
+#' }
+test_model_multinomial_plugin_dm_EB <- function(dd) {
+    gene <- unique(dd$gene); event <- unique(dd$event)
+    log_prec_mod <- dd$log_prec_mod[1]
+    if (is.na(log_prec_mod)) return(NULL)
+    alpha <- exp(log_prec_mod)
+
+    wide_df <- dd %>% dplyr::select(sample, groups, type, count) %>%
+               pivot_wider(names_from = type, values_from = count, values_fill = 0)
+    Y <- as.matrix(wide_df[, setdiff(names(wide_df), c("sample", "groups"))])
+    keep <- rowSums(Y) > 0
+    wide_df <- wide_df[keep, ]
+    Y <- Y[keep, , drop = FALSE]
+
+    if (nrow(Y) < 2 || length(unique(wide_df$groups)) < 2) return(NULL)
+    if (sum(colSums(Y) > 0) < 2) return(NULL)
+
+    K    <- ncol(Y)
+    n_i  <- rowSums(Y)
+    grps <- wide_df$groups
+    g_levels <- unique(grps)
+
+    # DM log-likelihood for a count matrix Y with row totals n_i,
+    # fixed precision alpha, and proportion vector pi
+    dm_ll_fixed <- function(Y, n_i, alpha, pi) {
+        pi     <- pmax(pi, 1e-300)
+        pi     <- pi / sum(pi)
+        ap     <- alpha * pi
+        sum(lgamma(alpha) - lgamma(n_i + alpha)) +
+          sum(lgamma(sweep(Y, 2, ap, "+")) -
+              matrix(lgamma(ap), nrow = nrow(Y), ncol = K, byrow = TRUE))
+    }
+
+    # Null: common proportions
+    pi_null <- colSums(Y) / sum(Y)
+    ll_null <- dm_ll_fixed(Y, n_i, alpha, pi_null)
+    if (!is.finite(ll_null)) return(NULL)
+
+    # Alt: per-group proportions (closed-form MLE)
+    ll_alt <- {
+        s <- 0
+        for (g in g_levels) {
+            idx  <- grps == g
+            Y_g  <- Y[idx, , drop = FALSE]
+            ni_g <- n_i[idx]
+            pi_g <- colSums(Y_g) / sum(Y_g)
+            s    <- s + dm_ll_fixed(Y_g, ni_g, alpha, pi_g)
+        }
+        s
+      } 
+    if (!is.finite(ll_alt)) return(NULL)
+
+    LR   <- max(2 * (ll_alt - ll_null), 0)
+    df   <- (K - 1) * (length(g_levels) - 1)   # = K-1 for 2 groups
+    pval <- pchisq(LR, df = df, lower.tail = FALSE)
+
+    # Effect size: log ratio of group proportions for category 1 vs reference (last)
+    pi1  <- colSums(Y[grps == g_levels[1], , drop = FALSE]) / sum(Y[grps == g_levels[1], , drop = FALSE])
+    pi2  <- colSums(Y[grps == g_levels[2], , drop = FALSE]) / sum(Y[grps == g_levels[2], , drop = FALSE])
+    pi1  <- pmax(pi1, 1e-10); pi2 <- pmax(pi2, 1e-10)
+    eff_size <- log(pi2[1] / pi2[K]) - log(pi1[1] / pi1[K])
+
+    data.frame(gene = gene, event = event, LRT = LR, p.value = pval,
+               model = "dirmult_moderated_direct", effect_size = eff_size)
+}
+
+
 # 4. Moderated VGAM Dirichlet-Multinomial EB
 #' Test differential exon usage with a VGAM Dirichlet-multinomial model using empirical Bayes fixed precision.
 #' @param dd A data frame of exon count data.
@@ -761,12 +1031,9 @@ test_model_multinomial_vgam_wald_EB <- function(dd, shape0, rate0, ref_option = 
     clist_full <- list("(Intercept)" = cm, groups = cm)
 
     # 4. Fit the Full Model with moderated precision
-    m1 <- tryCatch(
-      vglm(Y ~ groups, dirmultinomial, data = wide_df, 
-           offset = off, constraints = clist_full), 
-      error = function(e) NULL
-    )
-
+    m1 <- vglm(Y ~ groups, dirmultinomial, data = wide_df, 
+           offset = off, constraints = clist_full) 
+      
     if (!is.null(m1)) {
         # 5. Extract Wald Statistics for the 'groups' effect
         # The summary object contains the p-values for each coefficient
