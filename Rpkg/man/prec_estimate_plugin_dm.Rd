@@ -18,8 +18,7 @@ A one-row data frame with columns \code{gene}, \code{event},
 \code{NULL} on failure.
 }
 \description{
-Drop-in replacement for \code{prec_estimate_vgam} that avoids the full VGAM
-IRLS call.  Under the intercept-only model the MLE of the proportion vector
+Estimates DM precision via direct 1-D log-likelihood optimization.  Under the intercept-only model the MLE of the proportion vector
 is \eqn{\hat\pi_j = \sum_i y_{ij} / \sum_{ij} y_{ij}}, so precision
 estimation reduces to a one-dimensional optimization over \eqn{\log\alpha}.
 Variance is obtained from the analytical observed Fisher information at the

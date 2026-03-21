@@ -9,7 +9,7 @@ moderate_prec_trend(prec_df, baseMean_df, span = 0.5)
 \arguments{
 \item{prec_df}{data.frame with columns \code{gene}, \code{event},
 \code{log_prec}, \code{var_log_prec}, as returned by
-\code{prec_estimate_vgam}.}
+\code{prec_estimate_plugin_dm}.}
 
 \item{baseMean_df}{data.frame with columns \code{gene}, \code{event},
 \code{baseMean} covering ALL events (not just those with prec estimates).}

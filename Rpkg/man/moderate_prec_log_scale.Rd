@@ -10,7 +10,7 @@ moderate_prec_log_scale(prec_table)
 \arguments{
 \item{prec_table}{A data frame with columns \code{gene}, \code{event},
 \code{log_prec}, and \code{var_log_prec}, as returned by
-\code{prec_estimate_vgam}.}
+\code{prec_estimate_plugin_dm}.}
 }
 \description{
 Moderate Dirichlet-Multinomial precision estimates using empirical Bayes

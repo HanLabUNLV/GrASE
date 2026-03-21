@@ -34,7 +34,6 @@ Imports:
     MatrixGenerics,
     S4Vectors,
     SplicingGraphs,
-    VGAM,
     dplyr,
     glmmTMB,
     igraph,

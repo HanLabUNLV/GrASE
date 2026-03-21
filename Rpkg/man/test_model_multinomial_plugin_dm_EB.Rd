@@ -15,7 +15,7 @@ A one-row data frame with columns \code{gene}, \code{event}, \code{LRT},
 \code{p.value}, \code{model}, \code{effect_size}, or \code{NULL} on failure.
 }
 \description{
-Drop-in replacement for \code{test_model_multinomial_vgam_EB} that avoids VGAM entirely.
+Direct Dirichlet-multinomial LRT using empirical Bayes fixed precision.
 When precision is fixed (EB-moderated), the MLE of the proportion vector under each model
 has a closed form (empirical marginal counts), so both null and alternative log-likelihoods
 can be evaluated directly without iterative fitting.

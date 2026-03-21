@@ -2,7 +2,6 @@ library(parallel)
 library(MASS)
 library(matrixStats)
 library(glmmTMB)
-library(VGAM)
 library(tidyverse)
 library(grase)
 library(optparse)
@@ -110,7 +109,7 @@ if (file.exists(exoncnt_master)) {
 }
 
 # Global Precision Estimation
-if (model == 'glmmTMB_prior' || model == 'glmmTMB_fixedEB' || model == 'VGAM_MLE_EB_init') {
+if (model == 'glmmTMB_prior' || model == 'glmmTMB_fixedEB') {
 
   if (is.null(opt$phi)) stop("--phi is required for model '", model, "'")
   if (!is.null(opt$prec)) warning("--prec is not used for model '", model, "' and will be ignored")
@@ -156,8 +155,8 @@ if (model == 'glmmTMB_prior' || model == 'glmmTMB_fixedEB' || model == 'VGAM_MLE
     rm(phi_list)
     write.table(phi_df, file=paste0(outdir,'/', phifile), quote=FALSE, sep="\t", row.names = FALSE)
   }
-} else if (model == 'multinomial_plugin_dm_EB' || model == 'multinomial_vgam_EB' || model == 'multinomial_vgam_wald_EB') {
-  # Multinomial VGAM Moderation Pipeline
+} else if (model == 'multinomial_plugin_dm_EB') {
+  # Multinomial DM Moderation Pipeline
   # group_by_event on counts instead of diff/n for multinomial
   if (is.null(opt$prec)) stop("--prec is required for model '", model, "'")
   if (!is.null(opt$phi)) warning("--phi is not used for model '", model, "' and will be ignored")
@@ -242,7 +241,7 @@ if (model == 'glmmTMB_prior') {
 
 
   #cl <- makeCluster(40, outfile='testglmmTMB_withprior.log')
-  #clusterEvalQ(cl, { library(glmmTMB); library(VGAM); library(tidyverse) })
+  #clusterEvalQ(cl, { library(glmmTMB); library(tidyverse) })
   #clusterExport(cl, varlist = c("test_model_glmmTMB_with_prior", "prior_disp"), envir = environment())
 
   result_list <- mclapply(grouped_data, function(dd) {
@@ -310,7 +309,7 @@ if (model == 'glmmTMB_prior') {
 
   # Moderated glmmTMB with EB
   #cl <- makeCluster(40, outfile='testglmmTMB_EB.log')
-  #clusterEvalQ(cl, { library(glmmTMB); library(VGAM); library(tidyverse) })
+  #clusterEvalQ(cl, { library(glmmTMB); library(tidyverse) })
   #clusterExport(cl, varlist = c("test_model_glmmTMB_EB"), envir = environment())
 
   result_list <- mclapply(grouped_data_eb, function(dd) {
@@ -355,52 +354,7 @@ if (model == 'glmmTMB_prior') {
 
   write.table(results, file=out_resultfile, quote=FALSE, sep="\t", row.names=FALSE)
 
-} else if (model == 'VGAM_MLE_EB_init') {
-
-  ## Empirical Bayes hyperparameters: prior mean and variance
-  phi_table <- moderate_phi_log_scale(phi_df)
-  phi_mod_file <- sub("\\.([^.]+)$", ".moderated.\\1", phifile)
-  write.table(phi_table, file=paste0(outdir, '/', phi_mod_file), sep="\t", quote=FALSE, row.names=FALSE)
-  splitcnts_eb <- splitcnts %>%
-    left_join(phi_table, by = c("gene", "event"))
-  ## Events with no phi estimate are fully shrunk to the global prior mean
-  z_bar <- median(phi_table$z, na.rm = TRUE)
-  splitcnts_eb$phi_mod[is.na(splitcnts_eb$phi_mod)] <- exp(z_bar)
-  grouped_data_eb <- group_by_event(splitcnts_eb, 'diff', 'n')
-  #grouped_data_eb <- grouped_data_eb[1:10]
-
-
-  # Moderated VGAM with EB
-  #cl <- makeCluster(40, outfile='testVGAM_EB.log')
-  #clusterEvalQ(cl, { library(glmmTMB); library(VGAM); library(tidyverse) })
-  #clusterExport(cl, varlist = c("test_model_vgam_EB_init"), envir = environment())
-
-  result_list <- mclapply(grouped_data_eb, function(dd) {
-  #result_list <- parLapply(cl, grouped_data_eb, function(dd) {
-    tryCatch({
-      test_model_vgam_EB_init(dd) 
-    }, error = function(e) {
-        msg <- sprintf("[%s] ERROR in %s (PID %d): %s\n",
-                       format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
-                       dd$gene[1], Sys.getpid(), conditionMessage(e))
-        cat(msg, file = "vgam_eb.errors.log", append = TRUE)
-        NULL
-    })
-  #})
-  }, mc.cores = 32)
-  #stopCluster(cl)
-  results <- bind_rows(Filter(Negate(is.null), result_list))
-  
-  if (exists("pvalueAdjustment") && nrow(results) > 0) {
-      results$pvalue <- results$p.value
-      results <- pvalueAdjustment(results, independentFiltering=FALSE, theta=NULL, alpha=0.05, pAdjustMethod="BH")
-      results$pvalue <- NULL
-  }
-  
-  write.table(results, file=out_resultfile, quote=FALSE, sep="\t", row.names = FALSE)
-
-
-} else if (model == 'multinomial_plugin_dm_EB' || model == 'multinomial_vgam_EB') {
+} else if (model == 'multinomial_plugin_dm_EB') {
 
   splitcnts_eb <- splitcnts %>%
     left_join(prec_table, by = c("gene", "event"))
@@ -418,9 +372,6 @@ if (model == 'glmmTMB_prior') {
 
   test_fn <- if (model == 'multinomial_plugin_dm_EB') {
     test_model_multinomial_plugin_dm_EB
-  } else {
-    test_model_multinomial_vgam_EB
-  }
   err_log <- paste0(model, ".errors.log")
 
   res_dm <- mclapply(grouped_eb, function(dd) {
@@ -446,48 +397,6 @@ if (model == 'glmmTMB_prior') {
 
   write.table(results, file=out_resultfile, sep="\t", quote=F, row.names = FALSE)
 
-} else if (model == 'multinomial_vgam_wald_EB') {
-
-  splitcnts_eb <- splitcnts %>%
-    left_join(prec_table, by = c("gene", "event"))
-  # Fill NAs for events not covered by prec estimation (subsampled run, no prec_trend)
-  if (any(is.na(splitcnts_eb$log_prec_mod))) {
-    fallback_log  <- median(prec_table$log_prec_mod, na.rm = TRUE)
-    fallback_prec <- exp(fallback_log)
-    fallback_rho  <- pmax(pmin(1 / (1 + fallback_prec), 1 - 1e-6), 1e-6)
-    na_rows <- is.na(splitcnts_eb$log_prec_mod)
-    splitcnts_eb$log_prec_mod[na_rows] <- fallback_log
-    splitcnts_eb$prec_mod[na_rows]     <- fallback_prec
-    splitcnts_eb$rho_mod[na_rows]      <- fallback_rho
-  }
-  grouped_eb <- splitcnts_eb %>% group_by(gene, event) %>% group_split()
-
-  # Run DM Wald EB
-  #cl <- makeCluster(40); clusterEvalQ(cl, {library(VGAM); library(tidyverse)})
-  #clusterExport(cl, "test_model_multinomial_vgam_wald_EB")
-  res_dm <- mclapply(grouped_eb, function(dd) {
-  #res_wald <- parLapply(cl, grouped_eb, function(dd) {
-    tryCatch({
-      test_model_multinomial_vgam_wald_EB(dd)
-    }, error = function(e) {
-      msg <- sprintf("[%s] ERROR gene=%s event=%s (PID %d): %s\n",
-                     format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
-                     dd$gene[1], dd$event[1], Sys.getpid(), conditionMessage(e))
-      cat(msg, file = "multinomial_vgam_wald_EB.errors.log", append = TRUE)
-      NULL
-    })
-  #})
-  }, mc.cores = 32)
-  #stopCluster(cl)
-  wald_results_df <- bind_rows(Filter(Negate(is.null), res_dm))
-  
-  if (exists("pvalueAdjustment") && nrow(wald_results_df) > 0) {
-      if (is.null(wald_results_df$pvalue)) wald_results_df$pvalue <- wald_results_df$p.value
-      wald_results_df <- pvalueAdjustment(wald_results_df, independentFiltering=FALSE, theta=NULL, alpha=0.05, pAdjustMethod="BH")
-      # wald_results_df$pvalue <- NULL # Keep if needed or remove. Wald test might have p.value or Pr(>Chi)
-  }
-
-  write.table(wald_results_df, file=out_resultfile, sep="\t", quote=FALSE, row.names = FALSE)
 } else if (model == 'wilcoxon') {
   if (!is.null(opt$phi)) warning("--phi is not used for model '", model, "' and will be ignored")
   if (!exists("grouped_data")) {
@@ -546,7 +455,7 @@ if (model == 'glmmTMB_prior') {
 
 } else {
   print ("model misspecified")
-  print ("choose between glmmTMB_prior, glmmTMB_no_prior, glmmTMB_fixedEB, VGAM_MLE_EB_init, multinomial_plugin_dm_EB, multinomial_vgam_EB, multinomial_vgam_wald_EB, wilcoxon")
+  print ("choose between glmmTMB_prior, glmmTMB_no_prior, glmmTMB_fixedEB, multinomial_plugin_dm_EB, wilcoxon")
 
 }
 

@@ -217,42 +217,10 @@ moderate_phi_trend <- function(phi_df, baseMean_df, span = 0.5,
 
 # --- DM Estimation & Moderation (NEW) ---
 
-#' Estimate Dirichlet-Multinomial precision per event using VGAM
-#' @param dd A data frame of exon count data for a single gene-event group,
-#'   with columns \code{gene}, \code{event}, \code{sample}, \code{groups},
-#'   \code{type}, and \code{count}.
-#' @export
-#' @examples
-#' \dontrun{
-#' splitcnts <- read.table("multinomial.exoncnt.combined.txt",
-#'                         header = TRUE, row.names = NULL)
-#' grouped_counts <- dplyr::group_split(dplyr::group_by(splitcnts, gene, event))
-#' prec_result <- grase::prec_estimate_vgam(grouped_counts[[1]])
-#' prec_result
-#' }
-prec_estimate_vgam <- function(dd) {
-    gene <- unique(dd$gene); event <- unique(dd$event)
-    wide_df <- dd %>% dplyr::select(sample, groups, type, count) %>% pivot_wider(names_from = type, values_from = count, values_fill = 0)
-    Y <- as.matrix(wide_df[, setdiff(names(wide_df), c("sample", "groups"))])
-    wide_df <- wide_df[rowSums(Y) > 0, ]
-    Y <- Y[rowSums(Y) > 0, , drop = FALSE]
-    if (nrow(Y) < 2 || ncol(Y) < 2) return(NULL)
-    if (sum(colSums(Y) > 0) < 2) return(NULL)
-
-    m_init <- vglm(Y ~ 1, dirmultinomial, data = wide_df)
-
-    log_prec_hat <- as.numeric(coef(m_init)[ncol(Y)])
-    vc <- vcov(m_init)
-    if (nrow(vc) < ncol(Y)) return(NULL)
-
-    return(data.frame(gene = gene, event = event, log_prec = log_prec_hat, var_log_prec = vc[ncol(Y), ncol(Y)]))
-}
-
 
 #' Estimate Dirichlet-Multinomial precision per event via direct 1-D grid log-likelihood optimization
 #'
-#' Drop-in replacement for \code{prec_estimate_vgam} that avoids the full VGAM
-#' IRLS call.  Under the intercept-only model the MLE of the proportion vector
+#' Estimates DM precision via direct 1-D log-likelihood optimization.  Under the intercept-only model the MLE of the proportion vector
 #' is \eqn{\hat\pi_j = \sum_i y_{ij} / \sum_{ij} y_{ij}}, so precision
 #' estimation reduces to a one-dimensional optimization over \eqn{\log\alpha}.
 #' Variance is obtained from the analytical observed Fisher information at the
@@ -278,7 +246,7 @@ prec_estimate_vgam <- function(dd) {
 prec_estimate_plugin_dm <- function(dd) {
     gene <- unique(dd$gene); event <- unique(dd$event)
 
-    # --- 1. Build count matrix Y (same guards as prec_estimate_vgam) ---
+    # --- 1. Build count matrix Y ---
     wide_df <- dd %>%
         dplyr::select(sample, groups, type, count) %>%
         pivot_wider(names_from = type, values_from = count, values_fill = 0)
@@ -341,7 +309,7 @@ prec_estimate_plugin_dm <- function(dd) {
 #' shrinkage
 #' @param prec_table A data frame with columns \code{gene}, \code{event},
 #'   \code{log_prec}, and \code{var_log_prec}, as returned by
-#'   \code{prec_estimate_vgam}.
+#'   \code{prec_estimate_plugin_dm}.
 #' @export
 #' @examples
 #' \dontrun{
@@ -402,7 +370,7 @@ moderate_prec_log_scale <- function(prec_table) {
 #'
 #' @param prec_df     data.frame with columns \code{gene}, \code{event},
 #'   \code{log_prec}, \code{var_log_prec}, as returned by
-#'   \code{prec_estimate_vgam}.
+#'   \code{prec_estimate_plugin_dm}.
 #' @param baseMean_df data.frame with columns \code{gene}, \code{event},
 #'   \code{baseMean} covering ALL events (not just those with prec estimates).
 #' @param span loess span parameter (default 0.5).
@@ -665,89 +633,6 @@ test_model_glmmTMB_EB <- function(dd) {
 
 
 
-# 3. EB-moderated VGAM beta-binomial
-#' Test differential exon usage with a VGAM beta-binomial model initialized from empirical Bayes dispersion.
-#' @param dd A data frame of exon count data.
-#' @export
-#' @examples
-#' \dontrun{
-#' splitcnts <- read.table("bipartition.internal.exoncnt.combined.txt",
-#'                         header = TRUE, row.names = NULL)
-#' phi_df <- read.table("phi.glmmtmb.txt", header = TRUE, row.names = NULL)
-#' phi_table <- grase::moderate_phi_log_scale(phi_df)
-#' splitcnts_eb <- dplyr::left_join(splitcnts, phi_table, by = c("gene", "event"))
-#' splitcnts_eb$groups <- factor(splitcnts_eb$groups)
-#' grouped_eb <- grase::group_by_event(splitcnts_eb, "diff", "n")
-#' result <- grase::test_model_vgam_EB_init(grouped_eb[[1]])
-#' result
-#' }
-test_model_vgam_EB_init <- function(dd) {
-
-  ## per-gene moderated LRT in VGAM
-  gene  <- unique(dd$gene)
-  event <- unique(dd$event)
-  dd <- dd[dd$n > 0, ]
-  if (nrow(dd) < 2 || length(unique(dd$groups)) < 2) return(NULL)
-  if (mean(dd$y) == 0) return(NULL)
-
-  phi_mod <- dd$phi_mod[1]
-  if (is.na(phi_mod)) return(NULL)
-
-  phi_hat = dd$phi[1]
-  phi_mod = dd$phi_mod[1]
-  rho_mod = 1 / (1 + phi_mod)
-  # Nudge slightly away from boundaries to prevent logit errors
-  rho_mod = min(max(rho_mod, 1e-6), 1 - 1e-6)
-  w = dd$w[1]
-
-  m1 <- tryCatch(
-    vglm(cbind(y, n - y) ~ groups,
-         family = VGAM::betabinomial(irho = rho_mod, zero = 2),
-         data = dd),
-    error = function(e) NULL
-  )
-
-  m0 <- tryCatch(
-    vglm(cbind(y, n - y) ~ 1,
-         family = VGAM::betabinomial(irho = rho_mod, zero = 2),
-         data = dd),
-    error = function(e) NULL
-  )
-
-  if (is.null(m1) || is.null(m0)) return(NULL)
-
-  intercept_2 <- coef(m1)["(Intercept):2"]
-  rho <- VGAM::logitlink(intercept_2, inverse = TRUE)
-  phi <- (1 / rho) - 1
-  # this can result in extremely large phi estimates. 
-  # but found it is not an inssue as it robustly estimates the phi and results in more conservative LRT compared to falling back to binomial glm. 
-  # no need to limit phi here unlike in glmmTMB where large phi can cause convergence issues and unreliable LRT.
-  cfs <- coef(m1)
-  eff_size <- cfs[grep("groups", names(cfs))][1] 
-
-  LR <- 2 * (logLik(m1) - logLik(m0))
-
-  if (as.numeric(LR) == -Inf) {
-    eff_size <- NA      # remove abnormally high effect sizes when splice event is perfectly correlated with the group (e.g., Group A has 0 reads for the event in all samples, while Group B has counts). complete separation
-  }
-
-  data.frame(
-    gene    = gene,
-    event   = event,
-    LRT     = as.numeric(LR),
-    p.value = pchisq(as.numeric(LR), df = 1, lower.tail = FALSE),
-    phi_hat = phi_hat,
-    phi_mod = phi_mod,
-    w       = w,
-    rho = rho,
-    phi = phi,
-    model   = "betabinomial_MLE_EB_anchor",
-    effect_size = eff_size,
-    stringsAsFactors = FALSE
-  )
-
-}
-
 
 # 3b. Wilcoxon Rank-Sum Test (Nonparametric)
 #' Test for differential exon usage using Wilcoxon rank-sum test
@@ -807,10 +692,10 @@ test_model_wilcoxon <- function(dd) {
 }
 
 
-# 4b. Direct DM LRT with fixed EB precision (fast, no VGAM)
+# 4b. Direct DM LRT with fixed EB precision
 #' Test differential exon usage with a direct Dirichlet-multinomial LRT using empirical Bayes fixed precision.
 #'
-#' Drop-in replacement for \code{test_model_multinomial_vgam_EB} that avoids VGAM entirely.
+#' Direct Dirichlet-multinomial LRT using empirical Bayes fixed precision.
 #' When precision is fixed (EB-moderated), the MLE of the proportion vector under each model
 #' has a closed form (empirical marginal counts), so both null and alternative log-likelihoods
 #' can be evaluated directly without iterative fitting.
@@ -898,165 +783,3 @@ test_model_multinomial_plugin_dm_EB <- function(dd) {
 }
 
 
-# 4. Moderated VGAM Dirichlet-Multinomial EB
-#' Test differential exon usage with a VGAM Dirichlet-multinomial model using empirical Bayes fixed precision.
-#' @param dd A data frame of exon count data.
-#' @export
-#' @examples
-#' \dontrun{
-#' splitcnts <- read.table("multinomial.exoncnt.combined.txt",
-#'                         header = TRUE, row.names = NULL)
-#' prec_table <- grase::moderate_prec_log_scale(
-#'   read.table("prec_dm.txt", header = TRUE, row.names = NULL)
-#' )
-#' splitcnts_eb <- dplyr::left_join(splitcnts, prec_table, by = c("gene", "event"))
-#' grouped_eb <- dplyr::group_split(dplyr::group_by(splitcnts_eb, gene, event))
-#' result <- grase::test_model_multinomial_vgam_EB(grouped_eb[[1]])
-#' result
-#' }
-test_model_multinomial_vgam_EB <- function(dd) {
-    gene <- unique(dd$gene); event <- unique(dd$event)
-    log_prec_mod <- dd$log_prec_mod[1]
-    rho_mod <- dd$rho_mod[1]
-
-    wide_df <- dd %>% dplyr::select(sample, groups, type, count) %>% pivot_wider(names_from = type, values_from = count, values_fill = 0)
-    Y <- as.matrix(wide_df[, setdiff(names(wide_df), c("sample", "groups"))])
-    wide_df <- wide_df[rowSums(Y) > 0, ]
-    Y <- Y[rowSums(Y) > 0, , drop = FALSE]
-    
-    if (nrow(Y) < 2 || length(unique(wide_df$groups)) < 2) return(NULL)
-    if (sum(colSums(Y) > 0) < 2) return(NULL)
-
-    # --- Fix rho using Offset and Constraints ---
-    K <- ncol(Y) # Number of predictors = Number of categories (K-1 probs + 1 rho)
-
-    # Offset: Set the K-th predictor (log precision) directly
-    off <- matrix(0, nrow = nrow(Y), ncol = K)
-    off[, K] <- log_prec_mod
-        
-    # Constraints: Suppress estimation of the K-th predictor
-    # Create a K x (K-1) matrix (Identity with last column removed)
-    cm <- diag(K)[, -K, drop = FALSE]
-    
-    # Apply constraints to Intercept and groups
-    clist_full <- list("(Intercept)" = cm, groups = cm)
-    clist_null <- list("(Intercept)" = cm)
-
-    m1 <- tryCatch(
-        vglm(Y ~ groups, dirmultinomial, data = wide_df, 
-             offset = off, constraints = clist_full), 
-        error = function(e) NULL
-    )
-    m0 <- tryCatch(
-        vglm(Y ~ 1, dirmultinomial, data = wide_df, 
-             offset = off, constraints = clist_null), 
-        error = function(e) NULL
-    )
-
-    if (!is.null(m1) && !is.null(m0)) {
-        LR <- 2 * (logLik(m1) - logLik(m0))
-        df_diff <- df.residual(m0) - df.residual(m1)
-        
-        cfs <- coef(m1)
-        eff_size <- cfs[grep("groups", names(cfs))][1]
-        
-        return(data.frame(gene=gene, event=event, LRT=as.numeric(LR), p.value=pchisq(as.numeric(LR), df_diff, lower.tail=F), model="dirmult_moderated", effect_size=eff_size))
-    }
-    return(NULL)
-}
-
-
-
-# Updated function for Wald tests in a Multinomial/Dirichlet-Multinomial setting
-#' Test differential exon usage with Wald tests in a VGAM Dirichlet-multinomial model using empirical Bayes precision.
-#' @param dd A data frame of exon count data.
-#' @param shape0 Numeric. Shape parameter of the Gamma prior on precision (currently unused in the
-#'   fixed-precision implementation; retained for API compatibility).
-#' @param rate0 Numeric. Rate parameter of the Gamma prior on precision (currently unused in the
-#'   fixed-precision implementation; retained for API compatibility).
-#' @param ref_option Character string or \code{NULL}. Name of the reference isoform/exon-part
-#'   category. If \code{NULL} or not found in the data, the first available option is used.
-#' @export
-#' @examples
-#' \dontrun{
-#' splitcnts <- read.table("multinomial.exoncnt.combined.txt",
-#'                         header = TRUE, row.names = NULL)
-#' prec_table <- grase::moderate_prec_log_scale(
-#'   read.table("prec_dm.txt", header = TRUE, row.names = NULL)
-#' )
-#' splitcnts_eb <- dplyr::left_join(splitcnts, prec_table, by = c("gene", "event"))
-#' grouped_eb <- dplyr::group_split(dplyr::group_by(splitcnts_eb, gene, event))
-#' result <- grase::test_model_multinomial_vgam_wald_EB(grouped_eb[[1]],
-#'                                                       shape0 = 1, rate0 = 1)
-#' result
-#' }
-test_model_multinomial_vgam_wald_EB <- function(dd, shape0, rate0, ref_option = NULL) {
-    gene <- unique(dd$gene); event <- unique(dd$event)
-    prec_mod <- dd$prec_mod[1]
-    log_prec_mod <- dd$log_prec_mod[1]
-  
-    # 1. Pivot data to wide format for multinomial modeling
-    wide_df <- dd %>% 
-      dplyr::select(sample, groups, type, count) %>% 
-      pivot_wider(names_from = type, values_from = count, values_fill = 0)
-    
-    # Identify available options (isoforms/exon parts)
-    all_options <- setdiff(names(wide_df), c("sample", "groups"))
-    
-    # 2. Set the Reference Option
-    # If no ref is provided, use the first one available
-    if (is.null(ref_option) || !(ref_option %in% all_options)) {
-        ref_option <- all_options[1]
-    }
-    
-    # Reorder columns so the reference is the LAST column (VGAM baseline default)
-    other_options <- setdiff(all_options, ref_option)
-    Y <- as.matrix(wide_df[, c(other_options, ref_option)])
-    
-    # Filter out empty samples
-    valid_rows <- rowSums(Y) > 0
-    wide_df <- wide_df[valid_rows, ]
-    Y <- Y[valid_rows, , drop = FALSE]
-    
-    if (nrow(Y) < 2 || length(unique(wide_df$groups)) < 2 || ncol(Y) < 2) return(NULL)
-    if (sum(colSums(Y) > 0) < 2) return(NULL)
-
-    # 3. Fix rho using Offset and Constraints
-    K <- ncol(Y)
-    
-    off <- matrix(0, nrow = nrow(Y), ncol = K)
-    off[, K] <- log_prec_mod
- 
-    cm <- diag(K)[, -K, drop = FALSE]
-    clist_full <- list("(Intercept)" = cm, groups = cm)
-
-    # 4. Fit the Full Model with moderated precision
-    m1 <- vglm(Y ~ groups, dirmultinomial, data = wide_df, 
-           offset = off, constraints = clist_full) 
-      
-    if (!is.null(m1)) {
-        # 5. Extract Wald Statistics for the 'groups' effect
-        # The summary object contains the p-values for each coefficient
-        s1 <- summary(m1)
-        coef_table <- as.data.frame(s1@coef3)
-        
-        # Filter for the predictor effect (groups) and exclude intercepts
-        # VGAM names these like 'groupsCD8T:1', 'groupsCD8T:2', etc.
-        wald_results <- coef_table %>%
-          mutate(coef_name = rownames(coef_table)) %>%
-          filter(grepl("groups", coef_name)) %>%
-          mutate(
-            gene = gene,
-            event = event,
-            reference = ref_option,
-            # Map the index (:1, :2) back to the actual option name
-            comparison_option = other_options[as.numeric(str_extract(coef_name, "\\d+$"))]
-          ) %>%
-          dplyr::select(gene, event, comparison_option, reference, 
-                        effect_size = Estimate, std_err = `Std. Error`, 
-                        z_value = `z value`, p.value = `Pr(>|z|)`)
-        
-        return(wald_results)
-    }
-    return(NULL)
-}

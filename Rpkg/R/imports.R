@@ -11,7 +11,6 @@
 #' @importFrom graphics par segments points text lines polygon xspline xyinch
 #' @importFrom stringr str_extract
 #' @importFrom glmmTMB glmmTMB fixef
-#' @importFrom VGAM vglm dirmultinomial
 #' @importFrom igraph .from .to
 #' @keywords internal
 NULL
@@ -30,9 +29,5 @@ utils::globalVariables(c(
   "ex_or_in",
   # moderate_phi_trend columns
   "baseMean", "z", "var_z",
-  # prec_estimate_vgam column
-  "groups",
-  # test_model_multinomial_vgam_wald_EB columns
-  "coef_name", "comparison_option", "reference",
-  "Estimate", "Std. Error", "z value", "Pr(>|z|)"
+  "groups"
 ))
