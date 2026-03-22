@@ -370,8 +370,7 @@ if (model == 'glmmTMB_prior') {
   }
   grouped_eb <- splitcnts_eb %>% group_by(gene, event) %>% group_split()
 
-  test_fn <- if (model == 'multinomial_plugin_dm_EB') {
-    test_model_multinomial_plugin_dm_EB
+  test_fn <- test_model_multinomial_plugin_dm_EB
   err_log <- paste0(model, ".errors.log")
 
   res_dm <- mclapply(grouped_eb, function(dd) {
