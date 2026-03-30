@@ -108,6 +108,13 @@ if (file.exists(exoncnt_master)) {
   stop()
 }
 
+# Pre-compute denominator-effect LFC summary for bipartition / n_choose_2 splits.
+# Multinomial format lacks diff/ref columns so is skipped.
+# Computed here (before any rm() calls) so it is available in all model branches.
+if (split != "multinomial") {
+  lfc_summary <- compute_lfc_summary(splitcnts)
+}
+
 # Global Precision Estimation
 if (model == 'glmmTMB_prior' || model == 'glmmTMB_fixedEB') {
 
@@ -261,13 +268,14 @@ if (model == 'glmmTMB_prior') {
   #stopCluster(cl)
 
   results <- bind_rows(Filter(Negate(is.null), result_list))
-  
+  if (exists("lfc_summary")) results <- flag_denominator_effect(results, lfc_summary)
+
   if (exists("pvalueAdjustment") && nrow(results) > 0) {
       results$pvalue <- results$p.value
       results <- pvalueAdjustment(results, independentFiltering=FALSE, theta=NULL, alpha=0.05, pAdjustMethod="BH")
       results$pvalue <- NULL
   }
-  
+
   write.table(results, file=out_resultfile, quote=FALSE, sep="\t", row.names = FALSE)
 
 } else if (model == 'glmmTMB_fixedEB') {
@@ -345,6 +353,7 @@ if (model == 'glmmTMB_prior') {
                baseMean = mean(dd$y, na.rm = TRUE),
                stringsAsFactors = FALSE)))
   results <- results %>% left_join(baseMean_df, by = c("gene", "event"))
+  if (exists("lfc_summary")) results <- flag_denominator_effect(results, lfc_summary)
 
   if (exists("pvalueAdjustment") && nrow(results) > 0) {
       results$pvalue <- results$p.value
@@ -387,7 +396,8 @@ if (model == 'glmmTMB_prior') {
   }, mc.cores = 32)
   #stopCluster(cl)
   results <- bind_rows(res_dm)
-  
+  # lfc_summary is not computed for multinomial (no diff/ref columns)
+
   if (exists("pvalueAdjustment") && nrow(results) > 0) {
       results$pvalue <- results$p.value
       results <- pvalueAdjustment(results, independentFiltering=FALSE, theta=NULL, alpha=0.05, pAdjustMethod="BH")
@@ -415,7 +425,8 @@ if (model == 'glmmTMB_prior') {
   }, mc.cores = 32)
 
   results <- bind_rows(Filter(Negate(is.null), result_list))
-  
+  if (exists("lfc_summary")) results <- flag_denominator_effect(results, lfc_summary)
+
   if (exists("pvalueAdjustment") && nrow(results) > 0) {
       results$pvalue <- results$p.value
       results <- pvalueAdjustment(results, independentFiltering=FALSE, theta=NULL, alpha=0.05, pAdjustMethod="BH")
@@ -443,6 +454,7 @@ if (model == 'glmmTMB_prior') {
   }, mc.cores = 32)
 
   results <- bind_rows(Filter(Negate(is.null), result_list))
+  if (exists("lfc_summary")) results <- flag_denominator_effect(results, lfc_summary)
 
   if (exists("pvalueAdjustment") && nrow(results) > 0) {
     results$pvalue <- results$p.value
