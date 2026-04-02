@@ -86,6 +86,36 @@ write_exoncnt_long <- function(ref_counts_df, diff_counts_df, events, gene_name,
 
 }
 
+#' Write exon counts in wide format for 3-way testing
+#' @param ref_counts_df A data frame of reference exonic part read counts.
+#' @param diff1_counts_df A data frame of differential exonic part 1 read counts.
+#' @param diff2_counts_df A data frame of differential exonic part 2 read counts.
+#' @param events Character vector of event identifiers to include.
+#' @param gene_name Character string. Gene identifier for the output file name.
+#' @param sampleinfo A named character vector mapping sample names to group labels.
+#' @param outfilesuffix Character string. Suffix for output file names.
+#' @param outdir Character string. Path to output directory.
+#' @export
+write_exoncnt_wide <- function(ref_counts_df, diff1_counts_df, diff2_counts_df,
+                               events, gene_name, sampleinfo, outfilesuffix, outdir) {
+  # pivot ref, diff1, diff2 independently to long format, then cbind
+  ref_long <- ref_counts_df[ref_counts_df$event %in% events, ] %>%
+    pivot_longer(cols = all_of(names(sampleinfo)), names_to = "sample", values_to = "ref")
+  diff1_long <- diff1_counts_df[diff1_counts_df$event %in% events, ] %>%
+    pivot_longer(cols = all_of(names(sampleinfo)), names_to = "sample", values_to = "diff1")
+  diff2_long <- diff2_counts_df[diff2_counts_df$event %in% events, ] %>%
+    pivot_longer(cols = all_of(names(sampleinfo)), names_to = "sample", values_to = "diff2")
+  exoncnts <- cbind.data.frame(ref_long, diff1 = diff1_long$diff1, diff2 = diff2_long$diff2)
+  exoncnts <- exoncnts %>% mutate(groups = sampleinfo[sample])
+  exoncnts$ref   <- as.numeric(exoncnts$ref)
+  exoncnts$diff1 <- as.numeric(exoncnts$diff1)
+  exoncnts$diff2 <- as.numeric(exoncnts$diff2)
+  if (nrow(exoncnts) > 1) {
+    write.table(exoncnts, file = paste0(outdir, '/', gene_name, '.', outfilesuffix, '.exoncnt.txt'),
+                quote = FALSE, sep = "\t")
+  }
+}
+
 #' Count exonic part reads for bipartition events
 #' @param bipartition_file Character string. Path to a bipartition results file (tab-separated,
 #'   as written by \code{bipartition_paths}).
@@ -136,45 +166,35 @@ count_bipartitions <- function(bipartition_file, countmat, sampleinfo, outdir, o
   colnames(diff1_counts_df) = colnames(countmat[,1:n_samples]) 
   colnames(diff2_counts_df) = colnames(countmat[,1:n_samples]) 
 
-  bipartitions$ref_mean = rowMeans(ref_counts_df)
-  bipartitions$diff1_mean = rowMeans(diff1_counts_df)
-  bipartitions$diff2_mean = rowMeans(diff2_counts_df)
+  bipartitions$ref_mean = rowMeans(ref_counts_df, na.rm = TRUE)
+  bipartitions$diff1_mean = rowMeans(diff1_counts_df, na.rm = TRUE)
+  bipartitions$diff2_mean = rowMeans(diff2_counts_df, na.rm = TRUE)
 
   ref_counts_df$event = bipartitions$event
   diff1_counts_df$event = bipartitions$event
   diff2_counts_df$event = bipartitions$event
 
+  ref_counts_df <- inner_join(
+    bipartitions[, c('gene', 'event', 'source', 'sink', 'ref_ex_part', 'setdiff1', 'setdiff2')],
+    ref_counts_df, by = "event")
+  diff1_counts_df <- inner_join(
+    bipartitions[, c('gene', 'event', 'source', 'sink', 'ref_ex_part', 'setdiff1', 'setdiff2')],
+    diff1_counts_df, by = "event")
+  diff2_counts_df <- inner_join(
+    bipartitions[, c('gene', 'event', 'source', 'sink', 'ref_ex_part', 'setdiff1', 'setdiff2')],
+    diff2_counts_df, by = "event")
 
-  bipartitions$diff_mean = do.call(pmax, c(bipartitions[, c("diff1_mean", "diff2_mean")], na.rm = TRUE))
-  bipartitions <- bipartitions %>%
-    mutate(
-      which   = case_when(
-        is.na(diff1_mean) & is.na(diff2_mean) ~ NA_character_,
-        is.na(diff1_mean)                     ~ "diff2",
-        is.na(diff2_mean)                     ~ "diff1",
-        diff1_mean > diff2_mean               ~ "diff1",
-        TRUE                                  ~ "diff2"
-      ),
-      setdiff = if_else(which == "diff1", setdiff1, setdiff2)
-    ) %>%
-    filter(!is.na(setdiff))
+  any_diff_mean <- do.call(pmax, c(bipartitions[, c("diff1_mean", "diff2_mean")], na.rm = TRUE))
 
-  ref_counts_df <- inner_join(bipartitions[,c('gene', 'event', 'source', 'sink', 'ref_ex_part', 'setdiff')], ref_counts_df, by = "event")
-
-  diff1_counts_df <- inner_join(bipartitions[bipartitions$which=='diff1',c('gene', 'event', 'source', 'sink', 'ref_ex_part', 'setdiff')], diff1_counts_df, by = "event")
-
-  diff2_counts_df <- inner_join(bipartitions[bipartitions$which=='diff2',c('gene', 'event', 'source', 'sink', 'ref_ex_part', 'setdiff')], diff2_counts_df, by = "event")
-
-  diff_counts_df <- bind_rows(diff1_counts_df, diff2_counts_df) %>%
-       arrange(as.numeric(event))
-
-
-  if (nrow(bipartitions[bipartitions$diff_mean > 0,])) {
-    print(paste0("writing ",gene[1]))
-    write.table(bipartitions, file=paste0(outdir,'/', gene[1], '.', outfilesuffix, '.txt'), quote=FALSE, sep="\t")
-    write_exoncnt_long(ref_counts_df, diff_counts_df, events=bipartitions$event, gene_name = gene[1], sampleinfo, outfilesuffix, outdir) 
+  if (any(any_diff_mean > 0, na.rm = TRUE)) {
+    print(paste0("writing ", gene[1]))
+    write.table(bipartitions, file = paste0(outdir, '/', gene[1], '.', outfilesuffix, '.txt'),
+                quote = FALSE, sep = "\t")
+    write_exoncnt_wide(ref_counts_df, diff1_counts_df, diff2_counts_df,
+                       events = bipartitions$event, gene_name = gene[1],
+                       sampleinfo, outfilesuffix, outdir)
   } else {
-    print(paste0("zero read counts at setdiff exons. skipping ",gene[1]))
+    print(paste0("zero read counts at setdiff exons. skipping ", gene[1]))
   }
  
   return (0)
