@@ -70,6 +70,11 @@ increase_curve_shortest_edges <- function(g, coords, ec) {
   ec
 }
 
+#' Style and plot
+#' @param gene Character string. Gene identifier.
+#' @param outdir Character string. Path to output directory where the PDF plot
+#'   is written.
+#' @export
 style_and_plot <- function(g, gene, outdir) {
   color_dict <- c("ex" = "darkorange", "in" = "black", "R" = "black", "L" = "black", "ex_part" = "dark green")
   width_dict <- c("ex" = 1, "in" = 1.2, "R" = 1.2, "L" = 1.2, "ex_part" = 1)

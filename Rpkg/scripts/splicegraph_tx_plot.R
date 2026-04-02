@@ -4,8 +4,14 @@ library(GenomicFeatures)
 library(SplicingGraphs)
 
 
-indir = '/mnt/storage/jaquino/scRNAseq_sim_pt2/grase/graphml.dexseq.v34/'
+indir = '/mnt/data1/home/mirahan/GrASE_simulation/'
+outdir = '/mnt/data1/home/mirahan/GrASE_simulation/'
+
+#genes = c('ENSG00000000457.14', 'ENSG00000001631.15')
+#genes = c('ENSG00000004809.14')
+genes = c('ENSG00000269713.7')
 gene = 'ENSG00000004809.14'
+gene = 'ENSG00000000419.12'
 gtf_path <- file.path(indir, "gtf", paste0(gene, ".gtf"))
 gr <- rtracklayer::import(gtf_path)
 gr <- gr[!(rtracklayer::mcols(gr)$type %in% c("start_codon", "stop_codon"))]
