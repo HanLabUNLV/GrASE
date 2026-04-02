@@ -184,17 +184,13 @@ count_bipartitions <- function(bipartition_file, countmat, sampleinfo, outdir, o
     bipartitions[, c('gene', 'event', 'source', 'sink', 'ref_ex_part', 'setdiff1', 'setdiff2')],
     diff2_counts_df, by = "event")
 
-  any_diff_mean <- do.call(pmax, c(bipartitions[, c("diff1_mean", "diff2_mean")], na.rm = TRUE))
-
-  if (any(any_diff_mean > 0, na.rm = TRUE)) {
+  if (nrow(bipartitions[bipartitions$diff1_mean > 0 | bipartitions$diff2_mean > 0, ])) {
     print(paste0("writing ", gene[1]))
     write.table(bipartitions, file = paste0(outdir, '/', gene[1], '.', outfilesuffix, '.txt'),
                 quote = FALSE, sep = "\t")
     write_exoncnt_wide(ref_counts_df, diff1_counts_df, diff2_counts_df,
                        events = bipartitions$event, gene_name = gene[1],
                        sampleinfo, outfilesuffix, outdir)
-  } else {
-    print(paste0("zero read counts at setdiff exons. skipping ", gene[1]))
   }
  
   return (0)

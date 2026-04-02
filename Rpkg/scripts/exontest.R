@@ -90,10 +90,20 @@ prec_trend       <- isTRUE(opt$use_prec_loess)
 padj_thr         <- as.double(opt$padj_threshold)
 delta            <- as.double(opt$delta)
 
+# Expand tilde in paths
+outdir <- path.expand(outdir)
+countdir <- path.expand(countdir)
+
 # Add a 'significant' column: padj < padj_thr AND (lfc_diff_net > delta OR lfc_diff_net absent/NA)
 add_significant <- function(res, padj_thr, delta) {
   has_lfc <- "lfc_diff_net" %in% names(res)
-  lfc_ok  <- if (has_lfc) (is.na(res$lfc_diff_net) | res$lfc_diff_net > delta) else TRUE
+  lfc_ok <- if (has_lfc) {
+    # Events are significant if lfc_diff_net > delta.
+    # If lfc_diff_net is NA, it's not filtered out.
+    (res$lfc_diff_net > delta) | is.na(res$lfc_diff_net)
+  } else {
+    TRUE # No LFC info, don't filter
+  }
   res$significant <- !is.na(res$padj) & res$padj < padj_thr & lfc_ok
   res
 }
@@ -109,29 +119,51 @@ if (file.exists(exoncnt_master)) {
   splitcnts <- read.table(exoncnt_master, header=TRUE, row.names=NULL)
   # Set levels such that cond2 is reference, so coefficient is cond1 - cond2
   splitcnts$groups <- factor(splitcnts$groups, levels = c(cond2, cond1))
-  # Add pseudocount to ref reads (and total n) only where ref == 0, so that
-  # all-or-nothing switches with zero reference coverage can still be tested
-  if (pseudocount > 0L) {
-    zero_ref <- splitcnts$ref == 0L
-    splitcnts$ref[zero_ref] <- pseudocount
-    splitcnts$n[zero_ref]   <- splitcnts$n[zero_ref] + pseudocount
-  }
 } else {
   print('exoncnt dataset file does not exist.')
   print('please combine the exoncounts into one file and specify the filename.')
   stop()
 }
 
-# Pre-compute denominator-effect LFC summary for bipartition / n_choose_2 splits.
-# Multinomial format lacks diff/ref columns so is skipped.
-# Computed here (before any rm() calls) so it is available in all model branches.
+# baseMean: total per-event coverage across both diffs and ref
 if (split != "multinomial") {
-  lfc_summary <- compute_lfc_summary(splitcnts)
   baseMean_df <- splitcnts %>%
+    mutate(n_total = rowSums(cbind(diff1, diff2, ref), na.rm = TRUE)) %>%
     group_by(gene, event) %>%
-    summarise(baseMean = mean(n, na.rm = TRUE), .groups = "drop")
-}
+    summarise(baseMean = mean(n_total, na.rm = TRUE), .groups = "drop")
 
+  make_comparison <- function(sc, diff_col, ref_col, comp_name) {
+    sc %>%
+      filter(!is.na(.data[[diff_col]]) & !is.na(.data[[ref_col]])) %>%
+      mutate(diff = .data[[diff_col]],
+             ref  = .data[[ref_col]],
+             n    = .data[[diff_col]] + .data[[ref_col]],
+             comparison = comp_name)
+  }
+
+  sc_d1r  <- make_comparison(splitcnts, "diff1", "ref",   "diff1_vs_ref")
+  sc_d2r  <- make_comparison(splitcnts, "diff2", "ref",   "diff2_vs_ref")
+  sc_d1d2 <- make_comparison(splitcnts, "diff1", "diff2", "diff1_vs_diff2")
+
+  # pseudocount: same logic as before, applied to each comparison's ref where ref == 0
+  if (pseudocount > 0L) {
+    apply_pseudo <- function(sc) {
+      zero_ref <- sc$ref == 0L
+      sc$ref[zero_ref] <- pseudocount
+      sc$n[zero_ref]   <- sc$n[zero_ref] + pseudocount
+      sc
+    }
+    sc_d1r  <- apply_pseudo(sc_d1r)
+    sc_d2r  <- apply_pseudo(sc_d2r)
+    # diff1_vs_diff2: no "ref" denominator effect risk, skip pseudocount
+  }
+
+  lfc_d1r  <- compute_lfc_summary(sc_d1r)  %>% mutate(comparison = "diff1_vs_ref")
+  lfc_d2r  <- compute_lfc_summary(sc_d2r)  %>% mutate(comparison = "diff2_vs_ref")
+  lfc_d1d2 <- compute_lfc_summary(sc_d1d2) %>% mutate(comparison = "diff1_vs_diff2")
+  lfc_summary_all <- bind_rows(lfc_d1r, lfc_d2r, lfc_d1d2)
+  comparisons_list <- list(sc_d1r, sc_d2r, sc_d1d2)
+}
 # Global Precision Estimation
 if (model == 'glmmTMB_prior' || model == 'glmmTMB_fixedEB') {
 
@@ -141,9 +173,8 @@ if (model == 'glmmTMB_prior' || model == 'glmmTMB_fixedEB') {
   if (file.exists(paste0(outdir,'/', phifile))) {
     phi_df <- read.table(paste0(outdir,'/', phifile), header=TRUE, row.names=NULL)
   } else {
-    # Only create grouped_data when phi estimation is actually needed.
-    # When the phi file is cached this object is unnecessary and wastes memory.
-    grouped_data <- group_by_event(splitcnts, 'diff', 'n')
+    # Estimate phi on diff1 vs ref comparison
+    grouped_data <- group_by_event(sc_d1r, 'diff', 'n')
     #grouped_data <- grouped_data[1:10]
     #cl <- makeCluster(30, outfile='phi.glmmtmb.log')
     #clusterEvalQ(cl, library(glmmTMB))
@@ -243,11 +274,28 @@ if (model == 'glmmTMB_prior' || model == 'glmmTMB_fixedEB') {
   rm(baseMean_df_all)
 }
 
+# Helper: run one comparison through group_by_event + mclapply
+run_one_comparison <- function(sc, test_fn, err_log, ...) {
+  if (nrow(sc) == 0) return(NULL)
+  gd <- group_by_event(sc, 'diff', 'n')
+  res_list <- mclapply(gd, function(dd) {
+    tryCatch(test_fn(dd, ...), error = function(e) {
+        msg <- sprintf("[%s] ERROR gene=%s event=%s (PID %d): %s\n",
+                       format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
+                       dd$gene[1], dd$event[1], Sys.getpid(), conditionMessage(e))
+        cat(msg, file = err_log, append = TRUE)
+        NULL
+    })
+  }, mc.cores = 32)
+  res <- bind_rows(Filter(Negate(is.null), res_list))
+  if (nrow(res) > 0) res$comparison <- sc$comparison[1]
+  res
+}
+
 # Per Gene Model Estimation
 if (model == 'glmmTMB_prior') {
-  if (!exists("grouped_data")) {
-    grouped_data <- group_by_event(splitcnts, 'diff', 'n')
-  }
+  # This model runs on each of the 3 comparisons.
+  # Phi estimation (above) already ran on sc_d1r.
   phi_trimmed <- phi_df[!is.na(phi_df$phi) & phi_df$phi < 1e+10 & phi_df$phi > 0,'phi']
 
   # fit normal to log(phi)
@@ -263,30 +311,15 @@ if (model == 'glmmTMB_prior') {
   )
   print(prior_disp)
 
+  result_list_all <- lapply(comparisons_list, run_one_comparison,
+                          test_fn = test_model_glmmTMB_with_prior,
+                          err_log = "glmmtmb_withprior.errors.log",
+                          prior_disp, z_bar = median_logphi)
 
-  #cl <- makeCluster(40, outfile='testglmmTMB_withprior.log')
-  #clusterEvalQ(cl, { library(glmmTMB); library(tidyverse) })
-  #clusterExport(cl, varlist = c("test_model_glmmTMB_with_prior", "prior_disp"), envir = environment())
-
-  result_list <- mclapply(grouped_data, function(dd) {
-  #result_list <- parLapply(cl, grouped_data, function(dd) {
-    tryCatch({
-      # Suppress glmmTMB timing messages from failed optimizations
-      suppressMessages(test_model_glmmTMB_with_prior(dd, prior_disp, z_bar = median_logphi))
-    }, error = function(e) {
-        msg <- sprintf("[%s] ERROR in %s (PID %d): %s\n",
-                       format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
-                       dd$gene[1], Sys.getpid(), conditionMessage(e))
-        cat(msg, file = "glmmtmb_withprior.errors.log", append = TRUE)
-        NULL
-    })
-  #})
-  }, mc.cores = 32)
-  #stopCluster(cl)
-
-  results <- bind_rows(Filter(Negate(is.null), result_list))
-  results <- results %>% left_join(baseMean_df, by = c("gene", "event"))
-  if (exists("lfc_summary")) results <- posthoc_lfc_summary(results, lfc_summary)
+  results <- bind_rows(result_list_all)
+  results <- results %>%
+    left_join(baseMean_df, by = c("gene", "event")) %>%
+    left_join(lfc_summary_all, by = c("gene", "event", "comparison"))
 
   if (exists("pvalueAdjustment") && nrow(results) > 0) {
       results$pvalue <- results$p.value
@@ -307,65 +340,40 @@ if (model == 'glmmTMB_prior') {
       group_by(gene, event) %>%
       summarise(baseMean = mean(n, na.rm = TRUE), .groups = "drop")
     phi_table <- moderate_phi_trend(phi_df, baseMean_df_all)
-    rm(baseMean_df_all)
-    splitcnts_eb <- splitcnts %>%
-      left_join(phi_table %>% select(gene, event, z_mod),
-                by = c("gene", "event"))
-    ## Residual NAs (event not in phi_table) trend median as fallback
     fallback_z <- median(phi_table$z_mod, na.rm = TRUE)
-    splitcnts_eb$z_mod[is.na(splitcnts_eb$z_mod)] <- fallback_z
+    sc_d1r_eb  <- sc_d1r  %>% left_join(phi_table %>% select(gene, event, z_mod), by = c("gene", "event"))
+    sc_d2r_eb  <- sc_d2r  %>% left_join(phi_table %>% select(gene, event, z_mod), by = c("gene", "event"))
+    sc_d1d2_eb <- sc_d1d2 %>% left_join(phi_table %>% select(gene, event, z_mod), by = c("gene", "event"))
+    sc_d1r_eb$z_mod[is.na(sc_d1r_eb$z_mod)] <- fallback_z
+    sc_d2r_eb$z_mod[is.na(sc_d2r_eb$z_mod)] <- fallback_z
+    sc_d1d2_eb$z_mod[is.na(sc_d1d2_eb$z_mod)] <- fallback_z
   } else {
     ## Global-mean moderation (original behaviour)
     phi_table <- moderate_phi_log_scale(phi_df)
-    splitcnts_eb <- splitcnts %>%
-      left_join(phi_table, by = c("gene", "event"))
-    ## Events with no phi estimate are fully shrunk to the global prior mean
     z_bar <- median(phi_table$z, na.rm = TRUE)
-    splitcnts_eb$z_mod[is.na(splitcnts_eb$z_mod)] <- z_bar
+    sc_d1r_eb  <- sc_d1r  %>% left_join(phi_table, by = c("gene", "event"))
+    sc_d2r_eb  <- sc_d2r  %>% left_join(phi_table, by = c("gene", "event"))
+    sc_d1d2_eb <- sc_d1d2 %>% left_join(phi_table, by = c("gene", "event"))
+    sc_d1r_eb$z_mod[is.na(sc_d1r_eb$z_mod)] <- z_bar
+    sc_d2r_eb$z_mod[is.na(sc_d2r_eb$z_mod)] <- z_bar
+    sc_d1d2_eb$z_mod[is.na(sc_d1d2_eb$z_mod)] <- z_bar
   }
+  comparisons_list_eb <- list(sc_d1r_eb, sc_d2r_eb, sc_d1d2_eb)
+
   phi_mod_file <- sub("\\.([^.]+)$", ".moderated.\\1", phifile)
   write.table(phi_table, file=paste0(outdir, '/', phi_mod_file), sep="\t", quote=FALSE, row.names=FALSE)
-  grouped_data_eb <- group_by_event(splitcnts_eb, 'diff', 'n')
-  #grouped_data_eb <- grouped_data_eb[1:10]
 
-  # Remove bindings to large objects no longer needed before forking.
-  # Do NOT call gc() before mclapply: gc() compacts R's heap, dirtying pages
-  # and breaking COW sharing across forked workers increasing memory usage.
-  rm(splitcnts, splitcnts_eb, phi_df, phi_table)
-  if (exists("grouped_data")) rm(grouped_data)
+  rm(splitcnts, phi_df, phi_table)
+  if (exists("sc_d1r")) rm(sc_d1r, sc_d2r, sc_d1d2)
 
-  # Moderated glmmTMB with EB
-  #cl <- makeCluster(40, outfile='testglmmTMB_EB.log')
-  #clusterEvalQ(cl, { library(glmmTMB); library(tidyverse) })
-  #clusterExport(cl, varlist = c("test_model_glmmTMB_EB"), envir = environment())
+  result_list_all <- lapply(comparisons_list_eb, run_one_comparison,
+                          test_fn = test_model_glmmTMB_EB,
+                          err_log = "glmmtmb_EB.errors.log")
 
-  result_list <- mclapply(grouped_data_eb, function(dd) {
-  #result_list <- parLapply(cl, grouped_data_eb, function(dd) {
-    withCallingHandlers(
-      tryCatch({
-        test_model_glmmTMB_EB(dd)
-      }, error = function(e) {
-        msg <- sprintf("[%s] ERROR gene=%s event=%s (PID %d): %s\n",
-                       format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
-                       dd$gene[1], dd$event[1], Sys.getpid(), conditionMessage(e))
-        cat(msg, file = "glmmtmb_EB.errors.log", append = TRUE)
-        NULL
-      }),
-      warning = function(w) {
-        msg <- sprintf("[%s] WARN  gene=%s event=%s (PID %d): %s\n",
-                       format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
-                       dd$gene[1], dd$event[1], Sys.getpid(), conditionMessage(w))
-        cat(msg, file = "glmmtmb_EB.errors.log", append = TRUE)
-        invokeRestart("muffleWarning")
-      }
-    )
-  #})
-  }, mc.cores = 32)
-  #stopCluster(cl)
-
-  results <- bind_rows(Filter(Negate(is.null), result_list))
-  results <- results %>% left_join(baseMean_df, by = c("gene", "event"))
-  if (exists("lfc_summary")) results <- posthoc_lfc_summary(results, lfc_summary)
+  results <- bind_rows(result_list_all)
+  results <- results %>%
+    left_join(baseMean_df, by = c("gene", "event")) %>%
+    left_join(lfc_summary_all, by = c("gene", "event", "comparison"))
 
   if (exists("pvalueAdjustment") && nrow(results) > 0) {
       results$pvalue <- results$p.value
@@ -422,25 +430,15 @@ if (model == 'glmmTMB_prior') {
 
 } else if (model == 'wilcoxon') {
   if (!is.null(opt$phi)) warning("--phi is not used for model '", model, "' and will be ignored")
-  if (!exists("grouped_data")) {
-    grouped_data <- group_by_event(splitcnts, 'diff', 'n')
-  }
 
-  result_list <- mclapply(grouped_data, function(dd) {
-    tryCatch({
-      test_model_wilcoxon(dd) 
-    }, error = function(e) {
-        msg <- sprintf("[%s] ERROR in %s (PID %d): %s\n",
-                       format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
-                       dd$gene[1], Sys.getpid(), conditionMessage(e))
-        cat(msg, file = "wilcoxon.errors.log", append = TRUE)
-        NULL
-    })
-  }, mc.cores = 32)
+  result_list_all <- lapply(comparisons_list, run_one_comparison,
+                          test_fn = test_model_wilcoxon,
+                          err_log = "wilcoxon.errors.log")
 
-  results <- bind_rows(Filter(Negate(is.null), result_list))
-  results <- results %>% left_join(baseMean_df, by = c("gene", "event"))
-  if (exists("lfc_summary")) results <- posthoc_lfc_summary(results, lfc_summary)
+  results <- bind_rows(result_list_all)
+  results <- results %>%
+    left_join(baseMean_df, by = c("gene", "event")) %>%
+    left_join(lfc_summary_all, by = c("gene", "event", "comparison"))
 
   if (exists("pvalueAdjustment") && nrow(results) > 0) {
       results$pvalue <- results$p.value
@@ -453,25 +451,15 @@ if (model == 'glmmTMB_prior') {
 
 } else if (model == 'glmmTMB_no_prior') {
   if (!is.null(opt$phi)) warning("--phi is not used for model '", model, "' and will be ignored")
-  if (!exists("grouped_data")) {
-    grouped_data <- group_by_event(splitcnts, 'diff', 'n')
-  }
 
-  result_list <- mclapply(grouped_data, function(dd) {
-    tryCatch({
-      suppressMessages(test_model_glmmTMB_without_prior(dd))
-    }, error = function(e) {
-      msg <- sprintf("[%s] ERROR gene=%s event=%s (PID %d): %s\n",
-                     format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
-                     dd$gene[1], dd$event[1], Sys.getpid(), conditionMessage(e))
-      cat(msg, file = "glmmtmb_noprior.errors.log", append = TRUE)
-      NULL
-    })
-  }, mc.cores = 32)
+  result_list_all <- lapply(comparisons_list, run_one_comparison,
+                          test_fn = function(dd) suppressMessages(test_model_glmmTMB_without_prior(dd)),
+                          err_log = "glmmtmb_noprior.errors.log")
 
-  results <- bind_rows(Filter(Negate(is.null), result_list))
-  results <- results %>% left_join(baseMean_df, by = c("gene", "event"))
-  if (exists("lfc_summary")) results <- posthoc_lfc_summary(results, lfc_summary)
+  results <- bind_rows(result_list_all)
+  results <- results %>%
+    left_join(baseMean_df, by = c("gene", "event")) %>%
+    left_join(lfc_summary_all, by = c("gene", "event", "comparison"))
 
   if (exists("pvalueAdjustment") && nrow(results) > 0) {
     results$pvalue <- results$p.value
@@ -514,12 +502,6 @@ message(paste("Processing", length(unique_genes), "unique genes."))
 read_gene_split <- function(gene_id) {
   # Construct filename based on gene ID
   f <- file.path(countdir, paste0(gene_id, ".", split, ".txt"))
-  
-  if (!file.exists(f)) {
-    # Try resolving tilde expansion if needed (Sys.glob might help if path has ~)
-    f_expanded <- Sys.glob(f)
-    if (length(f_expanded) > 0) f <- f_expanded[1]
-  }
 
   if (file.exists(f)) {
      tryCatch({
@@ -566,40 +548,37 @@ message(paste("Successfully wrote annotated tests to", out_result_annotated))
 
 # Each bipartition event was tested twice (_s1 and _s2 sides). 
 if (split == 'bipartition' || split == 'n_choose_2') {
-  if (nrow(merged_data) > 0 && 'setdiff' %in% names(merged_data)) {
+  if (nrow(merged_data) > 0 && 'setdiff1' %in% names(merged_data)) {
 
     # Min p-value combination for bipartition_both:
     # Take the minimum p-value across sides per event, union the setdiff exonic parts,
     # and re-apply BH FDR correction on the reduced hypothesis set (N not 2N).
     # Per-event: min p-value + union of setdiff exon parts
     combo_df <- merged_data %>%
-      mutate(event_base = sub("_s[12]$", "", event)) %>%
-      group_by(gene, event_base) %>%
+      group_by(gene, event) %>%
       summarise(
         p_min         = {
           pv <- p.value[!is.na(p.value) & p.value > 0 & p.value <= 1]
           if (length(pv) == 0) NA_real_ else min(pv)
         },
         setdiff_union = paste(unique(trimws(unlist(strsplit(
-                                na.omit(setdiff), ",")))), collapse = ","),
+                                na.omit(c(setdiff1, setdiff2)), ",")))), collapse = ","),
         .groups = "drop"
       )
 
     # Primary row per event: prefer the side with the lower p-value
     primary_df <- merged_data %>%
-      mutate(event_base = sub("_s[12]$", "", event)) %>%
-      group_by(gene, event_base) %>%
+      group_by(gene, event) %>%
       slice(which.min(p.value)) %>%
       ungroup()
 
     min_data <- primary_df %>%
-      left_join(combo_df, by = c("gene", "event_base")) %>%
+      left_join(combo_df, by = c("gene", "event")) %>%
       mutate(
-        event   = event_base,
         p.value = p_min,
         setdiff = setdiff_union
       ) %>%
-      select(-event_base, -p_min, -setdiff_union)
+      select(-p_min, -setdiff_union)
 
     if (exists("pvalueAdjustment") && nrow(min_data) > 0) {
       min_data$pvalue <- min_data$p.value
@@ -620,8 +599,7 @@ if (split == 'bipartition' || split == 'n_choose_2') {
     #   X = -2 * sum(log(p))  ~  chi-squared with 2*k df  (k = number of sides)
     # When only one side has a valid p-value, use that p directly (1 df = 2).
     fisher_combo_df <- merged_data %>%
-      mutate(event_base = sub("_s[12]$", "", event)) %>%
-      group_by(gene, event_base) %>%
+      group_by(gene, event) %>%
       summarise(
         p_fisher      = {
           pv <- p.value[!is.na(p.value) & p.value > 0 & p.value <= 1]
@@ -629,18 +607,17 @@ if (split == 'bipartition' || split == 'n_choose_2') {
           else pchisq(-2 * sum(log(pv)), df = 2 * length(pv), lower.tail = FALSE)
         },
         setdiff_union = paste(unique(trimws(unlist(strsplit(
-                                na.omit(setdiff), ",")))), collapse = ","),
+                                na.omit(c(setdiff1, setdiff2)), ",")))), collapse = ","),
         .groups = "drop"
       )
 
     fisher_data <- primary_df %>%
-      left_join(fisher_combo_df, by = c("gene", "event_base")) %>%
+      left_join(fisher_combo_df, by = c("gene", "event")) %>%
       mutate(
-        event   = event_base,
         p.value = p_fisher,
         setdiff = setdiff_union
       ) %>%
-      select(-event_base, -p_fisher, -setdiff_union)
+      select(-p_fisher, -setdiff_union)
 
     if (exists("pvalueAdjustment") && nrow(fisher_data) > 0) {
       fisher_data$pvalue <- fisher_data$p.value
