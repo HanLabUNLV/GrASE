@@ -127,6 +127,9 @@ if (file.exists(exoncnt_master)) {
 # Computed here (before any rm() calls) so it is available in all model branches.
 if (split != "multinomial") {
   lfc_summary <- compute_lfc_summary(splitcnts)
+  baseMean_df <- splitcnts %>%
+    group_by(gene, event) %>%
+    summarise(baseMean = mean(n, na.rm = TRUE), .groups = "drop")
 }
 
 # Global Precision Estimation
@@ -282,11 +285,12 @@ if (model == 'glmmTMB_prior') {
   #stopCluster(cl)
 
   results <- bind_rows(Filter(Negate(is.null), result_list))
+  results <- results %>% left_join(baseMean_df, by = c("gene", "event"))
   if (exists("lfc_summary")) results <- posthoc_lfc_summary(results, lfc_summary)
 
   if (exists("pvalueAdjustment") && nrow(results) > 0) {
       results$pvalue <- results$p.value
-      results <- pvalueAdjustment(results, independentFiltering=FALSE, theta=NULL, alpha=0.05, pAdjustMethod="BH")
+      results <- pvalueAdjustment(results, independentFiltering=indep_filter, alpha=0.05, pAdjustMethod="BH")
       results$pvalue <- NULL
   }
 
@@ -360,13 +364,6 @@ if (model == 'glmmTMB_prior') {
   #stopCluster(cl)
 
   results <- bind_rows(Filter(Negate(is.null), result_list))
-
-  # Derive baseMean from grouped_data_eb (still alive) rather than keeping
-  # a separate large object alive through the fork.
-  baseMean_df <- bind_rows(lapply(grouped_data_eb, function(dd)
-    data.frame(gene = dd$gene[1], event = dd$event[1],
-               baseMean = mean(dd$y, na.rm = TRUE),
-               stringsAsFactors = FALSE)))
   results <- results %>% left_join(baseMean_df, by = c("gene", "event"))
   if (exists("lfc_summary")) results <- posthoc_lfc_summary(results, lfc_summary)
 
@@ -442,11 +439,12 @@ if (model == 'glmmTMB_prior') {
   }, mc.cores = 32)
 
   results <- bind_rows(Filter(Negate(is.null), result_list))
+  results <- results %>% left_join(baseMean_df, by = c("gene", "event"))
   if (exists("lfc_summary")) results <- posthoc_lfc_summary(results, lfc_summary)
 
   if (exists("pvalueAdjustment") && nrow(results) > 0) {
       results$pvalue <- results$p.value
-      results <- pvalueAdjustment(results, independentFiltering=FALSE, theta=NULL, alpha=0.05, pAdjustMethod="BH")
+      results <- pvalueAdjustment(results, independentFiltering=indep_filter, alpha=0.05, pAdjustMethod="BH")
       results$pvalue <- NULL
   }
 
@@ -472,11 +470,12 @@ if (model == 'glmmTMB_prior') {
   }, mc.cores = 32)
 
   results <- bind_rows(Filter(Negate(is.null), result_list))
+  results <- results %>% left_join(baseMean_df, by = c("gene", "event"))
   if (exists("lfc_summary")) results <- posthoc_lfc_summary(results, lfc_summary)
 
   if (exists("pvalueAdjustment") && nrow(results) > 0) {
     results$pvalue <- results$p.value
-    results <- pvalueAdjustment(results, independentFiltering=FALSE, theta=NULL, alpha=0.05, pAdjustMethod="BH")
+    results <- pvalueAdjustment(results, independentFiltering=indep_filter, alpha=0.05, pAdjustMethod="BH")
     results$pvalue <- NULL
   }
 
