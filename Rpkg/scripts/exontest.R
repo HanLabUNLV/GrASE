@@ -45,7 +45,11 @@ option_list = list(
   make_option(c("--prec_subsample_n"), type="integer", default=NULL,
               help="number of events to subsample for DM precision estimation (multinomial models); NULL uses all events [default: NULL]", metavar="integer"),
   make_option(c("--use_prec_loess"), action="store_true", default=FALSE,
-              help="use loess prec trend (log(prec) ~ log(baseMean)) as EB shrinkage target instead of global mean (multinomial models)")
+              help="use loess prec trend (log(prec) ~ log(baseMean)) as EB shrinkage target instead of global mean (multinomial models)"),
+  make_option(c("--padj_threshold"), type="double", default=0.05,
+              help="padj threshold for the significant column [default: 0.05]", metavar="double"),
+  make_option(c("--delta"), type="double", default=0,
+              help="lfc_diff_net threshold for the significant column; events with lfc_diff_net <= delta are not significant [default: 0]", metavar="double")
 );
  
 opt_parser = OptionParser(option_list=option_list);
@@ -83,6 +87,16 @@ indep_filter     <- isTRUE(opt$independent_filtering)
 pseudocount      <- as.integer(opt$pseudocount)
 prec_subsample_n <- if (!is.null(opt$prec_subsample_n)) as.integer(opt$prec_subsample_n) else NULL
 prec_trend       <- isTRUE(opt$use_prec_loess)
+padj_thr         <- as.double(opt$padj_threshold)
+delta            <- as.double(opt$delta)
+
+# Add a 'significant' column: padj < padj_thr AND (lfc_diff_net > delta OR lfc_diff_net absent/NA)
+add_significant <- function(res, padj_thr, delta) {
+  has_lfc <- "lfc_diff_net" %in% names(res)
+  lfc_ok  <- if (has_lfc) (is.na(res$lfc_diff_net) | res$lfc_diff_net > delta) else TRUE
+  res$significant <- !is.na(res$padj) & res$padj < padj_thr & lfc_ok
+  res
+}
 if (!dir.exists(outdir)) {
   dir.create(outdir, recursive = TRUE)
 }
@@ -276,6 +290,7 @@ if (model == 'glmmTMB_prior') {
       results$pvalue <- NULL
   }
 
+  results <- add_significant(results, padj_thr, delta)
   write.table(results, file=out_resultfile, quote=FALSE, sep="\t", row.names = FALSE)
 
 } else if (model == 'glmmTMB_fixedEB') {
@@ -361,6 +376,7 @@ if (model == 'glmmTMB_prior') {
       results$pvalue <- NULL
   }
 
+  results <- add_significant(results, padj_thr, delta)
   write.table(results, file=out_resultfile, quote=FALSE, sep="\t", row.names=FALSE)
 
 } else if (model == 'multinomial_plugin_dm_EB') {
@@ -404,6 +420,7 @@ if (model == 'glmmTMB_prior') {
       results$pvalue <- NULL
   }
 
+  results <- add_significant(results, padj_thr, delta)
   write.table(results, file=out_resultfile, sep="\t", quote=F, row.names = FALSE)
 
 } else if (model == 'wilcoxon') {
@@ -433,6 +450,7 @@ if (model == 'glmmTMB_prior') {
       results$pvalue <- NULL
   }
 
+  results <- add_significant(results, padj_thr, delta)
   write.table(results, file=out_resultfile, quote=FALSE, sep="\t", row.names = FALSE)
 
 } else if (model == 'glmmTMB_no_prior') {
@@ -462,6 +480,7 @@ if (model == 'glmmTMB_prior') {
     results$pvalue <- NULL
   }
 
+  results <- add_significant(results, padj_thr, delta)
   write.table(results, file=out_resultfile, quote=FALSE, sep="\t", row.names = FALSE)
 
 } else {
@@ -591,6 +610,7 @@ if (split == 'bipartition' || split == 'n_choose_2') {
       min_data$padj <- p.adjust(min_data$p.value, method = "BH")
     }
 
+    min_data <- add_significant(min_data, padj_thr, delta)
     out_mincomb <- sub("\\.annotated\\.txt$", ".mincomb.annotated.txt",
                       out_result_annotated)
     write.table(min_data, out_mincomb, sep = "\t", quote = FALSE, row.names = FALSE)
@@ -631,6 +651,7 @@ if (split == 'bipartition' || split == 'n_choose_2') {
       fisher_data$padj <- p.adjust(fisher_data$p.value, method = "BH")
     }
 
+    fisher_data <- add_significant(fisher_data, padj_thr, delta)
     out_fisher <- sub("\\.annotated\\.txt$", ".fisher_combined.annotated.txt",
                       out_result_annotated)
     write.table(fisher_data, out_fisher, sep = "\t", quote = FALSE, row.names = FALSE)
