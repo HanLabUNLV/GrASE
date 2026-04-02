@@ -802,9 +802,11 @@ test_model_multinomial_plugin_dm_EB <- function(dd) {
 #'   must be a factor with levels c(cond2, cond1) so that LFC = log2(cond1 / cond2).
 #' @param pseudocount Integer pseudocount added to means before log2 to avoid log(0).
 #'   Default 1L.
-#' @return A data frame with columns gene, event, lfc_diff, lfc_ref, denom_flag.
-#'   denom_flag is TRUE when abs(lfc_ref) > abs(lfc_diff), indicating the ref is
-#'   the likely driver (denominator-effect FP).
+#' @return A data frame with columns gene, event, lfc_diff, lfc_ref, lfc_diff_net.
+#'   lfc_diff_net = abs(lfc_diff) - abs(lfc_ref): positive values indicate the diff
+#'   exon changes more than the ref exon (genuine DTU signal); negative values suggest
+#'   the ref exon is the likely driver (denominator effect FP).
+#'   Filter criterion: keep events where lfc_diff_net > delta.
 #' @export
 compute_lfc_summary <- function(splitcnts, pseudocount = 1L) {
   lvls     <- levels(splitcnts$groups)
@@ -823,24 +825,24 @@ compute_lfc_summary <- function(splitcnts, pseudocount = 1L) {
       values_from = c(mean_diff, mean_ref)
     ) %>%
     dplyr::mutate(
-      lfc_diff   = log2((.data[[paste0("mean_diff_", cond_trt)]] + pseudocount) /
-                        (.data[[paste0("mean_diff_", cond_ref)]] + pseudocount)),
-      lfc_ref    = log2((.data[[paste0("mean_ref_",  cond_trt)]] + pseudocount) /
-                        (.data[[paste0("mean_ref_",  cond_ref)]] + pseudocount)),
-      denom_flag = abs(lfc_ref) > abs(lfc_diff)
+      lfc_diff     = log2((.data[[paste0("mean_diff_", cond_trt)]] + pseudocount) /
+                          (.data[[paste0("mean_diff_", cond_ref)]] + pseudocount)),
+      lfc_ref      = log2((.data[[paste0("mean_ref_",  cond_trt)]] + pseudocount) /
+                          (.data[[paste0("mean_ref_",  cond_ref)]] + pseudocount)),
+      lfc_diff_net = abs(lfc_diff) - abs(lfc_ref)
     ) %>%
-    dplyr::select(gene, event, lfc_diff, lfc_ref, denom_flag)
+    dplyr::select(gene, event, lfc_diff, lfc_ref, lfc_diff_net)
 }
 
 #' Annotate test results with denominator-effect flag columns
 #'
 #' Joins the output of \code{compute_lfc_summary} onto a test results data frame,
-#' adding columns lfc_diff, lfc_ref, and denom_flag.
+#' adding columns lfc_diff, lfc_ref.
 #'
 #' @param results A test results data frame with columns gene and event.
 #' @param lfc_summary A data frame as returned by \code{compute_lfc_summary}.
-#' @return results with lfc_diff, lfc_ref, denom_flag columns added.
+#' @return results with lfc_diff, lfc_ref columns added.
 #' @export
-flag_denominator_effect <- function(results, lfc_summary) {
+posthoc_lfc_summary <- function(results, lfc_summary) {
   dplyr::left_join(results, lfc_summary, by = c("gene", "event"))
 }

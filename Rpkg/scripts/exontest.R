@@ -268,7 +268,7 @@ if (model == 'glmmTMB_prior') {
   #stopCluster(cl)
 
   results <- bind_rows(Filter(Negate(is.null), result_list))
-  if (exists("lfc_summary")) results <- flag_denominator_effect(results, lfc_summary)
+  if (exists("lfc_summary")) results <- posthoc_lfc_summary(results, lfc_summary)
 
   if (exists("pvalueAdjustment") && nrow(results) > 0) {
       results$pvalue <- results$p.value
@@ -353,7 +353,7 @@ if (model == 'glmmTMB_prior') {
                baseMean = mean(dd$y, na.rm = TRUE),
                stringsAsFactors = FALSE)))
   results <- results %>% left_join(baseMean_df, by = c("gene", "event"))
-  if (exists("lfc_summary")) results <- flag_denominator_effect(results, lfc_summary)
+  if (exists("lfc_summary")) results <- posthoc_lfc_summary(results, lfc_summary)
 
   if (exists("pvalueAdjustment") && nrow(results) > 0) {
       results$pvalue <- results$p.value
@@ -425,7 +425,7 @@ if (model == 'glmmTMB_prior') {
   }, mc.cores = 32)
 
   results <- bind_rows(Filter(Negate(is.null), result_list))
-  if (exists("lfc_summary")) results <- flag_denominator_effect(results, lfc_summary)
+  if (exists("lfc_summary")) results <- posthoc_lfc_summary(results, lfc_summary)
 
   if (exists("pvalueAdjustment") && nrow(results) > 0) {
       results$pvalue <- results$p.value
@@ -454,7 +454,7 @@ if (model == 'glmmTMB_prior') {
   }, mc.cores = 32)
 
   results <- bind_rows(Filter(Negate(is.null), result_list))
-  if (exists("lfc_summary")) results <- flag_denominator_effect(results, lfc_summary)
+  if (exists("lfc_summary")) results <- posthoc_lfc_summary(results, lfc_summary)
 
   if (exists("pvalueAdjustment") && nrow(results) > 0) {
     results$pvalue <- results$p.value
