@@ -113,7 +113,7 @@ if (analysis_type == 'all' || analysis_type == 'bipartition') {
       gene_id <- sub(paste0("\\.bipartition\\.",alt,"\\.txt$"), "", basename(f))
       gene_counts <- counts_list[[gene_id]]
       if (!is.null(gene_counts)) {
-        count_bipartitions_both(bipartition_file = f, countmat = gene_counts, sampleinfo, output_path, 'bipartition')
+        count_bipartitions(bipartition_file = f, countmat = gene_counts, sampleinfo, output_path, 'bipartition')
       }
     }, error = function(e) {
       msg <- sprintf("[%s] ERROR in %s (PID %d): %s\n",
@@ -141,7 +141,7 @@ if (analysis_type == 'all' || analysis_type == 'bipartition') {
       #count_bipartitions(bipartition_file = f, countmat = read_counts[read_counts$gene==gene_id,], sampleinfo, output_path, 'n_choose_2')
       gene_counts <- counts_list[[gene_id]]
       if (!is.null(gene_counts)) {
-        count_bipartitions_both(bipartition_file = f, countmat = gene_counts, sampleinfo, output_path, 'n_choose_2')
+        count_bipartitions(bipartition_file = f, countmat = gene_counts, sampleinfo, output_path, 'n_choose_2')
       }
  
     }, error = function(e) {
