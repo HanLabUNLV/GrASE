@@ -143,7 +143,6 @@ if (split != "multinomial") {
 
   sc_d1r  <- make_comparison(splitcnts, "diff1", "ref",   "diff1_vs_ref")
   sc_d2r  <- make_comparison(splitcnts, "diff2", "ref",   "diff2_vs_ref")
-  sc_d1d2 <- make_comparison(splitcnts, "diff1", "diff2", "diff1_vs_diff2")
 
   # pseudocount: same logic as before, applied to each comparison's ref where ref == 0
   if (pseudocount > 0L) {
@@ -155,14 +154,12 @@ if (split != "multinomial") {
     }
     sc_d1r  <- apply_pseudo(sc_d1r)
     sc_d2r  <- apply_pseudo(sc_d2r)
-    # diff1_vs_diff2: no "ref" denominator effect risk, skip pseudocount
   }
 
   lfc_d1r  <- compute_lfc_summary(sc_d1r)  %>% mutate(comparison = "diff1_vs_ref")
   lfc_d2r  <- compute_lfc_summary(sc_d2r)  %>% mutate(comparison = "diff2_vs_ref")
-  lfc_d1d2 <- compute_lfc_summary(sc_d1d2) %>% mutate(comparison = "diff1_vs_diff2")
-  lfc_summary_all <- bind_rows(lfc_d1r, lfc_d2r, lfc_d1d2)
-  comparisons_list <- list(sc_d1r, sc_d2r, sc_d1d2)
+  lfc_summary_all <- bind_rows(lfc_d1r, lfc_d2r)
+  comparisons_list <- list(sc_d1r, sc_d2r)
 }
 # Global Precision Estimation
 if (model == 'glmmTMB_prior' || model == 'glmmTMB_fixedEB') {
@@ -215,11 +212,9 @@ if (model == 'glmmTMB_prior' || model == 'glmmTMB_fixedEB') {
     phi_d1r <- estimate_phi_for_comparison(sc_d1r, "diff1_vs_ref")
     message("Estimating phi for diff2 vs ref...")
     phi_d2r <- estimate_phi_for_comparison(sc_d2r, "diff2_vs_ref")
-    message("Estimating phi for diff1 vs diff2...")
-    phi_d1d2 <- estimate_phi_for_comparison(sc_d1d2, "diff1_vs_diff2")
 
-    phi_df <- bind_rows(phi_d1r, phi_d2r, phi_d1d2)
-    rm(phi_d1r, phi_d2r, phi_d1d2)
+    phi_df <- bind_rows(phi_d1r, phi_d2r)
+    rm(phi_d1r, phi_d2r)
 
     write.table(phi_df, file=paste0(outdir,'/', phifile), quote=FALSE, sep="\t", row.names = FALSE)
   }
@@ -307,15 +302,14 @@ run_one_comparison <- function(sc, test_fn, err_log, ...) {
 
 # Per Gene Model Estimation
 if (model == 'glmmTMB_prior') {
-  # This model runs on each of the 3 comparisons.
+  # This model runs on each of the 2 comparisons (diff1_vs_ref, diff2_vs_ref).
   # Phi estimation (above) already ran on sc_d1r.
   phi_trimmed <- phi_df[!is.na(phi_df$phi) & phi_df$phi < 1e+10 & phi_df$phi > 0,'phi']
   if (phi_trend) {
     message("Using loess trend for glmmTMB_prior model's prior parameters.")
     baseMean_d1r  <- sc_d1r  %>% group_by(gene, event) %>% summarise(baseMean = mean(n, na.rm = TRUE), .groups = "drop") %>% mutate(comparison = "diff1_vs_ref")
     baseMean_d2r  <- sc_d2r  %>% group_by(gene, event) %>% summarise(baseMean = mean(n, na.rm = TRUE), .groups = "drop") %>% mutate(comparison = "diff2_vs_ref")
-    baseMean_d1d2 <- sc_d1d2 %>% group_by(gene, event) %>% summarise(baseMean = mean(n, na.rm = TRUE), .groups = "drop") %>% mutate(comparison = "diff1_vs_diff2")
-    baseMean_df_all <- bind_rows(baseMean_d1r, baseMean_d2r, baseMean_d1d2)
+    baseMean_df_all <- bind_rows(baseMean_d1r, baseMean_d2r)
 
     # fit normal to log(phi)
     log_phi_vals <- log(phi_trimmed)
@@ -367,7 +361,6 @@ if (model == 'glmmTMB_prior') {
     }
     sc_d1r_prior  <- join_prior_params(sc_d1r, phi_table_trend, prior_params)
     sc_d2r_prior  <- join_prior_params(sc_d2r, phi_table_trend, prior_params)
-    sc_d1d2_prior <- join_prior_params(sc_d1d2, phi_table_trend, prior_params)
 
     # Impute missing prior parameters
     impute_prior_params <- function(df, comp_name) {
@@ -381,9 +374,8 @@ if (model == 'glmmTMB_prior') {
     }
     sc_d1r_prior  <- impute_prior_params(sc_d1r_prior, "diff1_vs_ref")
     sc_d2r_prior  <- impute_prior_params(sc_d2r_prior, "diff2_vs_ref")
-    sc_d1d2_prior <- impute_prior_params(sc_d1d2_prior, "diff1_vs_diff2")
 
-    comparisons_list_prior <- list(sc_d1r_prior, sc_d2r_prior, sc_d1d2_prior)
+    comparisons_list_prior <- list(sc_d1r_prior, sc_d2r_prior)
 
     # Wrapper to construct prior inside mclapply
     test_fn_wrapper_trend <- function(dd) {
@@ -441,17 +433,14 @@ if (model == 'glmmTMB_prior') {
     ## baseMean is now comparison-specific.
     baseMean_d1r  <- sc_d1r  %>% group_by(gene, event) %>% summarise(baseMean = mean(n, na.rm = TRUE), .groups = "drop") %>% mutate(comparison = "diff1_vs_ref")
     baseMean_d2r  <- sc_d2r  %>% group_by(gene, event) %>% summarise(baseMean = mean(n, na.rm = TRUE), .groups = "drop") %>% mutate(comparison = "diff2_vs_ref")
-    baseMean_d1d2 <- sc_d1d2 %>% group_by(gene, event) %>% summarise(baseMean = mean(n, na.rm = TRUE), .groups = "drop") %>% mutate(comparison = "diff1_vs_diff2")
-    baseMean_df_all <- bind_rows(baseMean_d1r, baseMean_d2r, baseMean_d1d2)
+    baseMean_df_all <- bind_rows(baseMean_d1r, baseMean_d2r)
     phi_table <- moderate_phi_trend(phi_df, baseMean_df_all)
     fallback_z <- median(phi_table$z_mod, na.rm = TRUE)
     # Join moderated phi to each comparison dataset by gene, event, AND comparison
     sc_d1r_eb  <- sc_d1r  %>% left_join(phi_table, by = c("gene", "event", "comparison"))
     sc_d2r_eb  <- sc_d2r  %>% left_join(phi_table, by = c("gene", "event", "comparison"))
-    sc_d1d2_eb <- sc_d1d2 %>% left_join(phi_table, by = c("gene", "event", "comparison"))
     sc_d1r_eb$z_mod[is.na(sc_d1r_eb$z_mod)] <- fallback_z
     sc_d2r_eb$z_mod[is.na(sc_d2r_eb$z_mod)] <- fallback_z
-    sc_d1d2_eb$z_mod[is.na(sc_d1d2_eb$z_mod)] <- fallback_z
   } else {
     ## Global-mean moderation (original behaviour)
     # To make moderation more robust, apply it independently to each comparison type,
@@ -465,7 +454,6 @@ if (model == 'glmmTMB_prior') {
     # Join moderated phi values.
     sc_d1r_eb  <- sc_d1r  %>% left_join(phi_table, by = c("gene", "event", "comparison"))
     sc_d2r_eb  <- sc_d2r  %>% left_join(phi_table, by = c("gene", "event", "comparison"))
-    sc_d1d2_eb <- sc_d1d2 %>% left_join(phi_table, by = c("gene", "event", "comparison"))
 
     # Impute missing z_mod with the median of their respective comparison group.
     impute_z_mod <- function(df, p_table) {
@@ -479,15 +467,14 @@ if (model == 'glmmTMB_prior') {
     }
     sc_d1r_eb  <- impute_z_mod(sc_d1r_eb, phi_table)
     sc_d2r_eb  <- impute_z_mod(sc_d2r_eb, phi_table)
-    sc_d1d2_eb <- impute_z_mod(sc_d1d2_eb, phi_table)
   }
-  comparisons_list_eb <- list(sc_d1r_eb, sc_d2r_eb, sc_d1d2_eb)
+  comparisons_list_eb <- list(sc_d1r_eb, sc_d2r_eb)
 
   phi_mod_file <- sub("\\.([^.]+)$", ".moderated.\\1", phifile)
   write.table(phi_table, file=paste0(outdir, '/', phi_mod_file), sep="\t", quote=FALSE, row.names=FALSE)
 
   rm(splitcnts, phi_df, phi_table)
-  if (exists("sc_d1r")) rm(sc_d1r, sc_d2r, sc_d1d2)
+  if (exists("sc_d1r")) rm(sc_d1r, sc_d2r)
 
   result_list_all <- lapply(comparisons_list_eb, run_one_comparison,
                           test_fn = test_model_glmmTMB_EB,
