@@ -310,24 +310,114 @@ if (model == 'glmmTMB_prior') {
   # This model runs on each of the 3 comparisons.
   # Phi estimation (above) already ran on sc_d1r.
   phi_trimmed <- phi_df[!is.na(phi_df$phi) & phi_df$phi < 1e+10 & phi_df$phi > 0,'phi']
+  if (phi_trend) {
+    message("Using loess trend for glmmTMB_prior model's prior parameters.")
+    baseMean_d1r  <- sc_d1r  %>% group_by(gene, event) %>% summarise(baseMean = mean(n, na.rm = TRUE), .groups = "drop") %>% mutate(comparison = "diff1_vs_ref")
+    baseMean_d2r  <- sc_d2r  %>% group_by(gene, event) %>% summarise(baseMean = mean(n, na.rm = TRUE), .groups = "drop") %>% mutate(comparison = "diff2_vs_ref")
+    baseMean_d1d2 <- sc_d1d2 %>% group_by(gene, event) %>% summarise(baseMean = mean(n, na.rm = TRUE), .groups = "drop") %>% mutate(comparison = "diff1_vs_diff2")
+    baseMean_df_all <- bind_rows(baseMean_d1r, baseMean_d2r, baseMean_d1d2)
 
-  # fit normal to log(phi)
-  log_phi_vals <- log(phi_trimmed)
-  median_logphi <- median(log_phi_vals, na.rm = TRUE)
-  fit_logphi <- fitdistr(log_phi_vals, "normal")
-  mean_logphi <- fit_logphi$estimate["mean"]
-  sd_logphi   <- fit_logphi$estimate["sd"]
-  prior_disp <- data.frame(prior = sprintf("normal(%g,%g)", mean_logphi, sd_logphi),
-    class = "fixef_disp",
-    coef = "", # Explicitly target the intercept
-    stringsAsFactors = FALSE
-  )
-  print(prior_disp)
+    # fit normal to log(phi)
+    log_phi_vals <- log(phi_trimmed)
+    median_logphi <- median(log_phi_vals, na.rm = TRUE)
+    fit_logphi <- fitdistr(log_phi_vals, "normal")
+    mean_logphi <- fit_logphi$estimate["mean"]
+    sd_logphi   <- fit_logphi$estimate["sd"]
+    prior_disp <- data.frame(prior = sprintf("normal(%g,%g)", mean_logphi, sd_logphi),
+      class = "fixef_disp",
+      coef = "", # Explicitly target the intercept
+      stringsAsFactors = FALSE
+    )
+    print(prior_disp)
+      # Get trended phi values. Assumes moderate_phi_trend returns z_trend.
+      phi_table_trend <- moderate_phi_trend(phi_df, baseMean_df_all)
 
-  result_list_all <- lapply(comparisons_list, run_one_comparison,
-                          test_fn = test_model_glmmTMB_with_prior,
-                          err_log = "glmmtmb_withprior.errors.log",
-                          prior_disp, z_bar = median_logphi)
+    result_list_all <- lapply(comparisons_list, run_one_comparison,
+                            test_fn = test_model_glmmTMB_with_prior,
+                            err_log = "glmmtmb_withprior.errors.log",
+                            prior_disp, z_bar = median_logphi)
+    # Calculate residual SD from trend, per comparison
+    phi_df_with_trend <- phi_df %>%
+      left_join(phi_table_trend, by = c("gene", "event", "comparison")) %>%
+      filter(!is.na(phi) & phi > 0 & !is.na(z_trend))
+
+    prior_params <- phi_df_with_trend %>%
+      mutate(resid = log(phi) - z_trend) %>%
+      group_by(comparison) %>%
+      summarise(sd_resid = sd(resid, na.rm = TRUE), .groups = "drop")
+
+    # Global fallback for SD
+    global_sd_resid <- sd(phi_df_with_trend$resid, na.rm = TRUE)
+    if (is.na(global_sd_resid)) {
+        phi_trimmed <- phi_df[!is.na(phi_df$phi) & phi_df$phi < 1e+10 & phi_df$phi > 0, 'phi']
+        global_sd_resid <- sd(log(phi_trimmed), na.rm = TRUE)
+    }
+    prior_params <- prior_params %>%
+        mutate(sd_resid = ifelse(is.na(sd_resid), global_sd_resid, sd_resid))
+
+    # Global fallbacks for mean and median
+    median_logphi <- median(log(phi_df$phi), na.rm = TRUE)
+    global_mean_logphi <- mean(log(phi_df$phi), na.rm = TRUE)
+
+    # Join prior parameters to each comparison dataset
+    join_prior_params <- function(sc, trend_table, params_table) {
+      sc %>%
+        left_join(trend_table %>% select(gene, event, comparison, z_trend), by = c("gene", "event", "comparison")) %>%
+        left_join(params_table, by = "comparison")
+    }
+    sc_d1r_prior  <- join_prior_params(sc_d1r, phi_table_trend, prior_params)
+    sc_d2r_prior  <- join_prior_params(sc_d2r, phi_table_trend, prior_params)
+    sc_d1d2_prior <- join_prior_params(sc_d1d2, phi_table_trend, prior_params)
+
+    # Impute missing prior parameters
+    impute_prior_params <- function(df, comp_name) {
+      if (nrow(df) == 0) return(df)
+      fallback_sd <- prior_params$sd_resid[prior_params$comparison == comp_name]
+      if (length(fallback_sd) == 0 || is.na(fallback_sd)) fallback_sd <- global_sd_resid
+
+      df$z_trend[is.na(df$z_trend)] <- global_mean_logphi
+      df$sd_resid[is.na(df$sd_resid)] <- fallback_sd
+      df
+    }
+    sc_d1r_prior  <- impute_prior_params(sc_d1r_prior, "diff1_vs_ref")
+    sc_d2r_prior  <- impute_prior_params(sc_d2r_prior, "diff2_vs_ref")
+    sc_d1d2_prior <- impute_prior_params(sc_d1d2_prior, "diff1_vs_diff2")
+
+    comparisons_list_prior <- list(sc_d1r_prior, sc_d2r_prior, sc_d1d2_prior)
+
+    # Wrapper to construct prior inside mclapply
+    test_fn_wrapper_trend <- function(dd) {
+      mean_logphi <- dd$z_trend[1]
+      sd_logphi   <- dd$sd_resid[1]
+      prior_disp <- data.frame(prior = sprintf("normal(%g,%g)", mean_logphi, sd_logphi),
+                               class = "fixef_disp", coef = "",
+                               stringsAsFactors = FALSE)
+      test_model_glmmTMB_with_prior(dd, prior_disp, z_bar = median_logphi)
+    }
+
+    result_list_all <- lapply(comparisons_list_prior, run_one_comparison,
+                              test_fn = test_fn_wrapper_trend,
+                              err_log = "glmmtmb_withprior_trend.errors.log")
+  } else {
+    # Original behavior: global prior for all events
+    phi_trimmed <- phi_df[!is.na(phi_df$phi) & phi_df$phi < 1e+10 & phi_df$phi > 0,'phi']
+    log_phi_vals <- log(phi_trimmed)
+    median_logphi <- median(log_phi_vals, na.rm = TRUE)
+    fit_logphi <- fitdistr(log_phi_vals, "normal")
+    mean_logphi <- fit_logphi$estimate["mean"]
+    sd_logphi   <- fit_logphi$estimate["sd"]
+    prior_disp <- data.frame(prior = sprintf("normal(%g,%g)", mean_logphi, sd_logphi),
+      class = "fixef_disp",
+      coef = "", # Explicitly target the intercept
+      stringsAsFactors = FALSE
+    )
+    print(prior_disp)
+
+    result_list_all <- lapply(comparisons_list, run_one_comparison,
+                            test_fn = test_model_glmmTMB_with_prior,
+                            err_log = "glmmtmb_withprior.errors.log",
+                            prior_disp, z_bar = median_logphi)
+  }
 
   results <- bind_rows(result_list_all)
   results <- results %>%
