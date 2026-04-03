@@ -170,44 +170,57 @@ if (model == 'glmmTMB_prior' || model == 'glmmTMB_fixedEB') {
   if (is.null(opt$phi)) stop("--phi is required for model '", model, "'")
   if (!is.null(opt$prec)) warning("--prec is not used for model '", model, "' and will be ignored")
 
-  if (file.exists(paste0(outdir,'/', phifile))) {
+  if (file.exists(paste0(outdir, "/", phifile))) {
     phi_df <- read.table(paste0(outdir,'/', phifile), header=TRUE, row.names=NULL)
   } else {
-    # Estimate phi on diff1 vs ref comparison
-    grouped_data <- group_by_event(sc_d1r, 'diff', 'n')
-    #grouped_data <- grouped_data[1:10]
-    #cl <- makeCluster(30, outfile='phi.glmmtmb.log')
-    #clusterEvalQ(cl, library(glmmTMB))
-    #clusterExport(cl, varlist = c("phi_estimate_glmmTMB", "grouped_data"), envir = environment())
-    phi_progress_file <- paste0(outdir, "/phi_progress.log")
-    phi_list <- mclapply(grouped_data, function(dd) {
-    #phi_list <- parLapply(cl, grouped_data, function(dd) {
-      result <- withCallingHandlers(
-        tryCatch({
-          phi_estimate_glmmTMB(dd)
-        }, error = function(e) {
-          msg <- sprintf("[%s] ERROR gene=%s event=%s (PID %d): %s\n",
-                         format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
-                         dd$gene[1], dd$event[1], Sys.getpid(), conditionMessage(e))
-          cat(msg, file = "phi.glmmtmb.errors.log", append = TRUE)
-          NULL
-        }),
-        warning = function(w) {
-          msg <- sprintf("[%s] WARN  gene=%s event=%s (PID %d): %s\n",
-                         format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
-                         dd$gene[1], dd$event[1], Sys.getpid(), conditionMessage(w))
-          cat(msg, file = "phi.glmmtmb.errors.log", append = TRUE)
-          invokeRestart("muffleWarning")
-        }
-      )
-      cat(sprintf("%s\t%s\n", dd$gene[1], dd$event[1]),
-          file = phi_progress_file, append = TRUE)
-      result
-    #})
-    }, mc.cores = 32)
-    #stopCluster(cl)
-    phi_df <- bind_rows(Filter(Negate(is.null), phi_list))
-    rm(phi_list)
+    # Estimate phi for each comparison separately
+    estimate_phi_for_comparison <- function(sc, comp_name) {
+      if (nrow(sc) == 0) return(NULL)
+      grouped_data <- group_by_event(sc, 'diff', 'n')
+      phi_progress_file <- paste0(outdir, "/phi_progress_", comp_name, ".log")
+      error_log_file <- paste0("phi.glmmtmb.errors.", comp_name, ".log")
+
+      phi_list <- mclapply(grouped_data, function(dd) {
+        result <- withCallingHandlers(
+          tryCatch({
+            phi_estimate_glmmTMB(dd)
+          }, error = function(e) {
+            msg <- sprintf("[%s] ERROR gene=%s event=%s (PID %d): %s\n",
+                           format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
+                           dd$gene[1], dd$event[1], Sys.getpid(), conditionMessage(e))
+            cat(msg, file = error_log_file, append = TRUE)
+            NULL
+          }),
+          warning = function(w) {
+            msg <- sprintf("[%s] WARN  gene=%s event=%s (PID %d): %s\n",
+                           format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
+                           dd$gene[1], dd$event[1], Sys.getpid(), conditionMessage(w))
+            cat(msg, file = error_log_file, append = TRUE)
+            invokeRestart("muffleWarning")
+          }
+        )
+        cat(sprintf("%s\t%s\n", dd$gene[1], dd$event[1]),
+            file = phi_progress_file, append = TRUE)
+        result
+      }, mc.cores = 32)
+
+      phi_df_comp <- bind_rows(Filter(Negate(is.null), phi_list))
+      if (nrow(phi_df_comp) > 0) {
+        phi_df_comp$comparison <- comp_name
+      }
+      return(phi_df_comp)
+    }
+
+    message("Estimating phi for diff1 vs ref...")
+    phi_d1r <- estimate_phi_for_comparison(sc_d1r, "diff1_vs_ref")
+    message("Estimating phi for diff2 vs ref...")
+    phi_d2r <- estimate_phi_for_comparison(sc_d2r, "diff2_vs_ref")
+    message("Estimating phi for diff1 vs diff2...")
+    phi_d1d2 <- estimate_phi_for_comparison(sc_d1d2, "diff1_vs_diff2")
+
+    phi_df <- bind_rows(phi_d1r, phi_d2r, phi_d1d2)
+    rm(phi_d1r, phi_d2r, phi_d1d2)
+
     write.table(phi_df, file=paste0(outdir,'/', phifile), quote=FALSE, sep="\t", row.names = FALSE)
   }
 } else if (model == 'multinomial_plugin_dm_EB') {
@@ -335,28 +348,48 @@ if (model == 'glmmTMB_prior') {
   ## Empirical Bayes hyperparameters: prior mean and variance
   if (phi_trend) {
     ## Trend-based moderation: loess(log(phi) ~ log(baseMean)) as shrinkage target.
-    ## baseMean_df_all is needed only here; rm'd before fork to keep footprint small.
-    baseMean_df_all <- splitcnts %>%
-      group_by(gene, event) %>%
-      summarise(baseMean = mean(n, na.rm = TRUE), .groups = "drop")
+    ## baseMean is now comparison-specific.
+    baseMean_d1r  <- sc_d1r  %>% group_by(gene, event) %>% summarise(baseMean = mean(n, na.rm = TRUE), .groups = "drop") %>% mutate(comparison = "diff1_vs_ref")
+    baseMean_d2r  <- sc_d2r  %>% group_by(gene, event) %>% summarise(baseMean = mean(n, na.rm = TRUE), .groups = "drop") %>% mutate(comparison = "diff2_vs_ref")
+    baseMean_d1d2 <- sc_d1d2 %>% group_by(gene, event) %>% summarise(baseMean = mean(n, na.rm = TRUE), .groups = "drop") %>% mutate(comparison = "diff1_vs_diff2")
+    baseMean_df_all <- bind_rows(baseMean_d1r, baseMean_d2r, baseMean_d1d2)
     phi_table <- moderate_phi_trend(phi_df, baseMean_df_all)
     fallback_z <- median(phi_table$z_mod, na.rm = TRUE)
-    sc_d1r_eb  <- sc_d1r  %>% left_join(phi_table %>% select(gene, event, z_mod), by = c("gene", "event"))
-    sc_d2r_eb  <- sc_d2r  %>% left_join(phi_table %>% select(gene, event, z_mod), by = c("gene", "event"))
-    sc_d1d2_eb <- sc_d1d2 %>% left_join(phi_table %>% select(gene, event, z_mod), by = c("gene", "event"))
+    # Join moderated phi to each comparison dataset by gene, event, AND comparison
+    sc_d1r_eb  <- sc_d1r  %>% left_join(phi_table, by = c("gene", "event", "comparison"))
+    sc_d2r_eb  <- sc_d2r  %>% left_join(phi_table, by = c("gene", "event", "comparison"))
+    sc_d1d2_eb <- sc_d1d2 %>% left_join(phi_table, by = c("gene", "event", "comparison"))
     sc_d1r_eb$z_mod[is.na(sc_d1r_eb$z_mod)] <- fallback_z
     sc_d2r_eb$z_mod[is.na(sc_d2r_eb$z_mod)] <- fallback_z
     sc_d1d2_eb$z_mod[is.na(sc_d1d2_eb$z_mod)] <- fallback_z
   } else {
     ## Global-mean moderation (original behaviour)
-    phi_table <- moderate_phi_log_scale(phi_df)
-    z_bar <- median(phi_table$z, na.rm = TRUE)
-    sc_d1r_eb  <- sc_d1r  %>% left_join(phi_table, by = c("gene", "event"))
-    sc_d2r_eb  <- sc_d2r  %>% left_join(phi_table, by = c("gene", "event"))
-    sc_d1d2_eb <- sc_d1d2 %>% left_join(phi_table, by = c("gene", "event"))
-    sc_d1r_eb$z_mod[is.na(sc_d1r_eb$z_mod)] <- z_bar
-    sc_d2r_eb$z_mod[is.na(sc_d2r_eb$z_mod)] <- z_bar
-    sc_d1d2_eb$z_mod[is.na(sc_d1d2_eb$z_mod)] <- z_bar
+    # To make moderation more robust, apply it independently to each comparison type,
+    # acknowledging that their phi distributions may differ.
+    phi_table <- phi_df %>%
+      filter(!is.na(comparison)) %>%
+      group_by(comparison) %>%
+      group_modify(~ moderate_phi_log_scale(.x)) %>%
+      ungroup()
+
+    # Join moderated phi values.
+    sc_d1r_eb  <- sc_d1r  %>% left_join(phi_table, by = c("gene", "event", "comparison"))
+    sc_d2r_eb  <- sc_d2r  %>% left_join(phi_table, by = c("gene", "event", "comparison"))
+    sc_d1d2_eb <- sc_d1d2 %>% left_join(phi_table, by = c("gene", "event", "comparison"))
+
+    # Impute missing z_mod with the median of their respective comparison group.
+    impute_z_mod <- function(df, p_table) {
+        if (nrow(df) == 0) return(df)
+        comp_name <- df$comparison[1]
+        fallback_z <- median(p_table$z_mod[p_table$comparison == comp_name], na.rm = TRUE)
+        if (is.na(fallback_z)) fallback_z <- median(p_table$z_mod, na.rm = TRUE) # Global fallback
+        if (is.na(fallback_z)) fallback_z <- 0 # Ultimate fallback log(1)
+        df$z_mod[is.na(df$z_mod)] <- fallback_z
+        df
+    }
+    sc_d1r_eb  <- impute_z_mod(sc_d1r_eb, phi_table)
+    sc_d2r_eb  <- impute_z_mod(sc_d2r_eb, phi_table)
+    sc_d1d2_eb <- impute_z_mod(sc_d1d2_eb, phi_table)
   }
   comparisons_list_eb <- list(sc_d1r_eb, sc_d2r_eb, sc_d1d2_eb)
 
