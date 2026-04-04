@@ -177,29 +177,40 @@ if (model == 'glmmTMB_prior' || model == 'glmmTMB_fixedEB') {
       phi_progress_file <- paste0(outdir, "/phi_progress_", comp_name, ".log")
       error_log_file <- paste0("phi.glmmtmb.errors.", comp_name, ".log")
 
-      phi_list <- mclapply(grouped_data, function(dd) {
-        result <- withCallingHandlers(
-          tryCatch({
-            phi_estimate_glmmTMB(dd)
-          }, error = function(e) {
-            msg <- sprintf("[%s] ERROR gene=%s event=%s (PID %d): %s\n",
-                           format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
-                           dd$gene[1], dd$event[1], Sys.getpid(), conditionMessage(e))
-            cat(msg, file = error_log_file, append = TRUE)
-            NULL
-          }),
-          warning = function(w) {
-            msg <- sprintf("[%s] WARN  gene=%s event=%s (PID %d): %s\n",
-                           format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
-                           dd$gene[1], dd$event[1], Sys.getpid(), conditionMessage(w))
-            cat(msg, file = error_log_file, append = TRUE)
-            invokeRestart("muffleWarning")
-          }
-        )
-        cat(sprintf("%s\t%s\n", dd$gene[1], dd$event[1]),
-            file = phi_progress_file, append = TRUE)
-        result
-      }, mc.cores = 32)
+      n_events <- length(grouped_data)
+      chunk_size <- 10000L
+      chunk_starts <- seq(1L, n_events, by = chunk_size)
+      phi_chunks <- vector("list", length(chunk_starts))
+      for (ci in seq_along(chunk_starts)) {
+        idx <- chunk_starts[ci]:min(chunk_starts[ci] + chunk_size - 1L, n_events)
+        phi_chunks[[ci]] <- mclapply(grouped_data[idx], function(dd) {
+          result <- withCallingHandlers(
+            tryCatch({
+              phi_estimate_glmmTMB(dd)
+            }, error = function(e) {
+              msg <- sprintf("[%s] ERROR gene=%s event=%s (PID %d): %s\n",
+                             format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
+                             dd$gene[1], dd$event[1], Sys.getpid(), conditionMessage(e))
+              cat(msg, file = error_log_file, append = TRUE)
+              NULL
+            }),
+            warning = function(w) {
+              msg <- sprintf("[%s] WARN  gene=%s event=%s (PID %d): %s\n",
+                             format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
+                             dd$gene[1], dd$event[1], Sys.getpid(), conditionMessage(w))
+              cat(msg, file = error_log_file, append = TRUE)
+              invokeRestart("muffleWarning")
+            }
+          )
+          cat(sprintf("%s\t%s\n", dd$gene[1], dd$event[1]),
+              file = phi_progress_file, append = TRUE)
+          result
+        }, mc.cores = 32)
+        message(sprintf("[%s] phi chunk %d/%d done (%d events)",
+                        format(Sys.time(), "%H:%M:%S"), ci,
+                        length(chunk_starts), length(idx)))
+      }
+      phi_list <- unlist(phi_chunks, recursive = FALSE)
 
       phi_df_comp <- bind_rows(Filter(Negate(is.null), phi_list))
       if (nrow(phi_df_comp) > 0) {
@@ -282,21 +293,38 @@ if (model == 'glmmTMB_prior' || model == 'glmmTMB_fixedEB') {
   rm(baseMean_df_all)
 }
 
-# Helper: run one comparison through group_by_event + mclapply
-run_one_comparison <- function(sc, test_fn, err_log, ...) {
+# Helper: run one comparison through group_by_event + chunked mclapply.
+# Processing in chunks of chunk_size avoids each worker accumulating a huge
+# result list before sendMaster(), which causes SIGPIPE on large datasets.
+run_one_comparison <- function(sc, test_fn, err_log, ..., chunk_size = 10000L) {
   if (nrow(sc) == 0) return(NULL)
   gd <- group_by_event(sc, 'diff', 'n')
-  res_list <- mclapply(gd, function(dd) {
-    tryCatch(test_fn(dd, ...), error = function(e) {
+  n_events <- length(gd)
+  chunk_starts <- seq(1L, n_events, by = chunk_size)
+  n_chunks <- length(chunk_starts)
+  all_results <- vector("list", n_chunks)
+  for (ci in seq_along(chunk_starts)) {
+    idx <- chunk_starts[ci]:min(chunk_starts[ci] + chunk_size - 1L, n_events)
+    chunk_res <- mclapply(gd[idx], function(dd) {
+      result <- tryCatch(test_fn(dd, ...), error = function(e) {
         msg <- sprintf("[%s] ERROR gene=%s event=%s (PID %d): %s\n",
                        format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
                        dd$gene[1], dd$event[1], Sys.getpid(), conditionMessage(e))
         cat(msg, file = err_log, append = TRUE)
         NULL
-    })
-  }, mc.cores = 32)
-  res <- bind_rows(Filter(Negate(is.null), res_list))
-  if (nrow(res) > 0) res$comparison <- sc$comparison[1]
+      })
+      if (!is.null(result) && "comparison" %in% names(dd))
+        result$comparison <- dd$comparison[1]
+      result
+    }, mc.cores = 32)
+    all_results[[ci]] <- bind_rows(Filter(Negate(is.null), chunk_res))
+    message(sprintf("[%s] chunk %d/%d done (%d events)",
+                    format(Sys.time(), "%H:%M:%S"), ci, n_chunks, length(idx)))
+  }
+  res <- bind_rows(all_results)
+  # fallback for callers that pass a single-comparison sc (no comparison column in dd)
+  if (nrow(res) > 0 && !"comparison" %in% names(res))
+    res$comparison <- sc$comparison[1]
   res
 }
 
@@ -326,10 +354,7 @@ if (model == 'glmmTMB_prior') {
       # Get trended phi values. Assumes moderate_phi_trend returns z_trend.
       phi_table_trend <- moderate_phi_trend(phi_df, baseMean_df_all)
 
-    result_list_all <- lapply(comparisons_list, run_one_comparison,
-                            test_fn = test_model_glmmTMB_with_prior,
-                            err_log = "glmmtmb_withprior.errors.log",
-                            prior_disp, z_bar = median_logphi)
+    # NOTE: result unused -- trend-specific run below overwrites results
     # Calculate residual SD from trend, per comparison
     phi_df_with_trend <- phi_df %>%
       left_join(phi_table_trend, by = c("gene", "event", "comparison")) %>%
@@ -375,8 +400,6 @@ if (model == 'glmmTMB_prior') {
     sc_d1r_prior  <- impute_prior_params(sc_d1r_prior, "diff1_vs_ref")
     sc_d2r_prior  <- impute_prior_params(sc_d2r_prior, "diff2_vs_ref")
 
-    comparisons_list_prior <- list(sc_d1r_prior, sc_d2r_prior)
-
     # Wrapper to construct prior inside mclapply
     test_fn_wrapper_trend <- function(dd) {
       mean_logphi <- dd$z_trend[1]
@@ -387,9 +410,9 @@ if (model == 'glmmTMB_prior') {
       test_model_glmmTMB_with_prior(dd, prior_disp, z_bar = median_logphi)
     }
 
-    result_list_all <- lapply(comparisons_list_prior, run_one_comparison,
-                              test_fn = test_fn_wrapper_trend,
-                              err_log = "glmmtmb_withprior_trend.errors.log")
+    results <- run_one_comparison(bind_rows(sc_d1r_prior, sc_d2r_prior),
+                                  test_fn = test_fn_wrapper_trend,
+                                  err_log = "glmmtmb_withprior_trend.errors.log")
   } else {
     # Original behavior: global prior for all events
     phi_trimmed <- phi_df[!is.na(phi_df$phi) & phi_df$phi < 1e+10 & phi_df$phi > 0,'phi']
@@ -405,13 +428,12 @@ if (model == 'glmmTMB_prior') {
     )
     print(prior_disp)
 
-    result_list_all <- lapply(comparisons_list, run_one_comparison,
-                            test_fn = test_model_glmmTMB_with_prior,
-                            err_log = "glmmtmb_withprior.errors.log",
-                            prior_disp, z_bar = median_logphi)
+    results <- run_one_comparison(bind_rows(comparisons_list),
+                                  test_fn = test_model_glmmTMB_with_prior,
+                                  err_log = "glmmtmb_withprior.errors.log",
+                                  prior_disp, z_bar = median_logphi)
   }
 
-  results <- bind_rows(result_list_all)
   results <- results %>%
     left_join(baseMean_df, by = c("gene", "event")) %>%
     left_join(lfc_summary_all, by = c("gene", "event", "comparison"))
@@ -468,19 +490,17 @@ if (model == 'glmmTMB_prior') {
     sc_d1r_eb  <- impute_z_mod(sc_d1r_eb, phi_table)
     sc_d2r_eb  <- impute_z_mod(sc_d2r_eb, phi_table)
   }
-  comparisons_list_eb <- list(sc_d1r_eb, sc_d2r_eb)
-
   phi_mod_file <- sub("\\.([^.]+)$", ".moderated.\\1", phifile)
   write.table(phi_table, file=paste0(outdir, '/', phi_mod_file), sep="\t", quote=FALSE, row.names=FALSE)
 
-  rm(splitcnts, phi_df, phi_table)
+  sc_both_eb <- bind_rows(sc_d1r_eb, sc_d2r_eb)
+  rm(splitcnts, phi_df, phi_table, sc_d1r_eb, sc_d2r_eb)
   if (exists("sc_d1r")) rm(sc_d1r, sc_d2r)
 
-  result_list_all <- lapply(comparisons_list_eb, run_one_comparison,
-                          test_fn = test_model_glmmTMB_EB,
-                          err_log = "glmmtmb_EB.errors.log")
-
-  results <- bind_rows(result_list_all)
+  results <- run_one_comparison(sc_both_eb,
+                                test_fn = test_model_glmmTMB_EB,
+                                err_log = "glmmtmb_EB.errors.log")
+  rm(sc_both_eb)
   results <- results %>%
     left_join(baseMean_df, by = c("gene", "event")) %>%
     left_join(lfc_summary_all, by = c("gene", "event", "comparison"))
@@ -541,11 +561,9 @@ if (model == 'glmmTMB_prior') {
 } else if (model == 'wilcoxon') {
   if (!is.null(opt$phi)) warning("--phi is not used for model '", model, "' and will be ignored")
 
-  result_list_all <- lapply(comparisons_list, run_one_comparison,
-                          test_fn = test_model_wilcoxon,
-                          err_log = "wilcoxon.errors.log")
-
-  results <- bind_rows(result_list_all)
+  results <- run_one_comparison(bind_rows(comparisons_list),
+                                test_fn = test_model_wilcoxon,
+                                err_log = "wilcoxon.errors.log")
   results <- results %>%
     left_join(baseMean_df, by = c("gene", "event")) %>%
     left_join(lfc_summary_all, by = c("gene", "event", "comparison"))
@@ -562,11 +580,9 @@ if (model == 'glmmTMB_prior') {
 } else if (model == 'glmmTMB_no_prior') {
   if (!is.null(opt$phi)) warning("--phi is not used for model '", model, "' and will be ignored")
 
-  result_list_all <- lapply(comparisons_list, run_one_comparison,
-                          test_fn = function(dd) suppressMessages(test_model_glmmTMB_without_prior(dd)),
-                          err_log = "glmmtmb_noprior.errors.log")
-
-  results <- bind_rows(result_list_all)
+  results <- run_one_comparison(bind_rows(comparisons_list),
+                                test_fn = function(dd) suppressMessages(test_model_glmmTMB_without_prior(dd)),
+                                err_log = "glmmtmb_noprior.errors.log")
   results <- results %>%
     left_join(baseMean_df, by = c("gene", "event")) %>%
     left_join(lfc_summary_all, by = c("gene", "event", "comparison"))

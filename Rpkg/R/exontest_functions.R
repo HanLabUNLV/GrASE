@@ -17,11 +17,22 @@ group_by_event <- function(dat, col_y, col_n) {
   dat$y <- dat[[col_y]]
   dat$n <- dat[[col_n]]
   dat <- dat[!is.na(dat$n),]
-  dat <- dat %>% dplyr::add_count(gene, event, name="n_samples")
-  dat <- dat %>% dplyr::filter(n_samples > 4)
-  grouped_data <- dat %>%
-    dplyr::group_by(gene, event) %>%
-    dplyr::group_split()
+  if ("comparison" %in% names(dat)) {
+    # Combined-comparison path: count samples per (gene, event, comparison)
+    # and arrange so both comparisons for the same gene/event are adjacent.
+    dat <- dat %>% dplyr::add_count(gene, event, comparison, name="n_samples")
+    dat <- dat %>% dplyr::filter(n_samples > 4)
+    grouped_data <- dat %>%
+      dplyr::arrange(gene, event, comparison) %>%
+      dplyr::group_by(gene, event, comparison) %>%
+      dplyr::group_split()
+  } else {
+    dat <- dat %>% dplyr::add_count(gene, event, name="n_samples")
+    dat <- dat %>% dplyr::filter(n_samples > 4)
+    grouped_data <- dat %>%
+      dplyr::group_by(gene, event) %>%
+      dplyr::group_split()
+  }
   return(grouped_data)
 }
 
