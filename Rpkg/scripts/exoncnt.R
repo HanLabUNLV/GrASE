@@ -83,7 +83,8 @@ sampleNames = c(paste0(cond1, '_', samples1), paste0(cond2, '_', samples2))
 conditions = c(rep(cond1,length(samples1)), rep(cond2, length(samples2)))
 
 colnames(read_counts) <- sampleNames
-#read_counts <- read_counts[1:(nrow(read_counts)-5),]
+# Remove rows where rownames start with "_"
+read_counts <- read_counts[!grepl("^_", rownames(read_counts)), , drop = FALSE]
 test = unlist(strsplit(rownames(read_counts), ":"))
 gene_exon = matrix(test, ncol=2, byrow=TRUE)
 read_counts$gene = gene_exon[,1]
