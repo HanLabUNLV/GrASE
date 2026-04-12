@@ -700,11 +700,8 @@ if (split == 'bipartition' || split == 'n_choose_2') {
 
     min_data <- primary_df %>%
       left_join(combo_df, by = c("gene", "event")) %>%
-      mutate(
-        p.value = p_min,
-        setdiff = setdiff_union
-      ) %>%
-      select(-p_min, -setdiff_union)
+      mutate(p.value = p_min) %>%
+      select(-p_min)
 
     if (exists("pvalueAdjustment") && nrow(min_data) > 0) {
       min_data$pvalue <- min_data$p.value
@@ -739,11 +736,8 @@ if (split == 'bipartition' || split == 'n_choose_2') {
 
     fisher_data <- primary_df %>%
       left_join(fisher_combo_df, by = c("gene", "event")) %>%
-      mutate(
-        p.value = p_fisher,
-        setdiff = setdiff_union
-      ) %>%
-      select(-p_fisher, -setdiff_union)
+      mutate(p.value = p_fisher) %>%
+      select(-p_fisher)
 
     if (exists("pvalueAdjustment") && nrow(fisher_data) > 0) {
       fisher_data$pvalue <- fisher_data$p.value
