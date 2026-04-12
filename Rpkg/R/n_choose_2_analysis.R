@@ -351,8 +351,12 @@ n_choose_2_paths <- function(gene, g, sg, outdir, max_path = 20, max_span = Inf,
         dplyr::distinct(ref_ex_part, setdiff1, setdiff2, .keep_all = TRUE) %>%
         dplyr::group_by(setdiff1, setdiff2) %>%
         dplyr::filter(ref_part_cnt == min(ref_part_cnt)) %>%
+        dplyr::mutate(.prox = mapply(ref_proximity_to_setdiffs,
+                                     ref_ex_part, setdiff1, setdiff2)) %>%
+        dplyr::filter(.prox == min(.prox, na.rm = TRUE)) %>%
+        dplyr::slice(1) %>%
         dplyr::ungroup() %>%
-        dplyr::select(-ref_part_cnt)
+        dplyr::select(-ref_part_cnt, -.prox)
     }
   } else {
     # Handle empty list case

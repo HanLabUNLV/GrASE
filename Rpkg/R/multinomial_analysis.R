@@ -370,8 +370,14 @@ multinomial_paths <- function(gene, g, sg, outdir, max_path = 20, max_span = Inf
         dplyr::distinct(dplyr::across(all_of(c("ref_ex_part", setdiff_cols))), .keep_all = TRUE) %>%
         dplyr::group_by(dplyr::across(all_of(setdiff_cols))) %>%
         dplyr::filter(ref_part_cnt == min(ref_part_cnt)) %>%
+        dplyr::mutate(.prox = apply(
+          dplyr::pick(dplyr::all_of(c("ref_ex_part", setdiff_cols))), 1,
+          function(row) do.call(ref_proximity_to_setdiffs,
+                                as.list(row[c("ref_ex_part", setdiff_cols)])))) %>%
+        dplyr::filter(.prox == min(.prox, na.rm = TRUE)) %>%
+        dplyr::slice(1) %>%
         dplyr::ungroup() %>%
-        dplyr::select(-ref_part_cnt)
+        dplyr::select(-ref_part_cnt, -.prox)
     } else if (nrow(multipaths_filtered) > 0) {
       multipaths_filtered <- multipaths_filtered %>% dplyr::select(-ref_part_cnt)
     }

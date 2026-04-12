@@ -517,13 +517,18 @@ bipartition_paths <- function(gene, g, outdir, max_path = 15, max_span = Inf, co
   if (nrow(bipartitions_df) > 0) {
     bipartitions_df <- bipartitions_df %>% dplyr::mutate(ref_part_cnt = sapply(ref_ex_part, count_items))
     # deduplicate exact events (same ref_ex_part + setdiff1 + setdiff2 from different graph paths),
-    # then among remaining rows with same (setdiff1, setdiff2) keep the one with fewest ref parts
+    # then among remaining rows with same (setdiff1, setdiff2) keep the one with fewest ref parts,
+    # then break remaining ties by choosing the ref_ex_part closest (by exon number) to the setdiff exons
     bipartitions_filtered <- bipartitions_df %>%
       dplyr::distinct(ref_ex_part, setdiff1, setdiff2, .keep_all = TRUE) %>%
       dplyr::group_by(setdiff1, setdiff2) %>%
       dplyr::filter(ref_part_cnt == min(ref_part_cnt)) %>%
+      dplyr::mutate(.prox = mapply(ref_proximity_to_setdiffs,
+                                   ref_ex_part, setdiff1, setdiff2)) %>%
+      dplyr::filter(.prox == min(.prox, na.rm = TRUE)) %>%
+      dplyr::slice(1) %>%
       dplyr::ungroup() %>%
-      dplyr::select(-ref_part_cnt)
+      dplyr::select(-ref_part_cnt, -.prox)
   } else {
     bipartitions_filtered <- bipartitions_df
   }
