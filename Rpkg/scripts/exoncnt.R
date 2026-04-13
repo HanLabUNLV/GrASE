@@ -114,7 +114,10 @@ if (analysis_type == 'all' || analysis_type == 'bipartition') {
       gene_id <- sub(paste0("\\.bipartition\\.",alt,"\\.txt$"), "", basename(f))
       gene_counts <- counts_list[[gene_id]]
       if (!is.null(gene_counts)) {
-        count_bipartitions(bipartition_file = f, countmat = gene_counts, sampleinfo, output_path, 'bipartition')
+        file_path <- file.path(output_path, paste0(gene_id, ".bipartition.exoncnt.txt"))
+        if (!file.exists(file_path) || file.size(file_path) == 0) {
+          count_bipartitions(bipartition_file = f, countmat = gene_counts, sampleinfo, output_path, 'bipartition')
+        }
       }
     }, error = function(e) {
       msg <- sprintf("[%s] ERROR in %s (PID %d): %s\n",

@@ -168,9 +168,15 @@ moderate_phi_log_scale <- function(phi_table, trimming_limit = 1e+10) {
 moderate_phi_trend <- function(phi_df, baseMean_df, span = 0.5,
                                trimming_limit = 1e+10) {
   # -- Step 1: prepare phi estimates --
+  # Include "comparison" in join key when both inputs carry it, to avoid
+  # a cross-product that would duplicate rows and inflate sample sizes.
+  join_cols <- c("gene", "event")
+  if ("comparison" %in% names(phi_df) && "comparison" %in% names(baseMean_df))
+    join_cols <- c(join_cols, "comparison")
+
   phi_est <- phi_df[phi_df$phi > 0 & phi_df$phi < trimming_limit, ]
   phi_est <- phi_est %>%
-    left_join(baseMean_df, by = c("gene", "event")) %>%
+    left_join(baseMean_df, by = join_cols) %>%
     filter(!is.na(baseMean) & baseMean > 0)
   phi_est$z      <- log(phi_est$phi)
   phi_est$var_z  <- phi_est$var_phi / (phi_est$phi^2)
@@ -209,8 +215,9 @@ moderate_phi_trend <- function(phi_df, baseMean_df, span = 0.5,
   tau2_z        <- max(s2_z - typical_var_z, 0)
 
   # -- Step 5: join phi estimates onto all events, compute shrinkage --
+  phi_est_cols <- c(join_cols, "z", "var_z")
   result <- all_events %>%
-    left_join(phi_est %>% select(gene, event, z, var_z), by = c("gene", "event"))
+    left_join(phi_est %>% select(all_of(phi_est_cols)), by = join_cols)
 
   # Events without a phi estimate get w = 0 fully shrunk to the trend
   result$w <- ifelse(
@@ -404,9 +411,15 @@ moderate_prec_log_scale <- function(prec_table) {
 #' }
 moderate_prec_trend <- function(prec_df, baseMean_df, span = 0.5) {
   # -- Step 1: prepare valid precision estimates --
+  # Include "comparison" in join key when both inputs carry it, to avoid
+  # a cross-product that would duplicate rows and inflate sample sizes.
+  join_cols <- c("gene", "event")
+  if ("comparison" %in% names(prec_df) && "comparison" %in% names(baseMean_df))
+    join_cols <- c(join_cols, "comparison")
+
   valid     <- abs(prec_df$log_prec) < 50 & prec_df$var_log_prec < 1000
   prec_est  <- prec_df[valid, ] %>%
-    left_join(baseMean_df, by = c("gene", "event")) %>%
+    left_join(baseMean_df, by = join_cols) %>%
     filter(!is.na(baseMean) & baseMean > 0)
   prec_est$log_bm <- log(prec_est$baseMean)
 
@@ -441,9 +454,9 @@ moderate_prec_trend <- function(prec_df, baseMean_df, span = 0.5) {
   tau2        <- max(s2 - typical_var, 0)
 
   # -- Step 5: join estimates onto all events and compute shrinkage weights --
+  prec_est_cols <- c(join_cols, "log_prec", "var_log_prec")
   result <- all_events %>%
-    left_join(prec_est %>% select(gene, event, log_prec, var_log_prec),
-              by = c("gene", "event"))
+    left_join(prec_est %>% select(all_of(prec_est_cols)), by = join_cols)
 
   # Events without an estimate (w=0) are fully shrunk to the trend
   result$w_prec <- ifelse(

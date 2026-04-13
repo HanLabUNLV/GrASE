@@ -36,11 +36,10 @@ option_list = list(
               help="condition 1 name (Group 1 - Group 2)", metavar="character"),
   make_option(c("--cond2"), type="character",
               help="condition 2 name (Reference Group)", metavar="character"),
-  make_option(c("--phi_median"), action="store_true", default=FALSE,
-              help="use global median as EB shrinkage target instead of loess phi trend (trend is on by default)"),
-  make_option(c("--no_independent_filtering"), action="store_false", default=TRUE,
-              dest="independent_filtering",
-              help="disable DESeq2-style independent filtering (filter on baseMean) before BH FDR correction (on by default)"),
+  make_option(c("--use_phi_loess"), action="store_true", default=FALSE,
+              help="use loess phi trend (log(phi) ~ log(baseMean)) as EB shrinkage target instead of global median"),
+  make_option(c("--independent_filtering"), action="store_true", default=FALSE,
+              help="use DESeq2-style independent filtering (filter on baseMean) before BH FDR correction"),
   make_option(c("--pseudocount"), type="integer", default=0L,
               help="pseudocount added to diff (ref reads) and n (total) before testing; enables detection of all-or-nothing switches when ref coverage is zero [default: 0]"),
   make_option(c("--prec_subsample_n"), type="integer", default=NULL,
@@ -83,7 +82,7 @@ if (!is.null(opt$cond1)) {
 if (!is.null(opt$cond2)) {
   cond2 = opt$cond2
 }
-phi_trend        <- !isTRUE(opt$phi_median)
+phi_trend        <- isTRUE(opt$use_phi_loess)
 indep_filter     <- isTRUE(opt$independent_filtering)
 pseudocount      <- as.integer(opt$pseudocount)
 prec_subsample_n <- if (!is.null(opt$prec_subsample_n)) as.integer(opt$prec_subsample_n) else NULL
