@@ -11,7 +11,7 @@ library(optparse)
 outdir = '~/GrASE_simulation/bipartition.test'
 countdir = '~/GrASE_simulation/bipartition.internal.counts'
 split = 'bipartition'
-model = 'glmmTMB_prior'
+model = 'betabinom_EBprior'
 masterfile = 'bipartition.internal.exoncnt.combined.txt'
 phifile = 'phi.glmmtmb.txt'
 cond1 = 'group1'; cond2 = 'group2'
@@ -36,10 +36,11 @@ option_list = list(
               help="condition 1 name (Group 1 - Group 2)", metavar="character"),
   make_option(c("--cond2"), type="character",
               help="condition 2 name (Reference Group)", metavar="character"),
-  make_option(c("--use_phi_loess"), action="store_true", default=FALSE,
-              help="use loess phi trend (log(phi) ~ log(baseMean)) as EB shrinkage target instead of global mean"),
-  make_option(c("--independent_filtering"), action="store_true", default=FALSE,
-              help="use DESeq2-style independent filtering (filter on baseMean) before BH FDR correction"),
+  make_option(c("--phi_median"), action="store_true", default=FALSE,
+              help="use global median as EB shrinkage target instead of loess phi trend (trend is on by default)"),
+  make_option(c("--no_independent_filtering"), action="store_false", default=TRUE,
+              dest="independent_filtering",
+              help="disable DESeq2-style independent filtering (filter on baseMean) before BH FDR correction (on by default)"),
   make_option(c("--pseudocount"), type="integer", default=0L,
               help="pseudocount added to diff (ref reads) and n (total) before testing; enables detection of all-or-nothing switches when ref coverage is zero [default: 0]"),
   make_option(c("--prec_subsample_n"), type="integer", default=NULL,
@@ -82,7 +83,7 @@ if (!is.null(opt$cond1)) {
 if (!is.null(opt$cond2)) {
   cond2 = opt$cond2
 }
-phi_trend        <- isTRUE(opt$use_phi_loess)
+phi_trend        <- !isTRUE(opt$phi_median)
 indep_filter     <- isTRUE(opt$independent_filtering)
 pseudocount      <- as.integer(opt$pseudocount)
 prec_subsample_n <- if (!is.null(opt$prec_subsample_n)) as.integer(opt$prec_subsample_n) else NULL
@@ -162,7 +163,7 @@ if (split != "multinomial") {
   comparisons_list <- list(sc_d1r, sc_d2r)
 }
 # Global Precision Estimation
-if (model == 'glmmTMB_prior' || model == 'glmmTMB_fixedEB') {
+if (model == 'betabinom_EBprior' || model == 'betabinom_EBfixed') {
 
   if (is.null(opt$phi)) stop("--phi is required for model '", model, "'")
   if (!is.null(opt$prec)) warning("--prec is not used for model '", model, "' and will be ignored")
@@ -229,7 +230,7 @@ if (model == 'glmmTMB_prior' || model == 'glmmTMB_fixedEB') {
 
     write.table(phi_df, file=paste0(outdir,'/', phifile), quote=FALSE, sep="\t", row.names = FALSE)
   }
-} else if (model == 'multinomial_plugin_dm_EB') {
+} else if (model == 'dirmult_EBplugin') {
   # Multinomial DM Moderation Pipeline
   # group_by_event on counts instead of diff/n for multinomial
   if (is.null(opt$prec)) stop("--prec is required for model '", model, "'")
@@ -329,12 +330,12 @@ run_one_comparison <- function(sc, test_fn, err_log, ..., chunk_size = 10000L) {
 }
 
 # Per Gene Model Estimation
-if (model == 'glmmTMB_prior') {
+if (model == 'betabinom_EBprior') {
   # This model runs on each of the 2 comparisons (diff1_vs_ref, diff2_vs_ref).
   # Phi estimation (above) already ran on sc_d1r.
   phi_trimmed <- phi_df[!is.na(phi_df$phi) & phi_df$phi < 1e+10 & phi_df$phi > 0,'phi']
   if (phi_trend) {
-    message("Using loess trend for glmmTMB_prior model's prior parameters.")
+    message("Using loess trend for betabinom_EBprior model's prior parameters.")
     baseMean_d1r  <- sc_d1r  %>% group_by(gene, event) %>% summarise(baseMean = mean(n, na.rm = TRUE), .groups = "drop") %>% mutate(comparison = "diff1_vs_ref")
     baseMean_d2r  <- sc_d2r  %>% group_by(gene, event) %>% summarise(baseMean = mean(n, na.rm = TRUE), .groups = "drop") %>% mutate(comparison = "diff2_vs_ref")
     baseMean_df_all <- bind_rows(baseMean_d1r, baseMean_d2r)
@@ -447,7 +448,7 @@ if (model == 'glmmTMB_prior') {
   results <- add_significant(results, padj_thr, delta)
   write.table(results, file=out_resultfile, quote=FALSE, sep="\t", row.names = FALSE)
 
-} else if (model == 'glmmTMB_fixedEB') {
+} else if (model == 'betabinom_EBfixed') {
 
   ## Empirical Bayes hyperparameters: prior mean and variance
   if (phi_trend) {
@@ -514,7 +515,7 @@ if (model == 'glmmTMB_prior') {
   results <- add_significant(results, padj_thr, delta)
   write.table(results, file=out_resultfile, quote=FALSE, sep="\t", row.names=FALSE)
 
-} else if (model == 'multinomial_plugin_dm_EB') {
+} else if (model == 'dirmult_EBplugin') {
 
   splitcnts_eb <- splitcnts %>%
     left_join(prec_table, by = c("gene", "event"))
@@ -530,7 +531,7 @@ if (model == 'glmmTMB_prior') {
   }
   grouped_eb <- splitcnts_eb %>% group_by(gene, event) %>% group_split()
 
-  test_fn <- test_model_multinomial_plugin_dm_EB
+  test_fn <- test_model_dirmult_EBplugin
   err_log <- paste0(model, ".errors.log")
 
   res_dm <- mclapply(grouped_eb, function(dd) {
@@ -577,7 +578,7 @@ if (model == 'glmmTMB_prior') {
   results <- add_significant(results, padj_thr, delta)
   write.table(results, file=out_resultfile, quote=FALSE, sep="\t", row.names = FALSE)
 
-} else if (model == 'glmmTMB_no_prior') {
+} else if (model == 'betabinom_MLE') {
   if (!is.null(opt$phi)) warning("--phi is not used for model '", model, "' and will be ignored")
 
   results <- run_one_comparison(bind_rows(comparisons_list),
@@ -598,7 +599,7 @@ if (model == 'glmmTMB_prior') {
 
 } else {
   print ("model misspecified")
-  print ("choose between glmmTMB_prior, glmmTMB_no_prior, glmmTMB_fixedEB, multinomial_plugin_dm_EB, wilcoxon")
+  print ("choose between betabinom_EBprior, betabinom_MLE, betabinom_EBfixed, dirmult_EBplugin, wilcoxon")
 
 }
 

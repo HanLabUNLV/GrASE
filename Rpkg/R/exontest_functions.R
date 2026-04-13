@@ -511,12 +511,12 @@ test_model_glmmTMB_with_prior <- function(dd, prior_disp, z_bar = NULL) {
             LR <- 2 * (logLik(m1) - logLik(m0))
             pval <- pchisq(as.numeric(LR), df = 1, lower.tail = FALSE)
             eff_size <- fixef(m1)$cond[2]
-            return(data.frame(gene=gene, event=event, LRT=as.numeric(LR), p.value=pval, model="betabinomial_glmmTMB_MAP_with_prior", phi=sigma(m1), effect_size=eff_size))
+            return(data.frame(gene=gene, event=event, LRT=as.numeric(LR), p.value=pval, model="betabinom_EBprior", phi=sigma(m1), effect_size=eff_size))
         }
     }
 
     # Fallback: fix dispersion at the global EB median log-phi and refit.
-    # This is conservative and consistent with the glmmTMB_fixedEB approach.
+    # This is conservative and consistent with the glmmTMB_EBfixed approach.
     # A binomial GLM fallback would be anticonservative for overdispersed data.
     if (!is.null(z_bar) && is.finite(z_bar)) {
         m1 <- tryCatch(
@@ -537,7 +537,7 @@ test_model_glmmTMB_with_prior <- function(dd, prior_disp, z_bar = NULL) {
             LR <- 2 * (logLik(m1) - logLik(m0))
             pval <- pchisq(as.numeric(LR), df = 1, lower.tail = FALSE)
             eff_size <- fixef(m1)$cond[2]
-            return(data.frame(gene=gene, event=event, LRT=as.numeric(LR), p.value=pval, model="betabinomial_glmmTMB_fixed_median", phi=sigma(m1), effect_size=eff_size))
+            return(data.frame(gene=gene, event=event, LRT=as.numeric(LR), p.value=pval, model="betabinom_EBprior_median", phi=sigma(m1), effect_size=eff_size))
         }
     }
     return(NULL)
@@ -582,7 +582,7 @@ test_model_glmmTMB_without_prior <- function(dd) {
         pval <- pchisq(as.numeric(LR), df = 1, lower.tail = FALSE)
         eff_size <- fixef(m1)$cond[2]
         return(data.frame(gene = gene, event = event, LRT = as.numeric(LR),
-                          p.value = pval, model = "betabinomial_glmmTMB_no_prior",
+                          p.value = pval, model = "betabinom_MLE",
                           phi = sigma(m1), effect_size = eff_size))
     }
     return(NULL)
@@ -636,7 +636,7 @@ test_model_glmmTMB_EB <- function(dd) {
         LR <- 2 * (logLik(m1) - logLik(m0))
         pval <- pchisq(as.numeric(LR), df = 1, lower.tail = FALSE)
         eff_size <- fixef(m1)$cond[2]
-        return(data.frame(gene=gene, event=event, LRT=as.numeric(LR), p.value=pval, model="betabinomial_glmmTMB_fixed_EB", phi=sigma(m1), effect_size=eff_size))
+        return(data.frame(gene=gene, event=event, LRT=as.numeric(LR), p.value=pval, model="betabinom_EBfixed", phi=sigma(m1), effect_size=eff_size))
     }
     return(NULL)
 }
@@ -790,7 +790,7 @@ test_model_multinomial_plugin_dm_EB <- function(dd) {
     eff_size <- log(pi2[1] / pi2[K]) - log(pi1[1] / pi1[K])
 
     data.frame(gene = gene, event = event, LRT = LR, p.value = pval,
-               model = "dirmult_moderated_direct", effect_size = eff_size)
+               model = "dirmult_EBplugin", effect_size = eff_size)
 }
 
 
