@@ -2,15 +2,19 @@
 % Please edit documentation in R/exontest_functions.R
 \name{test_model_glmmTMB_EB}
 \alias{test_model_glmmTMB_EB}
-\title{Test differential exon usage with a beta-binomial glmmTMB model using empirical Bayes fixed dispersion.}
+\title{Test differential exon usage with a beta-binomial glmmTMB model using fixed moderated dispersion.}
 \usage{
-test_model_glmmTMB_EB(dd)
+test_model_glmmTMB_EB(dd, model_label = "betabinom_EBapprox")
 }
 \arguments{
-\item{dd}{A data frame of exon count data.}
+\item{dd}{A data frame of exon count data with column \code{z_mod} (log-scale moderated phi).}
+
+\item{model_label}{Character. Label written to the \code{model} column of the result.
+Use \code{"betabinom_EBapprox"} for closed-form Gaussian-approximation moderation and
+\code{"betabinom_EBmap"} for MAP-optimized moderation. Default is \code{"betabinom_EBapprox"}.}
 }
 \description{
-Test differential exon usage with a beta-binomial glmmTMB model using empirical Bayes fixed dispersion.
+Test differential exon usage with a beta-binomial glmmTMB model using fixed moderated dispersion.
 }
 \examples{
 \dontrun{

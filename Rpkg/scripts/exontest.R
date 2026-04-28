@@ -11,7 +11,7 @@ library(optparse)
 outdir = '~/GrASE_simulation/bipartition.test'
 countdir = '~/GrASE_simulation/bipartition.internal.counts'
 split = 'bipartition'
-model = 'betabinom_EBprior'
+model = 'betabinom_EBmap'
 masterfile = 'bipartition.internal.exoncnt.combined.txt'
 phifile = 'phi.glmmtmb.txt'
 cond1 = 'group1'; cond2 = 'group2'
@@ -42,9 +42,7 @@ option_list = list(
               help="use DESeq2-style independent filtering (filter on baseMean) before BH FDR correction"),
   make_option(c("--pseudocount"), type="integer", default=0L,
               help="pseudocount added to diff (ref reads) and n (total) before testing; enables detection of all-or-nothing switches when ref coverage is zero [default: 0]"),
-  make_option(c("--prec_subsample_n"), type="integer", default=NULL,
-              help="number of events to subsample for DM precision estimation (multinomial models); NULL uses all events [default: NULL]", metavar="integer"),
-  make_option(c("--use_prec_loess"), action="store_true", default=FALSE,
+make_option(c("--use_prec_loess"), action="store_true", default=FALSE,
               help="use loess prec trend (log(prec) ~ log(baseMean)) as EB shrinkage target instead of global mean (multinomial models)"),
   make_option(c("--padj_threshold"), type="double", default=0.05,
               help="padj threshold for the significant column [default: 0.05]", metavar="double"),
@@ -85,7 +83,6 @@ if (!is.null(opt$cond2)) {
 phi_trend        <- isTRUE(opt$use_phi_loess)
 indep_filter     <- isTRUE(opt$independent_filtering)
 pseudocount      <- as.integer(opt$pseudocount)
-prec_subsample_n <- if (!is.null(opt$prec_subsample_n)) as.integer(opt$prec_subsample_n) else NULL
 prec_trend       <- isTRUE(opt$use_prec_loess)
 padj_thr         <- as.double(opt$padj_threshold)
 delta            <- as.double(opt$delta)
@@ -162,7 +159,7 @@ if (split != "multinomial") {
   comparisons_list <- list(sc_d1r, sc_d2r)
 }
 # Global Precision Estimation
-if (model == 'betabinom_EBprior' || model == 'betabinom_EBfixed') {
+if (model == 'betabinom_EBmap' || model == 'betabinom_EBapprox') {
 
   if (is.null(opt$phi)) stop("--phi is required for model '", model, "'")
   if (!is.null(opt$prec)) warning("--prec is not used for model '", model, "' and will be ignored")
@@ -251,19 +248,9 @@ if (model == 'betabinom_EBprior' || model == 'betabinom_EBfixed') {
     }
   } else {
     grouped_counts <- splitcnts %>% group_by(gene, event) %>% group_split()
-    n_events <- length(grouped_counts)
-
-    # Subsample events for faster precision estimation if requested
-    if (!is.null(prec_subsample_n) && prec_subsample_n < n_events) {
-      message(sprintf("Subsampling %d of %d events for prec estimation.", prec_subsample_n, n_events))
-      subsample_idx <- sample(n_events, prec_subsample_n)
-      grouped_counts_prec <- grouped_counts[subsample_idx]
-    } else {
-      grouped_counts_prec <- grouped_counts
-    }
 
     progress_file <- paste0(outdir, "/prec_progress.log")
-    prec_list <- mclapply(grouped_counts_prec, function(dd) {
+    prec_list <- mclapply(grouped_counts, function(dd) {
       result <- tryCatch(
         prec_estimate_plugin_dm(dd),
         error = function(e) {
@@ -318,7 +305,7 @@ run_one_comparison <- function(sc, test_fn, err_log, ..., chunk_size = 10000L) {
       result
     }, mc.cores = 32)
     all_results[[ci]] <- bind_rows(Filter(Negate(is.null), chunk_res))
-    message(sprintf("[%s] chunk %d/%d done (%d events)",
+    message(sprintf("[%s] LRT testing chunk %d/%d done (%d events)",
                     format(Sys.time(), "%H:%M:%S"), ci, n_chunks, length(idx)))
   }
   res <- bind_rows(all_results)
@@ -329,125 +316,207 @@ run_one_comparison <- function(sc, test_fn, err_log, ..., chunk_size = 10000L) {
 }
 
 # Per Gene Model Estimation
-if (model == 'betabinom_EBprior') {
-  # This model runs on each of the 2 comparisons (diff1_vs_ref, diff2_vs_ref).
-  # Phi estimation (above) already ran on sc_d1r.
-  phi_trimmed <- phi_df[!is.na(phi_df$phi) & phi_df$phi < 1e+10 & phi_df$phi > 0,'phi']
+if (model == 'betabinom_EBmap') {
+  # Prior parameters from MLE phi estimates
+  phi_trimmed  <- phi_df[!is.na(phi_df$phi) & phi_df$phi < 1e+10 & phi_df$phi > 0, 'phi']
+  log_phi_vals <- log(phi_trimmed)
+  fit_logphi   <- fitdistr(log_phi_vals, "normal")
+  mean_logphi  <- fit_logphi$estimate["mean"]
+  sd_logphi    <- fit_logphi$estimate["sd"]
+
+  # Helper: run phi_map_glmmTMB in parallel for one comparison.
+  # prior_fn takes a grouped dd and returns phi_map_glmmTMB result or NULL.
+  run_map_for_comparison <- function(sc, comp_name, prior_fn, err_log) {
+    gd <- group_by_event(sc, 'diff', 'n')
+    n_events    <- length(gd)
+    chunk_size  <- 10000L
+    chunk_starts <- seq(1L, n_events, by = chunk_size)
+    chunks <- vector("list", length(chunk_starts))
+    for (ci in seq_along(chunk_starts)) {
+      idx <- chunk_starts[ci]:min(chunk_starts[ci] + chunk_size - 1L, n_events)
+      chunks[[ci]] <- mclapply(gd[idx], function(dd) {
+        result <- tryCatch(prior_fn(dd), error = function(e) {
+          cat(sprintf("[%s] WARN gene=%s event=%s: %s\n",
+                      format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
+                      dd$gene[1], dd$event[1], conditionMessage(e)),
+              file = err_log, append = TRUE)
+          NULL
+        })
+        if (!is.null(result)) result$comparison <- comp_name
+        result
+      }, mc.cores = 32)
+      message(sprintf("[%s] MAP phi moderation chunk %d/%d done (%d events, %s)",
+                      format(Sys.time(), "%H:%M:%S"), ci,
+                      length(chunk_starts), length(idx), comp_name))
+    }
+    bind_rows(Filter(Negate(is.null), unlist(chunks, recursive = FALSE)))
+  }
+
   if (phi_trend) {
-    message("Using loess trend for betabinom_EBprior model's prior parameters.")
-    baseMean_d1r  <- sc_d1r  %>% group_by(gene, event) %>% summarise(baseMean = mean(n, na.rm = TRUE), .groups = "drop") %>% mutate(comparison = "diff1_vs_ref")
-    baseMean_d2r  <- sc_d2r  %>% group_by(gene, event) %>% summarise(baseMean = mean(n, na.rm = TRUE), .groups = "drop") %>% mutate(comparison = "diff2_vs_ref")
+    message("Using loess trend for betabinom_EBmap prior parameters.")
+    baseMean_d1r <- sc_d1r %>%
+      group_by(gene, event) %>%
+      summarise(baseMean = mean(n, na.rm = TRUE), .groups = "drop") %>%
+      mutate(comparison = "diff1_vs_ref")
+    baseMean_d2r <- sc_d2r %>%
+      group_by(gene, event) %>%
+      summarise(baseMean = mean(n, na.rm = TRUE), .groups = "drop") %>%
+      mutate(comparison = "diff2_vs_ref")
     baseMean_df_all <- bind_rows(baseMean_d1r, baseMean_d2r)
 
-    # fit normal to log(phi)
-    log_phi_vals <- log(phi_trimmed)
-    median_logphi <- median(log_phi_vals, na.rm = TRUE)
-    fit_logphi <- fitdistr(log_phi_vals, "normal")
-    mean_logphi <- fit_logphi$estimate["mean"]
-    sd_logphi   <- fit_logphi$estimate["sd"]
-    prior_disp <- data.frame(prior = sprintf("normal(%g,%g)", mean_logphi, sd_logphi),
-      class = "fixef_disp",
-      coef = "", # Explicitly target the intercept
-      stringsAsFactors = FALSE
-    )
-    print(prior_disp)
-      # Get trended phi values. Assumes moderate_phi_trend returns z_trend.
-      phi_table_trend <- moderate_phi_trend(phi_df, baseMean_df_all)
+    # EBapprox trend moderation (fallback for MAP failures)
+    phi_table_trend <- moderate_phi_trend(phi_df, baseMean_df_all)
 
-    # NOTE: result unused -- trend-specific run below overwrites results
-    # Calculate residual SD from trend, per comparison
+    # Residual SD around trend, per comparison
     phi_df_with_trend <- phi_df %>%
-      left_join(phi_table_trend, by = c("gene", "event", "comparison")) %>%
-      filter(!is.na(phi) & phi > 0 & !is.na(z_trend))
+      left_join(phi_table_trend %>% select(gene, event, comparison, z_trend),
+                by = c("gene", "event", "comparison")) %>%
+      filter(!is.na(phi) & phi > 0 & !is.na(z_trend)) %>%
+      mutate(resid = log(phi) - z_trend)
 
     prior_params <- phi_df_with_trend %>%
-      mutate(resid = log(phi) - z_trend) %>%
       group_by(comparison) %>%
       summarise(sd_resid = sd(resid, na.rm = TRUE), .groups = "drop")
 
-    # Global fallback for SD
     global_sd_resid <- sd(phi_df_with_trend$resid, na.rm = TRUE)
-    if (is.na(global_sd_resid)) {
-        phi_trimmed <- phi_df[!is.na(phi_df$phi) & phi_df$phi < 1e+10 & phi_df$phi > 0, 'phi']
-        global_sd_resid <- sd(log(phi_trimmed), na.rm = TRUE)
-    }
+    if (is.na(global_sd_resid)) global_sd_resid <- sd_logphi
     prior_params <- prior_params %>%
-        mutate(sd_resid = ifelse(is.na(sd_resid), global_sd_resid, sd_resid))
+      mutate(sd_resid = ifelse(is.na(sd_resid), global_sd_resid, sd_resid))
 
-    # Global fallbacks for mean and median
-    median_logphi <- median(log(phi_df$phi), na.rm = TRUE)
-    global_mean_logphi <- mean(log(phi_df$phi), na.rm = TRUE)
-
-    # Join prior parameters to each comparison dataset
-    join_prior_params <- function(sc, trend_table, params_table) {
+    # Augment sc with per-event z_trend and sd_resid
+    join_trend_prior <- function(sc) {
       sc %>%
-        left_join(trend_table %>% select(gene, event, comparison, z_trend), by = c("gene", "event", "comparison")) %>%
-        left_join(params_table, by = "comparison")
+        left_join(phi_table_trend %>% select(gene, event, comparison, z_trend),
+                  by = c("gene", "event", "comparison")) %>%
+        left_join(prior_params, by = "comparison") %>%
+        mutate(z_trend  = ifelse(is.na(z_trend),  mean_logphi,     z_trend),
+               sd_resid = ifelse(is.na(sd_resid), global_sd_resid, sd_resid))
     }
-    sc_d1r_prior  <- join_prior_params(sc_d1r, phi_table_trend, prior_params)
-    sc_d2r_prior  <- join_prior_params(sc_d2r, phi_table_trend, prior_params)
+    sc_d1r_aug <- join_trend_prior(sc_d1r)
+    sc_d2r_aug <- join_trend_prior(sc_d2r)
 
-    # Impute missing prior parameters
-    impute_prior_params <- function(df, comp_name) {
-      if (nrow(df) == 0) return(df)
-      fallback_sd <- prior_params$sd_resid[prior_params$comparison == comp_name]
-      if (length(fallback_sd) == 0 || is.na(fallback_sd)) fallback_sd <- global_sd_resid
+    prior_fn_trend <- function(dd) {
+      pd <- data.frame(prior = sprintf("normal(%g,%g)", dd$z_trend[1], dd$sd_resid[1]),
+                       class = "fixef_disp", coef = "", stringsAsFactors = FALSE)
+      phi_map_glmmTMB(dd, pd)
+    }
 
-      df$z_trend[is.na(df$z_trend)] <- global_mean_logphi
-      df$sd_resid[is.na(df$sd_resid)] <- fallback_sd
+    phi_map_d1r <- run_map_for_comparison(sc_d1r_aug, "diff1_vs_ref",
+                                          prior_fn_trend, "phi_map.errors.log")
+    phi_map_d2r <- run_map_for_comparison(sc_d2r_aug, "diff2_vs_ref",
+                                          prior_fn_trend, "phi_map.errors.log")
+    phi_map_df  <- bind_rows(phi_map_d1r, phi_map_d2r)
+
+    # Fallback: EBapprox trend z_mod where MAP failed
+    phi_fallback <- phi_table_trend %>% select(gene, event, comparison, z_mod)
+    fallback_z   <- median(phi_table_trend$z_mod, na.rm = TRUE)
+
+    has_map <- nrow(phi_map_df) > 0 && "z_mod" %in% names(phi_map_df)
+    if (!has_map) {
+      message("WARNING: no MAP phi estimates obtained; using EBapprox trend fallback. Check phi_map.errors.log.")
+    } else {
+      message(sprintf("MAP phi trend: %d events with MAP estimate.", nrow(phi_map_df)))
+    }
+    build_sc_eb_trend <- function(sc_aug) {
+      df <- sc_aug %>%
+        left_join(phi_fallback, by = c("gene", "event", "comparison"))
+      if (has_map) {
+        df <- df %>%
+          left_join(phi_map_df %>% rename(z_mod_map = z_mod),
+                    by = c("gene", "event", "comparison")) %>%
+          mutate(z_mod = dplyr::coalesce(z_mod_map, z_mod)) %>%
+          select(-z_mod_map)
+      }
+      df$z_mod[is.na(df$z_mod)] <- fallback_z
       df
     }
-    sc_d1r_prior  <- impute_prior_params(sc_d1r_prior, "diff1_vs_ref")
-    sc_d2r_prior  <- impute_prior_params(sc_d2r_prior, "diff2_vs_ref")
+    sc_d1r_eb <- build_sc_eb_trend(sc_d1r_aug)
+    sc_d2r_eb <- build_sc_eb_trend(sc_d2r_aug)
 
-    # Wrapper to construct prior inside mclapply
-    test_fn_wrapper_trend <- function(dd) {
-      mean_logphi <- dd$z_trend[1]
-      sd_logphi   <- dd$sd_resid[1]
-      prior_disp <- data.frame(prior = sprintf("normal(%g,%g)", mean_logphi, sd_logphi),
-                               class = "fixef_disp", coef = "",
-                               stringsAsFactors = FALSE)
-      test_model_glmmTMB_with_prior(dd, prior_disp, z_bar = median_logphi)
-    }
-
-    results <- run_one_comparison(bind_rows(sc_d1r_prior, sc_d2r_prior),
-                                  test_fn = test_fn_wrapper_trend,
-                                  err_log = "glmmtmb_withprior_trend.errors.log")
   } else {
-    # Original behavior: global prior for all events
-    phi_trimmed <- phi_df[!is.na(phi_df$phi) & phi_df$phi < 1e+10 & phi_df$phi > 0,'phi']
-    log_phi_vals <- log(phi_trimmed)
-    median_logphi <- median(log_phi_vals, na.rm = TRUE)
-    fit_logphi <- fitdistr(log_phi_vals, "normal")
-    mean_logphi <- fit_logphi$estimate["mean"]
-    sd_logphi   <- fit_logphi$estimate["sd"]
-    prior_disp <- data.frame(prior = sprintf("normal(%g,%g)", mean_logphi, sd_logphi),
-      class = "fixef_disp",
-      coef = "", # Explicitly target the intercept
-      stringsAsFactors = FALSE
+    # Global prior for all events
+    prior_disp <- data.frame(
+      prior = sprintf("normal(%g,%g)", mean_logphi, sd_logphi),
+      class = "fixef_disp", coef = "", stringsAsFactors = FALSE
     )
     print(prior_disp)
 
-    results <- run_one_comparison(bind_rows(comparisons_list),
-                                  test_fn = test_model_glmmTMB_with_prior,
-                                  err_log = "glmmtmb_withprior.errors.log",
-                                  prior_disp, z_bar = median_logphi)
+    # EBapprox z_mod as fallback for MAP failures
+    phi_approx <- phi_df %>%
+      filter(!is.na(comparison)) %>%
+      group_by(comparison) %>%
+      group_modify(~ moderate_phi_log_scale(.x)) %>%
+      ungroup() %>%
+      select(gene, event, comparison, z_mod)
+
+    prior_fn_global <- function(dd) phi_map_glmmTMB(dd, prior_disp)
+
+    phi_map_d1r <- run_map_for_comparison(sc_d1r, "diff1_vs_ref",
+                                          prior_fn_global, "phi_map.errors.log")
+    phi_map_d2r <- run_map_for_comparison(sc_d2r, "diff2_vs_ref",
+                                          prior_fn_global, "phi_map.errors.log")
+    phi_map_df  <- bind_rows(phi_map_d1r, phi_map_d2r)
+
+    # MAP preferred; EBapprox fallback for events where MAP failed
+    if (nrow(phi_map_df) > 0 && "z_mod" %in% names(phi_map_df)) {
+      message(sprintf("MAP phi: %d events with MAP estimate.", nrow(phi_map_df)))
+      phi_final <- phi_approx %>%
+        left_join(phi_map_df %>% rename(z_mod_map = z_mod),
+                  by = c("gene", "event", "comparison")) %>%
+        mutate(z_mod = dplyr::coalesce(z_mod_map, z_mod)) %>%
+        select(-z_mod_map)
+    } else {
+      message("WARNING: no MAP phi estimates obtained; using EBapprox fallback. Check phi_map.errors.log.")
+      phi_final <- phi_approx
+    }
+
+    impute_z_mod <- function(df, p_table) {
+      if (nrow(df) == 0) return(df)
+      comp_name  <- df$comparison[1]
+      fallback_z <- median(p_table$z_mod[p_table$comparison == comp_name], na.rm = TRUE)
+      if (is.na(fallback_z)) fallback_z <- median(p_table$z_mod, na.rm = TRUE)
+      if (is.na(fallback_z)) fallback_z <- 0
+      df$z_mod[is.na(df$z_mod)] <- fallback_z
+      df
+    }
+
+    sc_d1r_eb <- sc_d1r %>%
+      left_join(phi_final, by = c("gene", "event", "comparison")) %>%
+      impute_z_mod(phi_final)
+    sc_d2r_eb <- sc_d2r %>%
+      left_join(phi_final, by = c("gene", "event", "comparison")) %>%
+      impute_z_mod(phi_final)
   }
+
+  phi_map_file <- sub("\\.([^.]+)$", ".map.moderated.\\1", phifile)
+  write.table(phi_map_df, file = paste0(outdir, '/', phi_map_file),
+              sep = "\t", quote = FALSE, row.names = FALSE)
+
+  sc_both_eb <- bind_rows(sc_d1r_eb, sc_d2r_eb)
+  rm(splitcnts, phi_df, phi_map_df)
+  if (exists("sc_d1r")) rm(sc_d1r, sc_d2r)
+
+  results <- run_one_comparison(sc_both_eb,
+                                test_fn = test_model_glmmTMB_EB,
+                                err_log = "glmmtmb_EBmap.errors.log",
+                                model_label = "betabinom_EBmap")
+  rm(sc_both_eb)
 
   results <- results %>%
     left_join(baseMean_df, by = c("gene", "event")) %>%
     left_join(lfc_summary_all, by = c("gene", "event", "comparison"))
 
   if (exists("pvalueAdjustment") && nrow(results) > 0) {
-      results$pvalue <- results$p.value
-      results <- pvalueAdjustment(results, independentFiltering=indep_filter, alpha=0.05, pAdjustMethod="BH")
-      results$pvalue <- NULL
+    results$pvalue <- results$p.value
+    results <- pvalueAdjustment(results, independentFiltering = indep_filter,
+                                alpha = 0.05, pAdjustMethod = "BH")
+    results$pvalue <- NULL
   }
 
   results <- add_significant(results, padj_thr, delta)
-  write.table(results, file=out_resultfile, quote=FALSE, sep="\t", row.names = FALSE)
+  write.table(results, file = out_resultfile, quote = FALSE, sep = "\t", row.names = FALSE)
 
-} else if (model == 'betabinom_EBfixed') {
+} else if (model == 'betabinom_EBapprox') {
 
   ## Empirical Bayes hyperparameters: prior mean and variance
   if (phi_trend) {
@@ -490,7 +559,7 @@ if (model == 'betabinom_EBprior') {
     sc_d1r_eb  <- impute_z_mod(sc_d1r_eb, phi_table)
     sc_d2r_eb  <- impute_z_mod(sc_d2r_eb, phi_table)
   }
-  phi_mod_file <- sub("\\.([^.]+)$", ".moderated.\\1", phifile)
+  phi_mod_file <- sub("\\.([^.]+)$", ".approx.moderated.\\1", phifile)
   write.table(phi_table, file=paste0(outdir, '/', phi_mod_file), sep="\t", quote=FALSE, row.names=FALSE)
 
   sc_both_eb <- bind_rows(sc_d1r_eb, sc_d2r_eb)
@@ -499,7 +568,8 @@ if (model == 'betabinom_EBprior') {
 
   results <- run_one_comparison(sc_both_eb,
                                 test_fn = test_model_glmmTMB_EB,
-                                err_log = "glmmtmb_EB.errors.log")
+                                err_log = "glmmtmb_EB.errors.log",
+                                model_label = "betabinom_EBapprox")
   rm(sc_both_eb)
   results <- results %>%
     left_join(baseMean_df, by = c("gene", "event")) %>%
@@ -598,7 +668,7 @@ if (model == 'betabinom_EBprior') {
 
 } else {
   print ("model misspecified")
-  print ("choose between betabinom_EBprior, betabinom_MLE, betabinom_EBfixed, dirmult_EBplugin, wilcoxon")
+  print ("choose between betabinom_EBmap, betabinom_EBapprox, betabinom_MLE, dirmult_EBplugin, wilcoxon")
 
 }
 

@@ -3,7 +3,7 @@
 \name{test_model_glmmTMB_without_prior}
 \alias{test_model_glmmTMB_without_prior}
 \title{Test differential exon usage with a beta-binomial glmmTMB model, no prior on dispersion.
-Intended for comparison with \code{test_model_glmmTMB_with_prior}.}
+Intended for comparison with \code{test_model_glmmTMB_EB}.}
 \usage{
 test_model_glmmTMB_without_prior(dd)
 }
@@ -12,7 +12,7 @@ test_model_glmmTMB_without_prior(dd)
 }
 \description{
 Test differential exon usage with a beta-binomial glmmTMB model, no prior on dispersion.
-Intended for comparison with \code{test_model_glmmTMB_with_prior}.
+Intended for comparison with \code{test_model_glmmTMB_EB}.
 }
 \examples{
 \dontrun{

@@ -79,6 +79,43 @@ phi_estimate_glmmTMB <- function(dd) {
 }
 
 
+#' Estimate MAP log-phi per event using glmmTMB with an empirical Bayes prior
+#' @param dd A data frame of exon count data.
+#' @param prior_disp A data frame specifying the glmmTMB prior on the dispersion parameter.
+#' @export
+#' @examples
+#' \dontrun{
+#' splitcnts <- read.table("bipartition.internal.exoncnt.combined.txt",
+#'                         header = TRUE, row.names = NULL)
+#' grouped_data <- grase::group_by_event(splitcnts, "diff", "n")
+#' prior_disp <- data.frame(prior = "normal(-1.5, 1.2)", class = "fixef_disp",
+#'                          coef = "", stringsAsFactors = FALSE)
+#' phi_map <- grase::phi_map_glmmTMB(grouped_data[[1]], prior_disp)
+#' phi_map
+#' }
+phi_map_glmmTMB <- function(dd, prior_disp) {
+    gene  <- unique(dd$gene)
+    event <- unique(dd$event)
+    dd <- dd[dd$n > 0, ]
+    if (nrow(dd) < 2) return(NULL)
+
+    m <- tryCatch(
+      glmmTMB(
+        cbind(y, n - y) ~ 1,
+        data = dd,
+        family = glmmTMB::betabinomial(link = "logit"),
+        priors = prior_disp
+      ),
+      error = function(e) NULL
+    )
+
+    if (!is.null(m) && !is.na(logLik(m))) {
+      return(data.frame(gene = gene, event = event,
+                        z_mod = log(as.numeric(sigma(m)))))
+    }
+    return(NULL)
+}
+
 
 #' Moderate phi estimates on the log scale using empirical Bayes shrinkage
 #' @param phi_table A data frame with columns \code{gene}, \code{event},
@@ -478,89 +515,9 @@ moderate_prec_trend <- function(prec_df, baseMean_df, span = 0.5) {
 
 # --- Moderated Testing Functions ---
 
-# 1. Moderated glmmTMB Beta-Binomial with Prior
-#' Test differential exon usage with a beta-binomial glmmTMB model using an empirical Bayes prior on dispersion.
-#' @param dd A data frame of exon count data.
-#' @param prior_disp A data frame specifying the glmmTMB prior on the dispersion parameter, with
-#'   columns \code{prior}, \code{class}, and \code{coef} (as produced by \code{glmmTMB::prior}).
-#' @param z_bar Numeric. The global empirical Bayes log-phi estimate used as a fixed-dispersion
-#'   fallback when the prior-based model does not converge. Pass \code{NULL} to disable the
-#'   fallback. Default is \code{NULL}.
-#' @export
-#' @examples
-#' \dontrun{
-#' splitcnts <- read.table("bipartition.internal.exoncnt.combined.txt",
-#'                         header = TRUE, row.names = NULL)
-#' splitcnts$groups <- factor(splitcnts$groups)
-#' grouped_data <- grase::group_by_event(splitcnts, "diff", "n")
-#' prior_disp <- data.frame(prior = "normal(-1.5, 1.2)", class = "fixef_disp",
-#'                          coef = "", stringsAsFactors = FALSE)
-#' result <- grase::test_model_glmmTMB_with_prior(grouped_data[[1]], prior_disp, z_bar = -1.5)
-#' result
-#' }
-test_model_glmmTMB_with_prior <- function(dd, prior_disp, z_bar = NULL) {
-    gene  <- unique(dd$gene)
-    event <- unique(dd$event)
-    dd <- dd[dd$n > 0, ]
-    if (nrow(dd) < 2 || length(unique(dd$groups)) < 2) return(NULL)
-    if (mean(dd$y) == 0) return(NULL)
-
-    # Models include 'priors' for empirical Bayes moderation
-    m1 <- tryCatch(
-      glmmTMB(cbind(y, n - y) ~ groups, data = dd, family = glmmTMB::betabinomial(link="logit"), priors = prior_disp, REML=FALSE),
-      error = function(e) NULL
-    )
-    m0 <- tryCatch(
-      glmmTMB(cbind(y, n - y) ~ 1, data = dd, family = glmmTMB::betabinomial(link="logit"), priors = prior_disp, REML=FALSE),
-      error = function(e) NULL
-    )
-
-    if (!is.null(m1) && !is.na(logLik(m1)) && !is.null(m0) && !is.na(logLik(m0))) {
-
-        # If phi escaped to an extreme value despite the prior, the optimizer likely
-        # diverged rather than reflecting truly binomial data. Fall through to the
-        # fixed-dispersion fallback below instead of using a binomial GLM.
-        if (sigma(m1) <= 1e5) {
-            LR <- 2 * (logLik(m1) - logLik(m0))
-            pval <- pchisq(as.numeric(LR), df = 1, lower.tail = FALSE)
-            eff_size <- fixef(m1)$cond[2]
-            return(data.frame(gene=gene, event=event, LRT=as.numeric(LR), p.value=pval, model="betabinom_EBprior", phi=sigma(m1), effect_size=eff_size))
-        }
-    }
-
-    # Fallback: fix dispersion at the global EB median log-phi and refit.
-    # This is conservative and consistent with the glmmTMB_EBfixed approach.
-    # A binomial GLM fallback would be anticonservative for overdispersed data.
-    if (!is.null(z_bar) && is.finite(z_bar)) {
-        m1 <- tryCatch(
-          glmmTMB(cbind(y, n - y) ~ groups, data = dd,
-                  family = glmmTMB::betabinomial(link = "logit"),
-                  start = list(betadisp = z_bar),
-                  map   = list(betadisp = factor(NA))),
-          error = function(e) NULL
-        )
-        m0 <- tryCatch(
-          glmmTMB(cbind(y, n - y) ~ 1, data = dd,
-                  family = glmmTMB::betabinomial(link = "logit"),
-                  start = list(betadisp = z_bar),
-                  map   = list(betadisp = factor(NA))),
-          error = function(e) NULL
-        )
-        if (!is.null(m1) && !is.na(logLik(m1)) && !is.null(m0) && !is.na(logLik(m0))) {
-            LR <- 2 * (logLik(m1) - logLik(m0))
-            pval <- pchisq(as.numeric(LR), df = 1, lower.tail = FALSE)
-            eff_size <- fixef(m1)$cond[2]
-            return(data.frame(gene=gene, event=event, LRT=as.numeric(LR), p.value=pval, model="betabinom_EBprior_median", phi=sigma(m1), effect_size=eff_size))
-        }
-    }
-    return(NULL)
-}
-
-
-
-# 1b. glmmTMB Beta-Binomial without prior (for comparison)
+# 1. glmmTMB Beta-Binomial without prior (for comparison)
 #' Test differential exon usage with a beta-binomial glmmTMB model, no prior on dispersion.
-#' Intended for comparison with \code{test_model_glmmTMB_with_prior}.
+#' Intended for comparison with \code{test_model_glmmTMB_EB}.
 #' @param dd A data frame of exon count data.
 #' @export
 #' @examples
@@ -602,9 +559,12 @@ test_model_glmmTMB_without_prior <- function(dd) {
 }
 
 
-# 2. Moderated glmmTMB Beta-Binomial EB
-#' Test differential exon usage with a beta-binomial glmmTMB model using empirical Bayes fixed dispersion.
-#' @param dd A data frame of exon count data.
+# 2. Moderated glmmTMB Beta-Binomial EB (EBapprox or EBmap)
+#' Test differential exon usage with a beta-binomial glmmTMB model using fixed moderated dispersion.
+#' @param dd A data frame of exon count data with column \code{z_mod} (log-scale moderated phi).
+#' @param model_label Character. Label written to the \code{model} column of the result.
+#'   Use \code{"betabinom_EBapprox"} for closed-form Gaussian-approximation moderation and
+#'   \code{"betabinom_EBmap"} for MAP-optimized moderation. Default is \code{"betabinom_EBapprox"}.
 #' @export
 #' @examples
 #' \dontrun{
@@ -618,7 +578,7 @@ test_model_glmmTMB_without_prior <- function(dd) {
 #' result <- grase::test_model_glmmTMB_EB(grouped_eb[[1]])
 #' result
 #' }
-test_model_glmmTMB_EB <- function(dd) {
+test_model_glmmTMB_EB <- function(dd, model_label = "betabinom_EBapprox") {
     gene  <- unique(dd$gene)
     event <- unique(dd$event)
     dd <- dd[dd$n > 0, ]
@@ -649,7 +609,9 @@ test_model_glmmTMB_EB <- function(dd) {
         LR <- 2 * (logLik(m1) - logLik(m0))
         pval <- pchisq(as.numeric(LR), df = 1, lower.tail = FALSE)
         eff_size <- fixef(m1)$cond[2]
-        return(data.frame(gene=gene, event=event, LRT=as.numeric(LR), p.value=pval, model="betabinom_EBfixed", phi=sigma(m1), effect_size=eff_size))
+        return(data.frame(gene = gene, event = event, LRT = as.numeric(LR),
+                          p.value = pval, model = model_label,
+                          phi = sigma(m1), effect_size = eff_size))
     }
     return(NULL)
 }
