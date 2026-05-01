@@ -780,21 +780,24 @@ precompute_gene_graph <- function(g) {
   }
 
   # Vertex positions (integer; NA for the root "R" vertex)
-  v_pos <- suppressWarnings(as.integer(igraph::V(g)$position))
+  v_pos  <- suppressWarnings(as.integer(igraph::V(g)$position))
+  v_sgid <- suppressWarnings(as.integer(igraph::V(g)$sg_id))
 
   # Actual from/to positions for every edge via graph topology.
   # Works for ex_part edges too (whose from_pos/to_pos attributes are "NA").
   ee <- igraph::ends(g, igraph::E(g), names = FALSE)
 
   list(
-    tx_cols  = tx_cols,
-    tx_mat   = tx_mat,
-    ex_or_in = igraph::E(g)$ex_or_in,
-    from_pos = suppressWarnings(as.integer(igraph::E(g)$from_pos)),
-    to_pos   = suppressWarnings(as.integer(igraph::E(g)$to_pos)),
-    vx_from  = v_pos[ee[, 1L]],
-    vx_to    = v_pos[ee[, 2L]],
-    dex_frag = igraph::E(g)$dexseq_fragment
+    tx_cols    = tx_cols,
+    tx_mat     = tx_mat,
+    ex_or_in   = igraph::E(g)$ex_or_in,
+    from_pos   = suppressWarnings(as.integer(igraph::E(g)$from_pos)),
+    to_pos     = suppressWarnings(as.integer(igraph::E(g)$to_pos)),
+    vx_from    = v_pos[ee[, 1L]],
+    vx_to      = v_pos[ee[, 2L]],
+    vx_sg_from = v_sgid[ee[, 1L]],
+    vx_sg_to   = v_sgid[ee[, 2L]],
+    dex_frag   = igraph::E(g)$dexseq_fragment
   )
 }
 

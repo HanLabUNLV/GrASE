@@ -9,17 +9,17 @@ library(optparse)
 # --- Main Execution Script ---
 
 outdir = '~/GrASE_simulation/bipartition.test'
-countdir = '~/GrASE_simulation/bipartition.internal.counts'
+countdir = '~/GrASE_simulation/sjcnt'
 split = 'bipartition'
 model = 'betabinom_EBmap'
-masterfile = 'bipartition.internal.exoncnt.combined.txt'
+masterfile = 'bipartition.sjcnt.combined.txt'
 phifile = 'phi.glmmtmb.txt'
 cond1 = 'group1'; cond2 = 'group2'
 args = commandArgs(trailingOnly=TRUE)
 
 option_list = list(
   make_option(c("-f", "--file"), type="character",  
-              help="file name of combined exoncnt dataset", metavar="character"),
+              help="file name of combined sjcnt dataset", metavar="character"),
   make_option(c("-o", "--outdir"), type="character", 
               help="output directory that contains the test results", metavar="character"),
   make_option(c("-c", "--countdir"), type="character", 
@@ -113,7 +113,7 @@ out_resultfile=paste0(outdir,'/test_', out_prefix,'_', model, '.txt')
 
 
 if (file.exists(exoncnt_master)) {
-  splitcnts <- read.table(exoncnt_master, header=TRUE, row.names=NULL)
+  splitcnts <- read.table(exoncnt_master, header=TRUE, row.names=NULL, sep="\t")
   # Set levels such that cond2 is reference, so coefficient is cond1 - cond2
   splitcnts$groups <- factor(splitcnts$groups, levels = c(cond2, cond1))
 } else {
@@ -140,8 +140,9 @@ if (split != "multinomial") {
 
   sc_d1r  <- make_comparison(splitcnts, "diff1", "ref",   "diff1_vs_ref")
   sc_d2r  <- make_comparison(splitcnts, "diff2", "ref",   "diff2_vs_ref")
+  sc_d1d2 <- make_comparison(splitcnts, "diff2", "diff1", "diff2_vs_diff1")
 
-  # pseudocount: same logic as before, applied to each comparison's ref where ref == 0
+  # pseudocount: applied to ref-based comparisons only; d1d2 uses count data
   if (pseudocount > 0L) {
     apply_pseudo <- function(sc) {
       zero_ref <- sc$ref == 0L
@@ -149,14 +150,15 @@ if (split != "multinomial") {
       sc$n[zero_ref]   <- sc$n[zero_ref] + pseudocount
       sc
     }
-    sc_d1r  <- apply_pseudo(sc_d1r)
-    sc_d2r  <- apply_pseudo(sc_d2r)
+    sc_d1r <- apply_pseudo(sc_d1r)
+    sc_d2r <- apply_pseudo(sc_d2r)
   }
 
   lfc_d1r  <- compute_lfc_summary(sc_d1r)  %>% mutate(comparison = "diff1_vs_ref")
   lfc_d2r  <- compute_lfc_summary(sc_d2r)  %>% mutate(comparison = "diff2_vs_ref")
-  lfc_summary_all <- bind_rows(lfc_d1r, lfc_d2r)
-  comparisons_list <- list(sc_d1r, sc_d2r)
+  lfc_d1d2 <- compute_lfc_summary(sc_d1d2) %>% mutate(comparison = "diff2_vs_diff1")
+  lfc_summary_all <- bind_rows(lfc_d1r, lfc_d2r, lfc_d1d2)
+  comparisons_list <- list(sc_d1r, sc_d2r, sc_d1d2)
 }
 # Global Precision Estimation
 if (model == 'betabinom_EBmap' || model == 'betabinom_EBapprox') {
@@ -216,13 +218,18 @@ if (model == 'betabinom_EBmap' || model == 'betabinom_EBapprox') {
       return(phi_df_comp)
     }
 
-    message("Estimating phi for diff1 vs ref...")
-    phi_d1r <- estimate_phi_for_comparison(sc_d1r, "diff1_vs_ref")
-    message("Estimating phi for diff2 vs ref...")
-    phi_d2r <- estimate_phi_for_comparison(sc_d2r, "diff2_vs_ref")
+    # Estimate phi once from d1d2 (non-degenerate even when ref=0) and share
+    # across all three comparisons -- d1r and d2r have n=diff when ref=0,
+    # making their dispersion estimates unreliable.
+    message("Estimating phi from diff2 vs diff1 (shared across all comparisons)...")
+    phi_d1d2 <- estimate_phi_for_comparison(sc_d1d2, "diff2_vs_diff1")
 
-    phi_df <- bind_rows(phi_d1r, phi_d2r)
-    rm(phi_d1r, phi_d2r)
+    phi_df <- bind_rows(
+      phi_d1d2 %>% mutate(comparison = "diff1_vs_ref"),
+      phi_d1d2 %>% mutate(comparison = "diff2_vs_ref"),
+      phi_d1d2
+    )
+    rm(phi_d1d2)
 
     write.table(phi_df, file=paste0(outdir,'/', phifile), quote=FALSE, sep="\t", row.names = FALSE)
   }
@@ -362,7 +369,11 @@ if (model == 'betabinom_EBmap') {
       group_by(gene, event) %>%
       summarise(baseMean = mean(n, na.rm = TRUE), .groups = "drop") %>%
       mutate(comparison = "diff2_vs_ref")
-    baseMean_df_all <- bind_rows(baseMean_d1r, baseMean_d2r)
+    baseMean_d1d2 <- sc_d1d2 %>%
+      group_by(gene, event) %>%
+      summarise(baseMean = mean(n, na.rm = TRUE), .groups = "drop") %>%
+      mutate(comparison = "diff2_vs_diff1")
+    baseMean_df_all <- bind_rows(baseMean_d1r, baseMean_d2r, baseMean_d1d2)
 
     # EBapprox trend moderation (fallback for MAP failures)
     phi_table_trend <- moderate_phi_trend(phi_df, baseMean_df_all)
@@ -392,8 +403,9 @@ if (model == 'betabinom_EBmap') {
         mutate(z_trend  = ifelse(is.na(z_trend),  mean_logphi,     z_trend),
                sd_resid = ifelse(is.na(sd_resid), global_sd_resid, sd_resid))
     }
-    sc_d1r_aug <- join_trend_prior(sc_d1r)
-    sc_d2r_aug <- join_trend_prior(sc_d2r)
+    sc_d1r_aug  <- join_trend_prior(sc_d1r)
+    sc_d2r_aug  <- join_trend_prior(sc_d2r)
+    sc_d1d2_aug <- join_trend_prior(sc_d1d2)
 
     prior_fn_trend <- function(dd) {
       pd <- data.frame(prior = sprintf("normal(%g,%g)", dd$z_trend[1], dd$sd_resid[1]),
@@ -401,11 +413,13 @@ if (model == 'betabinom_EBmap') {
       phi_map_glmmTMB(dd, pd)
     }
 
-    phi_map_d1r <- run_map_for_comparison(sc_d1r_aug, "diff1_vs_ref",
-                                          prior_fn_trend, "phi_map.errors.log")
-    phi_map_d2r <- run_map_for_comparison(sc_d2r_aug, "diff2_vs_ref",
-                                          prior_fn_trend, "phi_map.errors.log")
-    phi_map_df  <- bind_rows(phi_map_d1r, phi_map_d2r)
+    phi_map_d1r  <- run_map_for_comparison(sc_d1r_aug,  "diff1_vs_ref",
+                                           prior_fn_trend, "phi_map.errors.log")
+    phi_map_d2r  <- run_map_for_comparison(sc_d2r_aug,  "diff2_vs_ref",
+                                           prior_fn_trend, "phi_map.errors.log")
+    phi_map_d1d2 <- run_map_for_comparison(sc_d1d2_aug, "diff2_vs_diff1",
+                                           prior_fn_trend, "phi_map.errors.log")
+    phi_map_df   <- bind_rows(phi_map_d1r, phi_map_d2r, phi_map_d1d2)
 
     # Fallback: EBapprox trend z_mod where MAP failed
     phi_fallback <- phi_table_trend %>% select(gene, event, comparison, z_mod)
@@ -430,8 +444,9 @@ if (model == 'betabinom_EBmap') {
       df$z_mod[is.na(df$z_mod)] <- fallback_z
       df
     }
-    sc_d1r_eb <- build_sc_eb_trend(sc_d1r_aug)
-    sc_d2r_eb <- build_sc_eb_trend(sc_d2r_aug)
+    sc_d1r_eb  <- build_sc_eb_trend(sc_d1r_aug)
+    sc_d2r_eb  <- build_sc_eb_trend(sc_d2r_aug)
+    sc_d1d2_eb <- build_sc_eb_trend(sc_d1d2_aug)
 
   } else {
     # Global prior for all events
@@ -451,11 +466,13 @@ if (model == 'betabinom_EBmap') {
 
     prior_fn_global <- function(dd) phi_map_glmmTMB(dd, prior_disp)
 
-    phi_map_d1r <- run_map_for_comparison(sc_d1r, "diff1_vs_ref",
-                                          prior_fn_global, "phi_map.errors.log")
-    phi_map_d2r <- run_map_for_comparison(sc_d2r, "diff2_vs_ref",
-                                          prior_fn_global, "phi_map.errors.log")
-    phi_map_df  <- bind_rows(phi_map_d1r, phi_map_d2r)
+    phi_map_d1r  <- run_map_for_comparison(sc_d1r,  "diff1_vs_ref",
+                                           prior_fn_global, "phi_map.errors.log")
+    phi_map_d2r  <- run_map_for_comparison(sc_d2r,  "diff2_vs_ref",
+                                           prior_fn_global, "phi_map.errors.log")
+    phi_map_d1d2 <- run_map_for_comparison(sc_d1d2, "diff2_vs_diff1",
+                                           prior_fn_global, "phi_map.errors.log")
+    phi_map_df   <- bind_rows(phi_map_d1r, phi_map_d2r, phi_map_d1d2)
 
     # MAP preferred; EBapprox fallback for events where MAP failed
     if (nrow(phi_map_df) > 0 && "z_mod" %in% names(phi_map_df)) {
@@ -480,10 +497,13 @@ if (model == 'betabinom_EBmap') {
       df
     }
 
-    sc_d1r_eb <- sc_d1r %>%
+    sc_d1r_eb  <- sc_d1r  %>%
       left_join(phi_final, by = c("gene", "event", "comparison")) %>%
       impute_z_mod(phi_final)
-    sc_d2r_eb <- sc_d2r %>%
+    sc_d2r_eb  <- sc_d2r  %>%
+      left_join(phi_final, by = c("gene", "event", "comparison")) %>%
+      impute_z_mod(phi_final)
+    sc_d1d2_eb <- sc_d1d2 %>%
       left_join(phi_final, by = c("gene", "event", "comparison")) %>%
       impute_z_mod(phi_final)
   }
@@ -492,9 +512,9 @@ if (model == 'betabinom_EBmap') {
   write.table(phi_map_df, file = paste0(outdir, '/', phi_map_file),
               sep = "\t", quote = FALSE, row.names = FALSE)
 
-  sc_both_eb <- bind_rows(sc_d1r_eb, sc_d2r_eb)
+  sc_both_eb <- bind_rows(sc_d1r_eb, sc_d2r_eb, sc_d1d2_eb)
   rm(splitcnts, phi_df, phi_map_df)
-  if (exists("sc_d1r")) rm(sc_d1r, sc_d2r)
+  if (exists("sc_d1r")) rm(sc_d1r, sc_d2r, sc_d1d2)
 
   results <- run_one_comparison(sc_both_eb,
                                 test_fn = test_model_glmmTMB_EB,
@@ -524,14 +544,16 @@ if (model == 'betabinom_EBmap') {
     ## baseMean is now comparison-specific.
     baseMean_d1r  <- sc_d1r  %>% group_by(gene, event) %>% summarise(baseMean = mean(n, na.rm = TRUE), .groups = "drop") %>% mutate(comparison = "diff1_vs_ref")
     baseMean_d2r  <- sc_d2r  %>% group_by(gene, event) %>% summarise(baseMean = mean(n, na.rm = TRUE), .groups = "drop") %>% mutate(comparison = "diff2_vs_ref")
-    baseMean_df_all <- bind_rows(baseMean_d1r, baseMean_d2r)
+    baseMean_d1d2 <- sc_d1d2 %>% group_by(gene, event) %>% summarise(baseMean = mean(n, na.rm = TRUE), .groups = "drop") %>% mutate(comparison = "diff2_vs_diff1")
+    baseMean_df_all <- bind_rows(baseMean_d1r, baseMean_d2r, baseMean_d1d2)
     phi_table <- moderate_phi_trend(phi_df, baseMean_df_all)
     fallback_z <- median(phi_table$z_mod, na.rm = TRUE)
-    # Join moderated phi to each comparison dataset by gene, event, AND comparison
     sc_d1r_eb  <- sc_d1r  %>% left_join(phi_table, by = c("gene", "event", "comparison"))
     sc_d2r_eb  <- sc_d2r  %>% left_join(phi_table, by = c("gene", "event", "comparison"))
-    sc_d1r_eb$z_mod[is.na(sc_d1r_eb$z_mod)] <- fallback_z
-    sc_d2r_eb$z_mod[is.na(sc_d2r_eb$z_mod)] <- fallback_z
+    sc_d1d2_eb <- sc_d1d2 %>% left_join(phi_table, by = c("gene", "event", "comparison"))
+    sc_d1r_eb$z_mod[is.na(sc_d1r_eb$z_mod)]   <- fallback_z
+    sc_d2r_eb$z_mod[is.na(sc_d2r_eb$z_mod)]   <- fallback_z
+    sc_d1d2_eb$z_mod[is.na(sc_d1d2_eb$z_mod)] <- fallback_z
   } else {
     ## Global-mean moderation (original behaviour)
     # To make moderation more robust, apply it independently to each comparison type,
@@ -545,8 +567,9 @@ if (model == 'betabinom_EBmap') {
     # Join moderated phi values.
     sc_d1r_eb  <- sc_d1r  %>% left_join(phi_table, by = c("gene", "event", "comparison"))
     sc_d2r_eb  <- sc_d2r  %>% left_join(phi_table, by = c("gene", "event", "comparison"))
+    sc_d1d2_eb <- sc_d1d2 %>% left_join(phi_table, by = c("gene", "event", "comparison"))
 
-    # Impute missing z_mod with the median of their respective comparison group.
+    # Impute missing z_mod with the median of the comparison group.
     impute_z_mod <- function(df, p_table) {
         if (nrow(df) == 0) return(df)
         comp_name <- df$comparison[1]
@@ -556,15 +579,16 @@ if (model == 'betabinom_EBmap') {
         df$z_mod[is.na(df$z_mod)] <- fallback_z
         df
     }
-    sc_d1r_eb  <- impute_z_mod(sc_d1r_eb, phi_table)
-    sc_d2r_eb  <- impute_z_mod(sc_d2r_eb, phi_table)
+    sc_d1r_eb  <- impute_z_mod(sc_d1r_eb,  phi_table)
+    sc_d2r_eb  <- impute_z_mod(sc_d2r_eb,  phi_table)
+    sc_d1d2_eb <- impute_z_mod(sc_d1d2_eb, phi_table)
   }
   phi_mod_file <- sub("\\.([^.]+)$", ".approx.moderated.\\1", phifile)
   write.table(phi_table, file=paste0(outdir, '/', phi_mod_file), sep="\t", quote=FALSE, row.names=FALSE)
 
-  sc_both_eb <- bind_rows(sc_d1r_eb, sc_d2r_eb)
-  rm(splitcnts, phi_df, phi_table, sc_d1r_eb, sc_d2r_eb)
-  if (exists("sc_d1r")) rm(sc_d1r, sc_d2r)
+  sc_both_eb <- bind_rows(sc_d1r_eb, sc_d2r_eb, sc_d1d2_eb)
+  rm(splitcnts, phi_df, phi_table, sc_d1r_eb, sc_d2r_eb, sc_d1d2_eb)
+  if (exists("sc_d1r")) rm(sc_d1r, sc_d2r, sc_d1d2)
 
   results <- run_one_comparison(sc_both_eb,
                                 test_fn = test_model_glmmTMB_EB,
@@ -697,7 +721,7 @@ message(paste("Processing", length(unique_genes), "unique genes."))
 # Function to safely read a specific gene file
 read_gene_split <- function(gene_id) {
   # Construct filename based on gene ID
-  f <- file.path(countdir, paste0(gene_id, ".", split, ".txt"))
+  f <- file.path(countdir, paste0(gene_id, ".", split, ".sjcnt.txt"))
 
   if (file.exists(f)) {
      tryCatch({
@@ -730,11 +754,18 @@ if (length(split_list) == 0) {
 splits <- bind_rows(split_list)
 message(paste("Loaded split data for", length(unique(splits$gene)), "genes."))
 
+# Reduce to one row per (gene, event) -- sjcnt files are long-format (one row per sample)
+# so we keep only the per-event metadata columns before joining with test results.
+splits_meta <- splits %>%
+  select(any_of(c("gene", "event", "source", "sink",
+                  "intron_distinct1", "intron_distinct2", "intron_shared",
+                  "setdiff1", "setdiff2"))) %>%
+  distinct()
 
 # Combine data
 # Using left_join to keep all tests, filling NAs for missing annotations
 message("Merging data...")
-merged_data <- left_join(tests, splits, by = c("gene", "event"))
+merged_data <- left_join(tests, splits_meta, by = c("gene", "event"))
 message(paste("Merged dataset has", nrow(merged_data), "rows."))
 
 # Write output
@@ -744,19 +775,24 @@ message(paste("Successfully wrote annotated tests to", out_result_annotated))
 
 # Each bipartition event was tested twice (_s1 and _s2 sides). 
 if (split == 'bipartition' || split == 'n_choose_2') {
-  if (nrow(merged_data) > 0 && 'setdiff1' %in% names(merged_data)) {
+  if (nrow(merged_data) > 0 && 'intron_distinct1' %in% names(merged_data)) {
+
+    if (!"setdiff1" %in% names(merged_data)) merged_data$setdiff1 <- NA_character_
+    if (!"setdiff2" %in% names(merged_data)) merged_data$setdiff2 <- NA_character_
 
     # Min p-value combination for bipartition_both:
-    # Take the minimum p-value across sides per event, union the setdiff exonic parts,
+    # Take the minimum p-value across sides per event, union the distinct introns,
     # and re-apply BH FDR correction on the reduced hypothesis set (N not 2N).
-    # Per-event: min p-value + union of setdiff exon parts
+    # Per-event: min p-value + union of distinct introns
     combo_df <- merged_data %>%
       group_by(gene, event) %>%
       summarise(
-        p_min         = {
+        p_min        = {
           pv <- p.value[!is.na(p.value) & p.value > 0 & p.value <= 1]
           if (length(pv) == 0) NA_real_ else min(pv)
         },
+        intron_union  = paste(unique(trimws(unlist(strsplit(
+                                na.omit(c(intron_distinct1, intron_distinct2)), ",")))), collapse = ","),
         setdiff_union = paste(unique(trimws(unlist(strsplit(
                                 na.omit(c(setdiff1, setdiff2)), ",")))), collapse = ","),
         .groups = "drop"
@@ -799,6 +835,8 @@ if (split == 'bipartition' || split == 'n_choose_2') {
           if (length(pv) == 0) NA_real_
           else pchisq(-2 * sum(log(pv)), df = 2 * length(pv), lower.tail = FALSE)
         },
+        intron_union  = paste(unique(trimws(unlist(strsplit(
+                                na.omit(c(intron_distinct1, intron_distinct2)), ",")))), collapse = ","),
         setdiff_union = paste(unique(trimws(unlist(strsplit(
                                 na.omit(c(setdiff1, setdiff2)), ",")))), collapse = ","),
         .groups = "drop"
