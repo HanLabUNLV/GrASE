@@ -212,28 +212,29 @@ cat("\nCombining exon count files...\n")
 
 # Helper function to concatenate files
 concat_exoncnt_files <- function(input_dir, pattern, output_file, label) {
-  print (input_dir)
-  print (pattern)
+  print(input_dir)
+  print(pattern)
   files <- list.files(path = input_dir, pattern = pattern, full.names = TRUE)
-  
+
   if (length(files) == 0) {
     cat(label, ": No files found\n")
     return(invisible(NULL))
   }
-  
-  # Copy first file with header
+
+  # Copy first file (with header) to output
   file.copy(files[1], output_file, overwrite = TRUE)
-  
-  # Append remaining files without headers
+
+  # Append remaining files without headers via shell xargs to avoid R loop overhead
   if (length(files) > 1) {
-    for (i in 2:length(files)) {
-      lines <- readLines(files[i])
-      if (length(lines) > 1) {
-        write(lines[-1], file = output_file, append = TRUE)
-      }
-    }
+    tmp_filelist <- tempfile()
+    on.exit(unlink(tmp_filelist), add = TRUE)
+    writeLines(files[-1], tmp_filelist)
+    cmd <- paste0("xargs -a ", shQuote(tmp_filelist),
+                  " -d '\\n' tail -n +2 -q >> ", shQuote(output_file))
+    ret <- system(cmd)
+    if (ret != 0) stop("shell concat failed for ", label)
   }
-  
+
   cat(label, ": Combined", length(files), "files into", output_file, "\n")
 }
 
