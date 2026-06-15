@@ -529,33 +529,41 @@ moderate_prec_trend <- function(prec_df, baseMean_df, span = 0.5) {
 #' result <- grase::test_model_glmmTMB_without_prior(grouped_data[[1]])
 #' result
 #' }
-test_model_glmmTMB_without_prior <- function(dd) {
+test_model_glmmTMB_without_prior <- function(dd, L, model_label = "betabinom_MLE") {
     gene  <- unique(dd$gene)
     event <- unique(dd$event)
     dd <- dd[dd$n > 0, ]
     if (nrow(dd) < 2 || length(unique(dd$groups)) < 2) return(NULL)
     if (mean(dd$y) == 0) return(NULL)
 
+    dd$groups <- droplevels(dd$groups)
     m1 <- tryCatch(
-      glmmTMB(cbind(y, n - y) ~ groups, data = dd,
+      glmmTMB(cbind(y, n - y) ~ 0 + groups, data = dd,
               family = glmmTMB::betabinomial(link = "logit")),
       error = function(e) NULL
     )
-    m0 <- tryCatch(
-      glmmTMB(cbind(y, n - y) ~ 1, data = dd,
-              family = glmmTMB::betabinomial(link = "logit")),
-      error = function(e) NULL
-    )
+    if (is.null(m1) || is.na(logLik(m1))) return(NULL)
 
-    if (!is.null(m1) && !is.na(logLik(m1)) && !is.null(m0) && !is.na(logLik(m0))) {
-        LR <- 2 * (logLik(m1) - logLik(m0))
-        pval <- pchisq(as.numeric(LR), df = 1, lower.tail = FALSE)
-        eff_size <- fixef(m1)$cond[2]
-        return(data.frame(gene = gene, event = event, LRT = as.numeric(LR),
-                          p.value = pval, model = "betabinom_MLE",
-                          phi = sigma(m1), effect_size = eff_size))
-    }
-    return(NULL)
+    beta     <- fixef(m1)$cond
+    V        <- vcov(m1)$cond
+    coef_nms <- names(beta)
+    phi_val  <- sigma(m1)
+
+    results <- lapply(colnames(L), function(ctr_name) {
+      l_full  <- L[, ctr_name]
+      needed  <- names(l_full)[l_full != 0]
+      if (!all(needed %in% coef_nms)) return(NULL)
+      l_use   <- l_full[coef_nms]
+      est     <- as.numeric(l_use %*% beta)
+      se      <- sqrt(as.numeric(t(l_use) %*% V %*% l_use))
+      if (!is.finite(se) || se <= 0) return(NULL)
+      z2      <- (est / se)^2
+      data.frame(gene = gene, event = event, contrast = ctr_name,
+                 LRT = z2, p.value = pchisq(z2, df = 1, lower.tail = FALSE),
+                 model = model_label, phi = phi_val, effect_size = est,
+                 stringsAsFactors = FALSE)
+    })
+    bind_rows(Filter(Negate(is.null), results))
 }
 
 
@@ -578,7 +586,7 @@ test_model_glmmTMB_without_prior <- function(dd) {
 #' result <- grase::test_model_glmmTMB_EB(grouped_eb[[1]])
 #' result
 #' }
-test_model_glmmTMB_EB <- function(dd, model_label = "betabinom_EBapprox") {
+test_model_glmmTMB_EB <- function(dd, L, model_label = "betabinom_EBapprox") {
     gene  <- unique(dd$gene)
     event <- unique(dd$event)
     dd <- dd[dd$n > 0, ]
@@ -588,32 +596,37 @@ test_model_glmmTMB_EB <- function(dd, model_label = "betabinom_EBapprox") {
     target_log_phi <- dd$z_mod[1]
     if (is.na(target_log_phi)) return(NULL)
 
+    dd$groups <- droplevels(dd$groups)
     m1 <- tryCatch(
-      glmmTMB(cbind(y, n - y) ~ groups, 
-        data = dd, 
-        family = glmmTMB::betabinomial(link="logit"), 
-        start = list(betadisp = target_log_phi),
-        map = list(betadisp = factor(NA))), # This freezes the dispersion
-      error = function(e) NULL
-    )
-    m0 <- tryCatch(
-      glmmTMB(cbind(y, n - y) ~ 1, 
-        data = dd, 
-        family = glmmTMB::betabinomial(link="logit"), 
+      glmmTMB(cbind(y, n - y) ~ 0 + groups,
+        data = dd,
+        family = glmmTMB::betabinomial(link = "logit"),
         start = list(betadisp = target_log_phi),
         map = list(betadisp = factor(NA))),
       error = function(e) NULL
     )
+    if (is.null(m1) || is.na(logLik(m1))) return(NULL)
 
-    if (!is.null(m1) && !is.na(logLik(m1)) && !is.null(m0) && !is.na(logLik(m0))) {
-        LR <- 2 * (logLik(m1) - logLik(m0))
-        pval <- pchisq(as.numeric(LR), df = 1, lower.tail = FALSE)
-        eff_size <- fixef(m1)$cond[2]
-        return(data.frame(gene = gene, event = event, LRT = as.numeric(LR),
-                          p.value = pval, model = model_label,
-                          phi = sigma(m1), effect_size = eff_size))
-    }
-    return(NULL)
+    beta     <- fixef(m1)$cond
+    V        <- vcov(m1)$cond
+    coef_nms <- names(beta)
+    phi_val  <- sigma(m1)
+
+    results <- lapply(colnames(L), function(ctr_name) {
+      l_full  <- L[, ctr_name]
+      needed  <- names(l_full)[l_full != 0]
+      if (!all(needed %in% coef_nms)) return(NULL)
+      l_use   <- l_full[coef_nms]
+      est     <- as.numeric(l_use %*% beta)
+      se      <- sqrt(as.numeric(t(l_use) %*% V %*% l_use))
+      if (!is.finite(se) || se <= 0) return(NULL)
+      z2      <- (est / se)^2
+      data.frame(gene = gene, event = event, contrast = ctr_name,
+                 LRT = z2, p.value = pchisq(z2, df = 1, lower.tail = FALSE),
+                 model = model_label, phi = phi_val, effect_size = est,
+                 stringsAsFactors = FALSE)
+    })
+    bind_rows(Filter(Negate(is.null), results))
 }
 
 
@@ -794,10 +807,9 @@ test_model_multinomial_plugin_dm_EB <- function(dd) {
 #'   the ref exon is the likely driver (denominator effect FP).
 #'   Filter criterion: keep events where lfc_diff_net > delta.
 #' @export
-compute_lfc_summary <- function(splitcnts, pseudocount = 1L) {
-  lvls     <- levels(splitcnts$groups)
-  cond_ref <- lvls[1]   # reference condition (denominator of LFC)
-  cond_trt <- lvls[2]   # treatment condition  (numerator  of LFC)
+compute_lfc_summary <- function(splitcnts, pseudocount = 1L,
+                                cond_ref = levels(splitcnts$groups)[1],
+                                cond_trt = levels(splitcnts$groups)[2]) {
 
   splitcnts %>%
     dplyr::group_by(gene, event, groups) %>%

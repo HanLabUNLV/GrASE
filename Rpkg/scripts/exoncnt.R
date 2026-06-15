@@ -26,8 +26,10 @@ option_list = list(
               help="partition type", metavar="character"),
   make_option(c("-1", "--cond1"), type="character",  
               help="condition1", metavar="character"),
-  make_option(c("-2", "--cond2"), type="character",  
+  make_option(c("-2", "--cond2"), type="character",
               help="condition2", metavar="character"),
+  make_option(c("--conditions"), type="character", default=NULL,
+              help="comma-separated list of all conditions, e.g. CD4,CD4_STIM,TH1,TH2,TH17 (overrides --cond1/--cond2)", metavar="character"),
   make_option(c("-a", "--alt"), type="character",
               help="choose between 'internal' (internal AS) or 'TSS'(alternative TSS) ", metavar="character")
 ); 
@@ -60,27 +62,41 @@ if (!is.null(opt$alt)) {
   } else if (opt$alt == 'TSS') {
     alt = 'TSSTTS'
   } else {
-    stop ("choose between 'internal' (internal AS) or 'TSS'(alternative TSS) ") 
+    stop ("choose between 'internal' (internal AS) or 'TSS'(alternative TSS) ")
   }
-} 
+}
 
+if (!is.null(opt$conditions)) {
+  all_conditions <- trimws(strsplit(opt$conditions, ",")[[1]])
+} else {
+  all_conditions <- c(cond1, cond2)
+}
 
+countFiles_per_cond <- lapply(all_conditions, function(cond) {
+  d <- paste0(countdir, '/', cond)
+  if (!dir.exists(d)) {
+    cat("WARNING: condition directory not found:", d, "\n")
+    return(character(0))
+  }
+  files <- list.files(d, pattern = "\\.txt$", full.names=TRUE)
+  if (length(files) == 0) cat("WARNING: no .txt files found in:", d, "\n")
+  files
+})
+names(countFiles_per_cond) <- all_conditions
 
-countFiles1 <- list.files(paste0(countdir, '/', cond1), pattern = "\\.txt$", full.names=TRUE)
-countFiles2 <- list.files(paste0(countdir, '/', cond2), pattern = "\\.txt$", full.names=TRUE)
-countFiles = c(countFiles1, countFiles2)
-cond1_ncells = length(countFiles1)
-cond2_ncells = length(countFiles2)
+countFiles <- unlist(countFiles_per_cond, use.names = FALSE)
 total_ncells = length(countFiles)
 
-listOfFiles <- lapply(countFiles, function(x) read.table(x, header=FALSE, sep="\t", row.names = 1)) 
+listOfFiles <- lapply(countFiles, function(x) read.table(x, header=FALSE, sep="\t", row.names = 1))
 read_counts <- data.frame(listOfFiles)
 
-# samplesIDs
-samples1 <- sub("_counts\\.txt$", "", basename(countFiles1))
-samples2 <- sub("_counts\\.txt$", "", basename(countFiles2))
-sampleNames = c(paste0(cond1, '_', samples1), paste0(cond2, '_', samples2))
-conditions = c(rep(cond1,length(samples1)), rep(cond2, length(samples2)))
+sampleNames <- unlist(lapply(all_conditions, function(cond) {
+  samples <- sub("_counts\\.txt$", "", basename(countFiles_per_cond[[cond]]))
+  paste0(cond, '_', samples)
+}), use.names = FALSE)
+conditions <- unlist(lapply(all_conditions, function(cond) {
+  rep(cond, length(countFiles_per_cond[[cond]]))
+}), use.names = FALSE)
 
 colnames(read_counts) <- sampleNames
 # Remove rows where rownames start with "_"
@@ -93,7 +109,7 @@ counts_list <- split(read_counts, read_counts$gene)
 
 sampleTable = data.frame(
   row.names = sampleNames,
-  condition = c(rep(cond1, cond1_ncells), rep(cond2, cond2_ncells)))
+  condition = conditions)
 sampleinfo <- as.vector(sampleTable[,"condition"])
 names(sampleinfo) <- rownames(sampleTable)
 

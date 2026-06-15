@@ -4,7 +4,7 @@
 \alias{test_model_glmmTMB_EB}
 \title{Test differential exon usage with a beta-binomial glmmTMB model using fixed moderated dispersion.}
 \usage{
-test_model_glmmTMB_EB(dd, model_label = "betabinom_EBapprox")
+test_model_glmmTMB_EB(dd, L, model_label = "betabinom_EBapprox")
 }
 \arguments{
 \item{dd}{A data frame of exon count data with column \code{z_mod} (log-scale moderated phi).}

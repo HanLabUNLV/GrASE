@@ -5,7 +5,7 @@
 \title{Test differential exon usage with a beta-binomial glmmTMB model, no prior on dispersion.
 Intended for comparison with \code{test_model_glmmTMB_EB}.}
 \usage{
-test_model_glmmTMB_without_prior(dd)
+test_model_glmmTMB_without_prior(dd, L, model_label = "betabinom_MLE")
 }
 \arguments{
 \item{dd}{A data frame of exon count data.}

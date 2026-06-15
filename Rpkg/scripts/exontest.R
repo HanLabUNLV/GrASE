@@ -36,6 +36,8 @@ option_list = list(
               help="condition 1 name (Group 1 - Group 2)", metavar="character"),
   make_option(c("--cond2"), type="character",
               help="condition 2 name (Reference Group)", metavar="character"),
+  make_option(c("--contrasts"), type="character", default=NULL,
+              help="comma-separated contrasts in trt:ref format, e.g. B:A,C:A (overrides --cond1/--cond2 for multi-group runs)", metavar="character"),
   make_option(c("--use_phi_loess"), action="store_true", default=FALSE,
               help="use loess phi trend (log(phi) ~ log(baseMean)) as EB shrinkage target instead of global median"),
   make_option(c("--independent_filtering"), action="store_true", default=FALSE,
@@ -80,6 +82,17 @@ if (!is.null(opt$cond1)) {
 if (!is.null(opt$cond2)) {
   cond2 = opt$cond2
 }
+if (!is.null(opt$contrasts)) {
+  contrast_specs <- trimws(strsplit(opt$contrasts, ",")[[1]])
+  contrasts <- lapply(contrast_specs, function(s) {
+    parts <- trimws(strsplit(s, ":")[[1]])
+    if (length(parts) != 2) stop("each contrast must be trt:ref, got: ", s)
+    list(trt = parts[1], ref = parts[2])
+  })
+} else {
+  contrasts <- list(list(trt = cond1, ref = cond2))
+}
+all_groups <- unique(c(sapply(contrasts, `[[`, "ref"), sapply(contrasts, `[[`, "trt")))
 phi_trend        <- isTRUE(opt$use_phi_loess)
 indep_filter     <- isTRUE(opt$independent_filtering)
 pseudocount      <- as.integer(opt$pseudocount)
@@ -114,8 +127,19 @@ out_resultfile=paste0(outdir,'/test_', out_prefix,'_', model, '.txt')
 
 if (file.exists(exoncnt_master)) {
   splitcnts <- read.table(exoncnt_master, header=TRUE, row.names=NULL)
-  # Set levels such that cond2 is reference, so coefficient is cond1 - cond2
-  splitcnts$groups <- factor(splitcnts$groups, levels = c(cond2, cond1))
+  # Include all groups mentioned in any contrast; drop samples from other groups.
+  splitcnts$groups <- factor(splitcnts$groups, levels = all_groups)
+  splitcnts <- splitcnts[!is.na(splitcnts$groups), ]
+  # Contrast matrix L: rows = "groups<level>", one column per contrast.
+  L <- matrix(0L, nrow = length(all_groups), ncol = length(contrasts),
+              dimnames = list(
+                paste0("groups", all_groups),
+                sapply(contrasts, function(ct) paste0(ct$trt, "_vs_", ct$ref))
+              ))
+  for (ki in seq_along(contrasts)) {
+    L[paste0("groups", contrasts[[ki]]$ref), ki] <- -1L
+    L[paste0("groups", contrasts[[ki]]$trt), ki] <-  1L
+  }
 } else {
   print('exoncnt dataset file does not exist.')
   print('please combine the exoncounts into one file and specify the filename.')
@@ -153,9 +177,15 @@ if (split != "multinomial") {
     sc_d2r  <- apply_pseudo(sc_d2r)
   }
 
-  lfc_d1r  <- compute_lfc_summary(sc_d1r)  %>% mutate(comparison = "diff1_vs_ref")
-  lfc_d2r  <- compute_lfc_summary(sc_d2r)  %>% mutate(comparison = "diff2_vs_ref")
-  lfc_summary_all <- bind_rows(lfc_d1r, lfc_d2r)
+  lfc_summary_all <- bind_rows(lapply(contrasts, function(ct) {
+    ctr_name <- paste0(ct$trt, "_vs_", ct$ref)
+    bind_rows(
+      compute_lfc_summary(sc_d1r, cond_ref = ct$ref, cond_trt = ct$trt) %>%
+        mutate(comparison = "diff1_vs_ref", contrast = ctr_name),
+      compute_lfc_summary(sc_d2r, cond_ref = ct$ref, cond_trt = ct$trt) %>%
+        mutate(comparison = "diff2_vs_ref", contrast = ctr_name)
+    )
+  }))
   comparisons_list <- list(sc_d1r, sc_d2r)
 }
 # Global Precision Estimation
@@ -499,18 +529,24 @@ if (model == 'betabinom_EBmap') {
   results <- run_one_comparison(sc_both_eb,
                                 test_fn = test_model_glmmTMB_EB,
                                 err_log = "glmmtmb_EBmap.errors.log",
-                                model_label = "betabinom_EBmap")
+                                model_label = "betabinom_EBmap",
+                                L = L)
   rm(sc_both_eb)
 
   results <- results %>%
     left_join(baseMean_df, by = c("gene", "event")) %>%
-    left_join(lfc_summary_all, by = c("gene", "event", "comparison"))
+    left_join(lfc_summary_all, by = c("gene", "event", "comparison", "contrast"))
 
   if (exists("pvalueAdjustment") && nrow(results) > 0) {
-    results$pvalue <- results$p.value
-    results <- pvalueAdjustment(results, independentFiltering = indep_filter,
-                                alpha = 0.05, pAdjustMethod = "BH")
-    results$pvalue <- NULL
+    results <- results %>%
+      group_by(contrast) %>%
+      group_modify(~ {
+        r <- .x; r$pvalue <- r$p.value
+        r <- pvalueAdjustment(r, independentFiltering = indep_filter,
+                              alpha = 0.05, pAdjustMethod = "BH")
+        r$pvalue <- NULL; r
+      }) %>%
+      ungroup()
   }
 
   results <- add_significant(results, padj_thr, delta)
@@ -569,20 +605,27 @@ if (model == 'betabinom_EBmap') {
   results <- run_one_comparison(sc_both_eb,
                                 test_fn = test_model_glmmTMB_EB,
                                 err_log = "glmmtmb_EB.errors.log",
-                                model_label = "betabinom_EBapprox")
+                                model_label = "betabinom_EBapprox",
+                                L = L)
   rm(sc_both_eb)
   results <- results %>%
     left_join(baseMean_df, by = c("gene", "event")) %>%
-    left_join(lfc_summary_all, by = c("gene", "event", "comparison"))
+    left_join(lfc_summary_all, by = c("gene", "event", "comparison", "contrast"))
 
   if (exists("pvalueAdjustment") && nrow(results) > 0) {
-      results$pvalue <- results$p.value
-      results <- pvalueAdjustment(results, independentFiltering=indep_filter, alpha=0.05, pAdjustMethod="BH")
-      results$pvalue <- NULL
+    results <- results %>%
+      group_by(contrast) %>%
+      group_modify(~ {
+        r <- .x; r$pvalue <- r$p.value
+        r <- pvalueAdjustment(r, independentFiltering = indep_filter,
+                              alpha = 0.05, pAdjustMethod = "BH")
+        r$pvalue <- NULL; r
+      }) %>%
+      ungroup()
   }
 
   results <- add_significant(results, padj_thr, delta)
-  write.table(results, file=out_resultfile, quote=FALSE, sep="\t", row.names=FALSE)
+  write.table(results, file = out_resultfile, quote = FALSE, sep = "\t", row.names = FALSE)
 
 } else if (model == 'dirmult_EBplugin') {
 
@@ -598,73 +641,93 @@ if (model == 'betabinom_EBmap') {
     splitcnts_eb$prec_mod[na_rows]     <- fallback_prec
     splitcnts_eb$rho_mod[na_rows]      <- fallback_rho
   }
-  grouped_eb <- splitcnts_eb %>% group_by(gene, event) %>% group_split()
+  test_fn_dm <- test_model_multinomial_plugin_dm_EB
 
-  test_fn <- test_model_multinomial_plugin_dm_EB
-  err_log <- paste0(model, ".errors.log")
-
-  res_dm <- mclapply(grouped_eb, function(dd) {
-    tryCatch(
-      test_fn(dd),
-      error = function(e) {
-        msg <- sprintf("[%s] ERROR gene=%s event=%s (PID %d): %s\n",
-                       format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
-                       dd$gene[1], dd$event[1], Sys.getpid(), conditionMessage(e))
-        cat(msg, file = err_log, append = TRUE)
+  contrast_results <- lapply(seq_along(contrasts), function(ki) {
+    ctr_ref  <- contrasts[[ki]]$ref
+    ctr_trt  <- contrasts[[ki]]$trt
+    ctr_name <- paste0(ctr_trt, "_vs_", ctr_ref)
+    ctr_data <- splitcnts_eb %>%
+      filter(groups %in% c(ctr_ref, ctr_trt)) %>%
+      mutate(groups = factor(as.character(groups), levels = c(ctr_ref, ctr_trt)))
+    grouped_ctr <- ctr_data %>% group_by(gene, event) %>% group_split()
+    err_log <- paste0(model, ".", ctr_name, ".errors.log")
+    res_dm <- mclapply(grouped_ctr, function(dd) {
+      tryCatch(test_fn_dm(dd), error = function(e) {
+        cat(sprintf("[%s] ERROR gene=%s event=%s (PID %d): %s\n",
+                    format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
+                    dd$gene[1], dd$event[1], Sys.getpid(), conditionMessage(e)),
+            file = err_log, append = TRUE)
         NULL
-      }
-    )
-  }, mc.cores = 32)
-  #stopCluster(cl)
-  results <- bind_rows(res_dm)
-  # lfc_summary is not computed for multinomial (no diff/ref columns)
-
-  if (exists("pvalueAdjustment") && nrow(results) > 0) {
-      results$pvalue <- results$p.value
-      results <- pvalueAdjustment(results, independentFiltering=FALSE, theta=NULL, alpha=0.05, pAdjustMethod="BH")
-      results$pvalue <- NULL
-  }
-
-  results <- add_significant(results, padj_thr, delta)
-  write.table(results, file=out_resultfile, sep="\t", quote=F, row.names = FALSE)
+      })
+    }, mc.cores = 32)
+    res <- bind_rows(Filter(Negate(is.null), res_dm))
+    if (is.null(res) || nrow(res) == 0) return(NULL)
+    res$contrast <- ctr_name
+    if (exists("pvalueAdjustment")) {
+      res$pvalue <- res$p.value
+      res <- pvalueAdjustment(res, independentFiltering = FALSE, theta = NULL,
+                              alpha = 0.05, pAdjustMethod = "BH")
+      res$pvalue <- NULL
+    }
+    add_significant(res, padj_thr, delta)
+  })
+  results <- bind_rows(contrast_results)
+  write.table(results, file = out_resultfile, sep = "\t", quote = FALSE, row.names = FALSE)
 
 } else if (model == 'wilcoxon') {
   if (!is.null(opt$phi)) warning("--phi is not used for model '", model, "' and will be ignored")
 
-  results <- run_one_comparison(bind_rows(comparisons_list),
-                                test_fn = test_model_wilcoxon,
-                                err_log = "wilcoxon.errors.log")
-  results <- results %>%
-    left_join(baseMean_df, by = c("gene", "event")) %>%
-    left_join(lfc_summary_all, by = c("gene", "event", "comparison"))
-
-  if (exists("pvalueAdjustment") && nrow(results) > 0) {
-      results$pvalue <- results$p.value
-      results <- pvalueAdjustment(results, independentFiltering=indep_filter, alpha=0.05, pAdjustMethod="BH")
-      results$pvalue <- NULL
-  }
-
-  results <- add_significant(results, padj_thr, delta)
-  write.table(results, file=out_resultfile, quote=FALSE, sep="\t", row.names = FALSE)
+  contrast_results <- lapply(seq_along(contrasts), function(ki) {
+    ctr_ref  <- contrasts[[ki]]$ref
+    ctr_trt  <- contrasts[[ki]]$trt
+    ctr_name <- paste0(ctr_trt, "_vs_", ctr_ref)
+    sc_ctr <- bind_rows(comparisons_list) %>%
+      filter(groups %in% c(ctr_ref, ctr_trt)) %>%
+      mutate(groups = factor(as.character(groups), levels = c(ctr_ref, ctr_trt)))
+    res <- run_one_comparison(sc_ctr, test_fn = test_model_wilcoxon,
+                              err_log = paste0("wilcoxon.", ctr_name, ".log"))
+    if (is.null(res) || nrow(res) == 0) return(NULL)
+    res$contrast <- ctr_name
+    res <- res %>%
+      left_join(baseMean_df, by = c("gene", "event")) %>%
+      left_join(lfc_summary_all, by = c("gene", "event", "comparison", "contrast"))
+    if (exists("pvalueAdjustment")) {
+      res$pvalue <- res$p.value
+      res <- pvalueAdjustment(res, independentFiltering = indep_filter,
+                              alpha = 0.05, pAdjustMethod = "BH")
+      res$pvalue <- NULL
+    }
+    add_significant(res, padj_thr, delta)
+  })
+  results <- bind_rows(contrast_results)
+  write.table(results, file = out_resultfile, quote = FALSE, sep = "\t", row.names = FALSE)
 
 } else if (model == 'betabinom_MLE') {
   if (!is.null(opt$phi)) warning("--phi is not used for model '", model, "' and will be ignored")
 
   results <- run_one_comparison(bind_rows(comparisons_list),
-                                test_fn = function(dd) suppressMessages(test_model_glmmTMB_without_prior(dd)),
-                                err_log = "glmmtmb_noprior.errors.log")
+                                test_fn = function(dd, ...) suppressMessages(test_model_glmmTMB_without_prior(dd, ...)),
+                                err_log = "glmmtmb_noprior.errors.log",
+                                L = L)
   results <- results %>%
     left_join(baseMean_df, by = c("gene", "event")) %>%
-    left_join(lfc_summary_all, by = c("gene", "event", "comparison"))
+    left_join(lfc_summary_all, by = c("gene", "event", "comparison", "contrast"))
 
   if (exists("pvalueAdjustment") && nrow(results) > 0) {
-    results$pvalue <- results$p.value
-    results <- pvalueAdjustment(results, independentFiltering=indep_filter, alpha=0.05, pAdjustMethod="BH")
-    results$pvalue <- NULL
+    results <- results %>%
+      group_by(contrast) %>%
+      group_modify(~ {
+        r <- .x; r$pvalue <- r$p.value
+        r <- pvalueAdjustment(r, independentFiltering = indep_filter,
+                              alpha = 0.05, pAdjustMethod = "BH")
+        r$pvalue <- NULL; r
+      }) %>%
+      ungroup()
   }
 
   results <- add_significant(results, padj_thr, delta)
-  write.table(results, file=out_resultfile, quote=FALSE, sep="\t", row.names = FALSE)
+  write.table(results, file = out_resultfile, quote = FALSE, sep = "\t", row.names = FALSE)
 
 } else {
   print ("model misspecified")
@@ -751,7 +814,7 @@ if (split == 'bipartition' || split == 'n_choose_2') {
     # and re-apply BH FDR correction on the reduced hypothesis set (N not 2N).
     # Per-event: min p-value + union of setdiff exon parts
     combo_df <- merged_data %>%
-      group_by(gene, event) %>%
+      group_by(gene, event, contrast) %>%
       summarise(
         p_min         = {
           pv <- p.value[!is.na(p.value) & p.value > 0 & p.value <= 1]
@@ -764,12 +827,12 @@ if (split == 'bipartition' || split == 'n_choose_2') {
 
     # Primary row per event: prefer the side with the lower p-value
     primary_df <- merged_data %>%
-      group_by(gene, event) %>%
+      group_by(gene, event, contrast) %>%
       slice(which.min(p.value)) %>%
       ungroup()
 
     min_data <- primary_df %>%
-      left_join(combo_df, by = c("gene", "event")) %>%
+      left_join(combo_df, by = c("gene", "event", "contrast")) %>%
       mutate(p.value = p_min) %>%
       select(-p_min)
 
@@ -792,7 +855,7 @@ if (split == 'bipartition' || split == 'n_choose_2') {
     #   X = -2 * sum(log(p))  ~  chi-squared with 2*k df  (k = number of sides)
     # When only one side has a valid p-value, use that p directly (1 df = 2).
     fisher_combo_df <- merged_data %>%
-      group_by(gene, event) %>%
+      group_by(gene, event, contrast) %>%
       summarise(
         p_fisher      = {
           pv <- p.value[!is.na(p.value) & p.value > 0 & p.value <= 1]
@@ -805,7 +868,7 @@ if (split == 'bipartition' || split == 'n_choose_2') {
       )
 
     fisher_data <- primary_df %>%
-      left_join(fisher_combo_df, by = c("gene", "event")) %>%
+      left_join(fisher_combo_df, by = c("gene", "event", "contrast")) %>%
       mutate(p.value = p_fisher) %>%
       select(-p_fisher)
 

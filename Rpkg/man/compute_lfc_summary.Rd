@@ -4,7 +4,12 @@
 \alias{compute_lfc_summary}
 \title{Compute per-event log2 fold changes for diff and ref counts}
 \usage{
-compute_lfc_summary(splitcnts, pseudocount = 1L)
+compute_lfc_summary(
+  splitcnts,
+  pseudocount = 1L,
+  cond_ref = levels(splitcnts$groups)[1],
+  cond_trt = levels(splitcnts$groups)[2]
+)
 }
 \arguments{
 \item{splitcnts}{A data frame with columns gene, event, sample, groups, diff, ref.
