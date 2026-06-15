@@ -51,7 +51,9 @@ make_option(c("--use_prec_loess"), action="store_true", default=FALSE,
   make_option(c("--padj_threshold"), type="double", default=0.05,
               help="padj threshold for the significant column [default: 0.05]", metavar="double"),
   make_option(c("--delta"), type="double", default=0,
-              help="lfc_diff_net threshold for the significant column; events with lfc_diff_net <= delta are not significant [default: 0]", metavar="double")
+              help="lfc_diff_net threshold for the significant column; events with lfc_diff_net <= delta are not significant [default: 0]", metavar="double"),
+  make_option(c("--mc_cores"), type="integer", default=32L,
+              help="number of parallel worker processes for mclapply [default: %default]", metavar="integer")
 );
  
 opt_parser = OptionParser(option_list=option_list);
@@ -98,6 +100,7 @@ all_groups <- unique(c(sapply(contrasts, `[[`, "ref"), sapply(contrasts, `[[`, "
 phi_trend        <- isTRUE(opt$use_phi_loess)
 indep_filter     <- isTRUE(opt$independent_filtering)
 pseudocount      <- as.integer(opt$pseudocount)
+mc_cores         <- as.integer(opt$mc_cores)
 prec_trend       <- isTRUE(opt$use_prec_loess)
 padj_thr         <- as.double(opt$padj_threshold)
 delta            <- as.double(opt$delta)
@@ -162,7 +165,8 @@ if (split != "multinomial") {
       mutate(diff = .data[[diff_col]],
              ref  = .data[[ref_col]],
              n    = .data[[diff_col]] + .data[[ref_col]],
-             comparison = comp_name)
+             comparison = comp_name) %>%
+      select(gene, event, groups, diff, ref, n, comparison)
   }
 
   sc_d1r  <- make_comparison(splitcnts, "diff1", "ref",   "diff1_vs_ref")
@@ -196,6 +200,8 @@ if (model == 'betabinom_EBmap' || model == 'betabinom_EBapprox') {
 
   if (is.null(opt$phi)) stop("--phi is required for model '", model, "'")
   if (!is.null(opt$prec)) warning("--prec is not used for model '", model, "' and will be ignored")
+  rm(splitcnts)
+  gc()
 
   if (file.exists(paste0(outdir, "/", phifile))) {
     phi_df <- read.table(paste0(outdir,'/', phifile), header=TRUE, row.names=NULL)
@@ -235,7 +241,7 @@ if (model == 'betabinom_EBmap' || model == 'betabinom_EBapprox') {
           cat(sprintf("%s\t%s\n", dd$gene[1], dd$event[1]),
               file = phi_progress_file, append = TRUE)
           result
-        }, mc.cores = 32)
+        }, mc.cores = mc_cores)
         message(sprintf("[%s] phi chunk %d/%d done (%d events)",
                         format(Sys.time(), "%H:%M:%S"), ci,
                         length(chunk_starts), length(idx)))
@@ -297,7 +303,7 @@ if (model == 'betabinom_EBmap' || model == 'betabinom_EBapprox') {
       cat(sprintf("%s\t%s\n", dd$gene[1], dd$event[1]),
           file = progress_file, append = TRUE)
       result
-    }, mc.cores=32)
+    }, mc.cores = mc_cores)
     prec_raw <- bind_rows(Filter(Negate(is.null), prec_list))
     rm(prec_list)
     write.table(prec_raw, paste0(outdir,'/', prec_file), sep="\t", quote=F, row.names = FALSE)
@@ -336,7 +342,7 @@ run_one_comparison <- function(sc, test_fn, err_log, ..., chunk_size = 10000L) {
       if (!is.null(result) && "comparison" %in% names(dd))
         result$comparison <- dd$comparison[1]
       result
-    }, mc.cores = 32)
+    }, mc.cores = mc_cores)
     all_results[[ci]] <- bind_rows(Filter(Negate(is.null), chunk_res))
     message(sprintf("[%s] LRT testing chunk %d/%d done (%d events)",
                     format(Sys.time(), "%H:%M:%S"), ci, n_chunks, length(idx)))
@@ -377,7 +383,7 @@ if (model == 'betabinom_EBmap') {
         })
         if (!is.null(result)) result$comparison <- comp_name
         result
-      }, mc.cores = 32)
+      }, mc.cores = mc_cores)
       message(sprintf("[%s] MAP phi moderation chunk %d/%d done (%d events, %s)",
                       format(Sys.time(), "%H:%M:%S"), ci,
                       length(chunk_starts), length(idx), comp_name))
@@ -526,8 +532,9 @@ if (model == 'betabinom_EBmap') {
               sep = "\t", quote = FALSE, row.names = FALSE)
 
   sc_both_eb <- bind_rows(sc_d1r_eb, sc_d2r_eb)
-  rm(splitcnts, phi_df, phi_map_df)
+  rm(sc_d1r_eb, sc_d2r_eb, phi_df, phi_map_df)
   if (exists("sc_d1r")) rm(sc_d1r, sc_d2r)
+  gc()
 
   results <- run_one_comparison(sc_both_eb,
                                 test_fn = test_model_glmmTMB_EB,
@@ -601,8 +608,9 @@ if (model == 'betabinom_EBmap') {
   write.table(phi_table, file=paste0(outdir, '/', phi_mod_file), sep="\t", quote=FALSE, row.names=FALSE)
 
   sc_both_eb <- bind_rows(sc_d1r_eb, sc_d2r_eb)
-  rm(splitcnts, phi_df, phi_table, sc_d1r_eb, sc_d2r_eb)
+  rm(phi_df, phi_table, sc_d1r_eb, sc_d2r_eb)
   if (exists("sc_d1r")) rm(sc_d1r, sc_d2r)
+  gc()
 
   results <- run_one_comparison(sc_both_eb,
                                 test_fn = test_model_glmmTMB_EB,
@@ -661,7 +669,7 @@ if (model == 'betabinom_EBmap') {
             file = err_log, append = TRUE)
         NULL
       })
-    }, mc.cores = 32)
+    }, mc.cores = mc_cores)
     res <- bind_rows(Filter(Negate(is.null), res_dm))
     if (is.null(res) || nrow(res) == 0) return(NULL)
     res$contrast <- ctr_name
@@ -776,15 +784,16 @@ read_gene_split <- function(gene_id) {
 
 
 # Iterate over unique genes and read their corresponding files
-n_cores <- 32
-message(paste("Using", n_cores, "cores for reading split files."))
-split_list <- mclapply(unique_genes, read_gene_split, mc.cores = n_cores)
+message(paste("Using", mc_cores, "cores for reading split files."))
+split_list <- mclapply(unique_genes, read_gene_split, mc.cores = mc_cores)
 # Filter out NULLs
 split_list <- split_list[!sapply(split_list, is.null)]
 if (length(split_list) == 0) {
   stop("No matching split files found for any genes in the test file.")
 }
 splits <- bind_rows(split_list)
+rm(split_list)
+gc()
 message(paste("Loaded split data for", length(unique(splits$gene)), "genes."))
 
 
