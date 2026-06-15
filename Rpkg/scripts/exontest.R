@@ -40,8 +40,10 @@ option_list = list(
               help="comma-separated contrasts in trt:ref format, e.g. B:A,C:A (overrides --cond1/--cond2 for multi-group runs)", metavar="character"),
   make_option(c("--use_phi_loess"), action="store_true", default=FALSE,
               help="use loess phi trend (log(phi) ~ log(baseMean)) as EB shrinkage target instead of global median"),
-  make_option(c("--independent_filtering"), action="store_true", default=FALSE,
-              help="use DESeq2-style independent filtering (filter on baseMean) before BH FDR correction"),
+  make_option(c("--independent_filtering"), action="store_true", default=TRUE,
+              help="use DESeq2-style independent filtering (filter on baseMean) before FDR correction [default: TRUE]"),
+  make_option(c("--padj_method"), type="character", default="nested_BH",
+              help="p-value adjustment method: nested_BH (default) or any p.adjust method e.g. BH", metavar="character"),
   make_option(c("--pseudocount"), type="integer", default=0L,
               help="pseudocount added to diff (ref reads) and n (total) before testing; enables detection of all-or-nothing switches when ref coverage is zero [default: 0]"),
 make_option(c("--use_prec_loess"), action="store_true", default=FALSE,
@@ -99,6 +101,7 @@ pseudocount      <- as.integer(opt$pseudocount)
 prec_trend       <- isTRUE(opt$use_prec_loess)
 padj_thr         <- as.double(opt$padj_threshold)
 delta            <- as.double(opt$delta)
+padj_method      <- as.character(opt$padj_method)
 
 # Expand tilde in paths
 outdir <- path.expand(outdir)
@@ -537,13 +540,12 @@ if (model == 'betabinom_EBmap') {
     left_join(baseMean_df, by = c("gene", "event")) %>%
     left_join(lfc_summary_all, by = c("gene", "event", "comparison", "contrast"))
 
-  if (exists("pvalueAdjustment") && nrow(results) > 0) {
+  if (nrow(results) > 0) {
     results <- results %>%
       group_by(contrast) %>%
       group_modify(~ {
         r <- .x; r$pvalue <- r$p.value
-        r <- pvalueAdjustment(r, independentFiltering = indep_filter,
-                              alpha = 0.05, pAdjustMethod = "BH")
+        r <- adjust_pvalues(r, independentFiltering = indep_filter, alpha = 0.05, method = padj_method)
         r$pvalue <- NULL; r
       }) %>%
       ungroup()
@@ -612,13 +614,12 @@ if (model == 'betabinom_EBmap') {
     left_join(baseMean_df, by = c("gene", "event")) %>%
     left_join(lfc_summary_all, by = c("gene", "event", "comparison", "contrast"))
 
-  if (exists("pvalueAdjustment") && nrow(results) > 0) {
+  if (nrow(results) > 0) {
     results <- results %>%
       group_by(contrast) %>%
       group_modify(~ {
         r <- .x; r$pvalue <- r$p.value
-        r <- pvalueAdjustment(r, independentFiltering = indep_filter,
-                              alpha = 0.05, pAdjustMethod = "BH")
+        r <- adjust_pvalues(r, independentFiltering = indep_filter, alpha = 0.05, method = padj_method)
         r$pvalue <- NULL; r
       }) %>%
       ungroup()
@@ -664,12 +665,9 @@ if (model == 'betabinom_EBmap') {
     res <- bind_rows(Filter(Negate(is.null), res_dm))
     if (is.null(res) || nrow(res) == 0) return(NULL)
     res$contrast <- ctr_name
-    if (exists("pvalueAdjustment")) {
-      res$pvalue <- res$p.value
-      res <- pvalueAdjustment(res, independentFiltering = FALSE, theta = NULL,
-                              alpha = 0.05, pAdjustMethod = "BH")
-      res$pvalue <- NULL
-    }
+    res$pvalue <- res$p.value
+    res <- adjust_pvalues(res, independentFiltering = FALSE, alpha = 0.05, method = padj_method)
+    res$pvalue <- NULL
     add_significant(res, padj_thr, delta)
   })
   results <- bind_rows(contrast_results)
@@ -692,12 +690,9 @@ if (model == 'betabinom_EBmap') {
     res <- res %>%
       left_join(baseMean_df, by = c("gene", "event")) %>%
       left_join(lfc_summary_all, by = c("gene", "event", "comparison", "contrast"))
-    if (exists("pvalueAdjustment")) {
-      res$pvalue <- res$p.value
-      res <- pvalueAdjustment(res, independentFiltering = indep_filter,
-                              alpha = 0.05, pAdjustMethod = "BH")
-      res$pvalue <- NULL
-    }
+    res$pvalue <- res$p.value
+    res <- adjust_pvalues(res, independentFiltering = indep_filter, alpha = 0.05, method = padj_method)
+    res$pvalue <- NULL
     add_significant(res, padj_thr, delta)
   })
   results <- bind_rows(contrast_results)
@@ -714,13 +709,12 @@ if (model == 'betabinom_EBmap') {
     left_join(baseMean_df, by = c("gene", "event")) %>%
     left_join(lfc_summary_all, by = c("gene", "event", "comparison", "contrast"))
 
-  if (exists("pvalueAdjustment") && nrow(results) > 0) {
+  if (nrow(results) > 0) {
     results <- results %>%
       group_by(contrast) %>%
       group_modify(~ {
         r <- .x; r$pvalue <- r$p.value
-        r <- pvalueAdjustment(r, independentFiltering = indep_filter,
-                              alpha = 0.05, pAdjustMethod = "BH")
+        r <- adjust_pvalues(r, independentFiltering = indep_filter, alpha = 0.05, method = padj_method)
         r$pvalue <- NULL; r
       }) %>%
       ungroup()
@@ -836,12 +830,10 @@ if (split == 'bipartition' || split == 'n_choose_2') {
       mutate(p.value = p_min) %>%
       select(-p_min)
 
-    if (exists("pvalueAdjustment") && nrow(min_data) > 0) {
+    if (nrow(min_data) > 0) {
       min_data$pvalue <- min_data$p.value
-      min_data <- pvalueAdjustment(min_data, independentFiltering=indep_filter, alpha=0.05, pAdjustMethod="BH")
+      min_data <- adjust_pvalues(min_data, independentFiltering = indep_filter, alpha = 0.05, method = padj_method)
       min_data$pvalue <- NULL
-    } else {
-      min_data$padj <- p.adjust(min_data$p.value, method = "BH")
     }
 
     min_data <- add_significant(min_data, padj_thr, delta)
@@ -872,12 +864,10 @@ if (split == 'bipartition' || split == 'n_choose_2') {
       mutate(p.value = p_fisher) %>%
       select(-p_fisher)
 
-    if (exists("pvalueAdjustment") && nrow(fisher_data) > 0) {
+    if (nrow(fisher_data) > 0) {
       fisher_data$pvalue <- fisher_data$p.value
-      fisher_data <- pvalueAdjustment(fisher_data, independentFiltering=indep_filter, alpha=0.05, pAdjustMethod="BH")
+      fisher_data <- adjust_pvalues(fisher_data, independentFiltering = indep_filter, alpha = 0.05, method = padj_method)
       fisher_data$pvalue <- NULL
-    } else {
-      fisher_data$padj <- p.adjust(fisher_data$p.value, method = "BH")
     }
 
     fisher_data <- add_significant(fisher_data, padj_thr, delta)

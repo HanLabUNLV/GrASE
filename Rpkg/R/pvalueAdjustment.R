@@ -110,6 +110,91 @@ pvalueAdjustment <- function(res, independentFiltering, filter,
   res
 }
 
+#' Nested BH procedure for hierarchical FDR control
+#'
+#' Two-stage procedure (Benjamini-Bogomolov 2014):
+#' Stage 1 applies BH across genes on Simes gene-level p-values.
+#' Stage 2 applies BH within each gene that passes stage 1.
+#' Controls global FDR on individual events and removes gene-size detection bias.
+#'
+#' @param res Data frame with columns \code{gene} and \code{pvalue}.
+#' @param alpha Numeric. FDR level for both stages (default 0.05).
+#' @return \code{res} with two new columns:
+#'   \code{padj_gene} (BH-adjusted Simes p-value, one value per gene, replicated to all rows);
+#'   \code{padj} (within-gene BH adjusted p-value for events in selected genes, NA otherwise).
+#' @export
+#' @examples
+#' \dontrun{
+#' res <- data.frame(
+#'   gene   = c("G1","G1","G1","G2","G2"),
+#'   pvalue = c(0.001, 0.01, 0.8, 0.4, 0.5)
+#' )
+#' nested_bh(res, alpha = 0.05)
+#' }
+nested_bh <- function(res, alpha = 0.05) {
+  genes <- unique(res$gene)
+
+  # Stage 1: Simes p-value per gene
+  pv_by_gene <- split(res$pvalue, res$gene)
+  simes_p <- vapply(genes, function(g) {
+    pv <- sort(pv_by_gene[[g]][!is.na(pv_by_gene[[g]])])
+    K  <- length(pv)
+    if (K == 0L) return(NA_real_)
+    min(K * pv / seq_len(K))
+  }, numeric(1L))
+
+  padj_gene_vec          <- p.adjust(simes_p, method = "BH")
+  names(padj_gene_vec)   <- genes
+  res$padj_gene          <- padj_gene_vec[res$gene]
+
+  # Stage 2: within-gene BH only for genes passing stage 1
+  res$padj <- NA_real_
+  selected <- names(padj_gene_vec)[!is.na(padj_gene_vec) & padj_gene_vec < alpha]
+  for (g in selected) {
+    idx          <- which(res$gene == g)
+    res$padj[idx] <- p.adjust(res$pvalue[idx], method = "BH")
+  }
+
+  res
+}
+
+#' Apply p-value adjustment with optional independent filtering
+#'
+#' Dispatches on \code{method}:
+#' \itemize{
+#'   \item \code{"nested_BH"}: optionally masks low-count events via independent
+#'     filtering, then runs the two-stage nested BH procedure (\code{nested_bh}).
+#'     Adds \code{padj_gene} (gene-level) and \code{padj} (event-level) columns.
+#'   \item any \code{p.adjust} method (e.g. \code{"BH"}, \code{"bonferroni"}):
+#'     delegates directly to \code{pvalueAdjustment}, which handles independent
+#'     filtering internally and adds a single \code{padj} column.
+#' }
+#'
+#' @param res Data frame with columns \code{gene}, \code{pvalue}, and (when
+#'   \code{independentFiltering = TRUE}) \code{baseMean}.
+#' @param independentFiltering Logical. Apply independent filtering before
+#'   adjustment.
+#' @param alpha Numeric. FDR level (default 0.05).
+#' @param method Character. Adjustment method: \code{"nested_BH"} (default) or
+#'   any method accepted by \code{p.adjust} (e.g. \code{"BH"}).
+#' @return \code{res} with \code{padj} added (and \code{padj_gene} for
+#'   \code{"nested_BH"}).
+#' @export
+adjust_pvalues <- function(res, independentFiltering = FALSE, alpha = 0.05,
+                           method = "nested_BH") {
+  if (method == "nested_BH") {
+    if (independentFiltering && "baseMean" %in% names(res)) {
+      filt       <- pvalueAdjustment(res, independentFiltering = TRUE,
+                                     alpha = alpha, pAdjustMethod = "BH")
+      res$pvalue <- ifelse(is.na(filt$padj), NA_real_, res$pvalue)
+    }
+    nested_bh(res, alpha = alpha)
+  } else {
+    pvalueAdjustment(res, independentFiltering = independentFiltering,
+                     alpha = alpha, pAdjustMethod = method)
+  }
+}
+
 # function copied from `genefilter` package to avoid gfortran requirement
 filtered_p <- function( filter, test, theta, data, method = "none" ) {
   if ( is.function( filter ) )
