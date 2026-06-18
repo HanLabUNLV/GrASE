@@ -52,6 +52,8 @@ make_option(c("--use_prec_loess"), action="store_true", default=FALSE,
               help="padj threshold for the significant column [default: 0.05]", metavar="double"),
   make_option(c("--delta"), type="double", default=0,
               help="lfc_diff_net threshold for the significant column; events with lfc_diff_net <= delta are not significant [default: 0]", metavar="double"),
+  make_option(c("--min_dpsi"), type="double", default=0.1,
+              help="minimum |delta_psi| for the significant column; events with |delta_psi| < min_dpsi are not significant [default: 0.1]", metavar="double"),
   make_option(c("--mc_cores"), type="integer", default=32L,
               help="number of parallel worker processes for mclapply [default: %default]", metavar="integer")
 );
@@ -105,24 +107,12 @@ prec_trend       <- isTRUE(opt$use_prec_loess)
 padj_thr         <- as.double(opt$padj_threshold)
 delta            <- as.double(opt$delta)
 padj_method      <- as.character(opt$padj_method)
+min_dpsi         <- as.double(opt$min_dpsi)
 
 # Expand tilde in paths
 outdir <- path.expand(outdir)
 countdir <- path.expand(countdir)
 
-# Add a 'significant' column: padj < padj_thr AND (lfc_diff_net > delta OR lfc_diff_net absent/NA)
-add_significant <- function(res, padj_thr, delta) {
-  has_lfc <- "lfc_diff_net" %in% names(res)
-  lfc_ok <- if (has_lfc) {
-    # Events are significant if lfc_diff_net > delta.
-    # If lfc_diff_net is NA, it's not filtered out.
-    (res$lfc_diff_net > delta) | is.na(res$lfc_diff_net)
-  } else {
-    TRUE # No LFC info, don't filter
-  }
-  res$significant <- !is.na(res$padj) & res$padj < padj_thr & lfc_ok
-  res
-}
 if (!dir.exists(outdir)) {
   dir.create(outdir, recursive = TRUE)
 }
@@ -206,59 +196,10 @@ if (model == 'betabinom_EBmap' || model == 'betabinom_EBapprox') {
   if (file.exists(paste0(outdir, "/", phifile))) {
     phi_df <- read.table(paste0(outdir,'/', phifile), header=TRUE, row.names=NULL)
   } else {
-    # Estimate phi for each comparison separately
-    estimate_phi_for_comparison <- function(sc, comp_name) {
-      if (nrow(sc) == 0) return(NULL)
-      grouped_data <- group_by_event(sc, 'diff', 'n')
-      phi_progress_file <- paste0(outdir, "/phi_progress_", comp_name, ".log")
-      error_log_file <- paste0("phi.glmmtmb.errors.", comp_name, ".log")
-
-      n_events <- length(grouped_data)
-      chunk_size <- 10000L
-      chunk_starts <- seq(1L, n_events, by = chunk_size)
-      phi_chunks <- vector("list", length(chunk_starts))
-      for (ci in seq_along(chunk_starts)) {
-        idx <- chunk_starts[ci]:min(chunk_starts[ci] + chunk_size - 1L, n_events)
-        phi_chunks[[ci]] <- mclapply(grouped_data[idx], function(dd) {
-          result <- withCallingHandlers(
-            tryCatch({
-              phi_estimate_glmmTMB(dd)
-            }, error = function(e) {
-              msg <- sprintf("[%s] ERROR gene=%s event=%s (PID %d): %s\n",
-                             format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
-                             dd$gene[1], dd$event[1], Sys.getpid(), conditionMessage(e))
-              cat(msg, file = error_log_file, append = TRUE)
-              NULL
-            }),
-            warning = function(w) {
-              msg <- sprintf("[%s] WARN  gene=%s event=%s (PID %d): %s\n",
-                             format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
-                             dd$gene[1], dd$event[1], Sys.getpid(), conditionMessage(w))
-              cat(msg, file = error_log_file, append = TRUE)
-              invokeRestart("muffleWarning")
-            }
-          )
-          cat(sprintf("%s\t%s\n", dd$gene[1], dd$event[1]),
-              file = phi_progress_file, append = TRUE)
-          result
-        }, mc.cores = mc_cores)
-        message(sprintf("[%s] phi chunk %d/%d done (%d events)",
-                        format(Sys.time(), "%H:%M:%S"), ci,
-                        length(chunk_starts), length(idx)))
-      }
-      phi_list <- unlist(phi_chunks, recursive = FALSE)
-
-      phi_df_comp <- bind_rows(Filter(Negate(is.null), phi_list))
-      if (nrow(phi_df_comp) > 0) {
-        phi_df_comp$comparison <- comp_name
-      }
-      return(phi_df_comp)
-    }
-
     message("Estimating phi for diff1 vs ref...")
-    phi_d1r <- estimate_phi_for_comparison(sc_d1r, "diff1_vs_ref")
+    phi_d1r <- estimate_phi_for_comparison(sc_d1r, "diff1_vs_ref", outdir = outdir, mc_cores = mc_cores)
     message("Estimating phi for diff2 vs ref...")
-    phi_d2r <- estimate_phi_for_comparison(sc_d2r, "diff2_vs_ref")
+    phi_d2r <- estimate_phi_for_comparison(sc_d2r, "diff2_vs_ref", outdir = outdir, mc_cores = mc_cores)
 
     phi_df <- bind_rows(phi_d1r, phi_d2r)
     rm(phi_d1r, phi_d2r)
@@ -319,51 +260,6 @@ if (model == 'betabinom_EBmap' || model == 'betabinom_EBapprox') {
   rm(baseMean_df_all)
 }
 
-# Helper: run one comparison through group_by_event + chunked mclapply.
-# Processing in chunks of chunk_size avoids each worker accumulating a huge
-# result list before sendMaster(), which causes SIGPIPE on large datasets.
-run_one_comparison <- function(sc, test_fn, err_log, ..., chunk_size = 10000L,
-                               checkpoint_prefix = NULL) {
-  if (nrow(sc) == 0) return(NULL)
-  gd <- group_by_event(sc, 'diff', 'n')
-  n_events <- length(gd)
-  chunk_starts <- seq(1L, n_events, by = chunk_size)
-  n_chunks <- length(chunk_starts)
-  all_results <- vector("list", n_chunks)
-  for (ci in seq_along(chunk_starts)) {
-    ckpt_file <- if (!is.null(checkpoint_prefix))
-      sprintf("%s_chunk%dof%d.rds", checkpoint_prefix, ci, n_chunks) else NULL
-    if (!is.null(ckpt_file) && file.exists(ckpt_file)) {
-      all_results[[ci]] <- readRDS(ckpt_file)
-      message(sprintf("[%s] LRT chunk %d/%d loaded from checkpoint",
-                      format(Sys.time(), "%H:%M:%S"), ci, n_chunks))
-      next
-    }
-    idx <- chunk_starts[ci]:min(chunk_starts[ci] + chunk_size - 1L, n_events)
-    chunk_res <- mclapply(gd[idx], function(dd) {
-      result <- tryCatch(test_fn(dd, ...), error = function(e) {
-        msg <- sprintf("[%s] ERROR gene=%s event=%s (PID %d): %s\n",
-                       format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
-                       dd$gene[1], dd$event[1], Sys.getpid(), conditionMessage(e))
-        cat(msg, file = err_log, append = TRUE)
-        NULL
-      })
-      if (!is.null(result) && "comparison" %in% names(dd))
-        result$comparison <- dd$comparison[1]
-      result
-    }, mc.cores = mc_cores)
-    all_results[[ci]] <- bind_rows(Filter(Negate(is.null), chunk_res))
-    if (!is.null(ckpt_file)) saveRDS(all_results[[ci]], ckpt_file)
-    message(sprintf("[%s] LRT testing chunk %d/%d done (%d events)",
-                    format(Sys.time(), "%H:%M:%S"), ci, n_chunks, length(idx)))
-  }
-  res <- bind_rows(all_results)
-  # fallback for callers that pass a single-comparison sc (no comparison column in dd)
-  if (nrow(res) > 0 && !"comparison" %in% names(res))
-    res$comparison <- sc$comparison[1]
-  res
-}
-
 # Per Gene Model Estimation
 if (model == 'betabinom_EBmap') {
   # Prior parameters from MLE phi estimates
@@ -372,45 +268,6 @@ if (model == 'betabinom_EBmap') {
   fit_logphi   <- fitdistr(log_phi_vals, "normal")
   mean_logphi  <- fit_logphi$estimate["mean"]
   sd_logphi    <- fit_logphi$estimate["sd"]
-
-  # Helper: run phi_map_glmmTMB in parallel for one comparison.
-  # prior_fn takes a grouped dd and returns phi_map_glmmTMB result or NULL.
-  run_map_for_comparison <- function(sc, comp_name, prior_fn, err_log,
-                                     checkpoint_prefix = NULL) {
-    gd <- group_by_event(sc, 'diff', 'n')
-    n_events    <- length(gd)
-    chunk_size  <- 10000L
-    chunk_starts <- seq(1L, n_events, by = chunk_size)
-    n_chunks <- length(chunk_starts)
-    chunks <- vector("list", n_chunks)
-    for (ci in seq_along(chunk_starts)) {
-      ckpt_file <- if (!is.null(checkpoint_prefix))
-        sprintf("%s_chunk%dof%d.rds", checkpoint_prefix, ci, n_chunks) else NULL
-      if (!is.null(ckpt_file) && file.exists(ckpt_file)) {
-        chunks[[ci]] <- readRDS(ckpt_file)
-        message(sprintf("[%s] MAP phi chunk %d/%d loaded from checkpoint (%s)",
-                        format(Sys.time(), "%H:%M:%S"), ci, n_chunks, comp_name))
-        next
-      }
-      idx <- chunk_starts[ci]:min(chunk_starts[ci] + chunk_size - 1L, n_events)
-      chunks[[ci]] <- mclapply(gd[idx], function(dd) {
-        result <- tryCatch(prior_fn(dd), error = function(e) {
-          cat(sprintf("[%s] WARN gene=%s event=%s: %s\n",
-                      format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
-                      dd$gene[1], dd$event[1], conditionMessage(e)),
-              file = err_log, append = TRUE)
-          NULL
-        })
-        if (!is.null(result)) result$comparison <- comp_name
-        result
-      }, mc.cores = mc_cores)
-      if (!is.null(ckpt_file)) saveRDS(chunks[[ci]], ckpt_file)
-      message(sprintf("[%s] MAP phi moderation chunk %d/%d done (%d events, %s)",
-                      format(Sys.time(), "%H:%M:%S"), ci,
-                      n_chunks, length(idx), comp_name))
-    }
-    bind_rows(Filter(Negate(is.null), unlist(chunks, recursive = FALSE)))
-  }
 
   phi_map_file <- sub("\\.([^.]+)$", ".map.moderated.\\1", phifile)
   phi_map_full_path <- paste0(outdir, '/', phi_map_file)
@@ -471,10 +328,12 @@ if (model == 'betabinom_EBmap') {
 
       phi_map_d1r <- run_map_for_comparison(sc_d1r_aug, "diff1_vs_ref",
                                             prior_fn_trend, "phi_map.errors.log",
-                                            checkpoint_prefix = paste0(outdir, "/ckpt_phimap_", out_prefix, "_d1r"))
+                                            checkpoint_prefix = paste0(outdir, "/ckpt_phimap_", out_prefix, "_d1r"),
+                                            mc_cores = mc_cores)
       phi_map_d2r <- run_map_for_comparison(sc_d2r_aug, "diff2_vs_ref",
                                             prior_fn_trend, "phi_map.errors.log",
-                                            checkpoint_prefix = paste0(outdir, "/ckpt_phimap_", out_prefix, "_d2r"))
+                                            checkpoint_prefix = paste0(outdir, "/ckpt_phimap_", out_prefix, "_d2r"),
+                                            mc_cores = mc_cores)
       phi_map_df  <- bind_rows(phi_map_d1r, phi_map_d2r)
     }
 
@@ -525,10 +384,12 @@ if (model == 'betabinom_EBmap') {
 
       phi_map_d1r <- run_map_for_comparison(sc_d1r, "diff1_vs_ref",
                                             prior_fn_global, "phi_map.errors.log",
-                                            checkpoint_prefix = paste0(outdir, "/ckpt_phimap_", out_prefix, "_d1r"))
+                                            checkpoint_prefix = paste0(outdir, "/ckpt_phimap_", out_prefix, "_d1r"),
+                                            mc_cores = mc_cores)
       phi_map_d2r <- run_map_for_comparison(sc_d2r, "diff2_vs_ref",
                                             prior_fn_global, "phi_map.errors.log",
-                                            checkpoint_prefix = paste0(outdir, "/ckpt_phimap_", out_prefix, "_d2r"))
+                                            checkpoint_prefix = paste0(outdir, "/ckpt_phimap_", out_prefix, "_d2r"),
+                                            mc_cores = mc_cores)
       phi_map_df  <- bind_rows(phi_map_d1r, phi_map_d2r)
     }
 
@@ -543,16 +404,6 @@ if (model == 'betabinom_EBmap') {
     } else {
       message("WARNING: no MAP phi estimates obtained; using EBapprox fallback. Check phi_map.errors.log.")
       phi_final <- phi_approx
-    }
-
-    impute_z_mod <- function(df, p_table) {
-      if (nrow(df) == 0) return(df)
-      comp_name  <- df$comparison[1]
-      fallback_z <- median(p_table$z_mod[p_table$comparison == comp_name], na.rm = TRUE)
-      if (is.na(fallback_z)) fallback_z <- median(p_table$z_mod, na.rm = TRUE)
-      if (is.na(fallback_z)) fallback_z <- 0
-      df$z_mod[is.na(df$z_mod)] <- fallback_z
-      df
     }
 
     sc_d1r_eb <- sc_d1r %>%
@@ -578,7 +429,8 @@ if (model == 'betabinom_EBmap') {
                                 err_log = "glmmtmb_EBmap.errors.log",
                                 model_label = "betabinom_EBmap",
                                 L = L,
-                                checkpoint_prefix = paste0(outdir, "/ckpt_lrt_", out_prefix, "_EBmap"))
+                                checkpoint_prefix = paste0(outdir, "/ckpt_lrt_", out_prefix, "_EBmap"),
+                                mc_cores = mc_cores)
   rm(sc_both_eb)
 
   results <- results %>%
@@ -596,7 +448,7 @@ if (model == 'betabinom_EBmap') {
       ungroup()
   }
 
-  results <- add_significant(results, padj_thr, delta)
+  results <- add_significant(results, padj_thr, delta, min_dpsi)
   write.table(results, file = out_resultfile, quote = FALSE, sep = "\t", row.names = FALSE)
 
 } else if (model == 'betabinom_EBapprox') {
@@ -630,15 +482,6 @@ if (model == 'betabinom_EBmap') {
     sc_d2r_eb  <- sc_d2r  %>% left_join(phi_table, by = c("gene", "event", "comparison"))
 
     # Impute missing z_mod with the median of their respective comparison group.
-    impute_z_mod <- function(df, p_table) {
-        if (nrow(df) == 0) return(df)
-        comp_name <- df$comparison[1]
-        fallback_z <- median(p_table$z_mod[p_table$comparison == comp_name], na.rm = TRUE)
-        if (is.na(fallback_z)) fallback_z <- median(p_table$z_mod, na.rm = TRUE) # Global fallback
-        if (is.na(fallback_z)) fallback_z <- 0 # Ultimate fallback log(1)
-        df$z_mod[is.na(df$z_mod)] <- fallback_z
-        df
-    }
     sc_d1r_eb  <- impute_z_mod(sc_d1r_eb, phi_table)
     sc_d2r_eb  <- impute_z_mod(sc_d2r_eb, phi_table)
   }
@@ -655,7 +498,8 @@ if (model == 'betabinom_EBmap') {
                                 err_log = "glmmtmb_EB.errors.log",
                                 model_label = "betabinom_EBapprox",
                                 L = L,
-                                checkpoint_prefix = paste0(outdir, "/ckpt_lrt_", out_prefix, "_EBapprox"))
+                                checkpoint_prefix = paste0(outdir, "/ckpt_lrt_", out_prefix, "_EBapprox"),
+                                mc_cores = mc_cores)
   rm(sc_both_eb)
   results <- results %>%
     left_join(baseMean_df, by = c("gene", "event")) %>%
@@ -672,7 +516,7 @@ if (model == 'betabinom_EBmap') {
       ungroup()
   }
 
-  results <- add_significant(results, padj_thr, delta)
+  results <- add_significant(results, padj_thr, delta, min_dpsi)
   write.table(results, file = out_resultfile, quote = FALSE, sep = "\t", row.names = FALSE)
 
 } else if (model == 'dirmult_EBplugin') {
@@ -715,7 +559,7 @@ if (model == 'betabinom_EBmap') {
     res$pvalue <- res$p.value
     res <- adjust_pvalues(res, independentFiltering = FALSE, alpha = 0.05, method = padj_method)
     res$pvalue <- NULL
-    add_significant(res, padj_thr, delta)
+    add_significant(res, padj_thr, delta, min_dpsi)
   })
   results <- bind_rows(contrast_results)
   write.table(results, file = out_resultfile, sep = "\t", quote = FALSE, row.names = FALSE)
@@ -732,7 +576,8 @@ if (model == 'betabinom_EBmap') {
       mutate(groups = factor(as.character(groups), levels = c(ctr_ref, ctr_trt)))
     res <- run_one_comparison(sc_ctr, test_fn = test_model_wilcoxon,
                               err_log = paste0("wilcoxon.", ctr_name, ".log"),
-                              checkpoint_prefix = paste0(outdir, "/ckpt_lrt_", out_prefix, "_wilcoxon_", ctr_name))
+                              checkpoint_prefix = paste0(outdir, "/ckpt_lrt_", out_prefix, "_wilcoxon_", ctr_name),
+                              mc_cores = mc_cores)
     if (is.null(res) || nrow(res) == 0) return(NULL)
     res$contrast <- ctr_name
     res <- res %>%
@@ -741,7 +586,7 @@ if (model == 'betabinom_EBmap') {
     res$pvalue <- res$p.value
     res <- adjust_pvalues(res, independentFiltering = indep_filter, alpha = 0.05, method = padj_method)
     res$pvalue <- NULL
-    add_significant(res, padj_thr, delta)
+    add_significant(res, padj_thr, delta, min_dpsi)
   })
   results <- bind_rows(contrast_results)
   write.table(results, file = out_resultfile, quote = FALSE, sep = "\t", row.names = FALSE)
@@ -753,7 +598,8 @@ if (model == 'betabinom_EBmap') {
                                 test_fn = function(dd, ...) suppressMessages(test_model_glmmTMB_without_prior(dd, ...)),
                                 err_log = "glmmtmb_noprior.errors.log",
                                 L = L,
-                                checkpoint_prefix = paste0(outdir, "/ckpt_lrt_", out_prefix, "_MLE"))
+                                checkpoint_prefix = paste0(outdir, "/ckpt_lrt_", out_prefix, "_MLE"),
+                                mc_cores = mc_cores)
   results <- results %>%
     left_join(baseMean_df, by = c("gene", "event")) %>%
     left_join(lfc_summary_all, by = c("gene", "event", "comparison", "contrast"))
@@ -769,7 +615,7 @@ if (model == 'betabinom_EBmap') {
       ungroup()
   }
 
-  results <- add_significant(results, padj_thr, delta)
+  results <- add_significant(results, padj_thr, delta, min_dpsi)
   write.table(results, file = out_resultfile, quote = FALSE, sep = "\t", row.names = FALSE)
 
 } else {
@@ -886,7 +732,7 @@ if (split == 'bipartition' || split == 'n_choose_2') {
       min_data$pvalue <- NULL
     }
 
-    min_data <- add_significant(min_data, padj_thr, delta)
+    min_data <- add_significant(min_data, padj_thr, delta, min_dpsi)
     out_mincomb <- sub("\\.annotated\\.txt$", ".mincomb.annotated.txt",
                       out_result_annotated)
     write.table(min_data, out_mincomb, sep = "\t", quote = FALSE, row.names = FALSE)
@@ -920,7 +766,7 @@ if (split == 'bipartition' || split == 'n_choose_2') {
       fisher_data$pvalue <- NULL
     }
 
-    fisher_data <- add_significant(fisher_data, padj_thr, delta)
+    fisher_data <- add_significant(fisher_data, padj_thr, delta, min_dpsi)
     out_fisher <- sub("\\.annotated\\.txt$", ".fisher_combined.annotated.txt",
                       out_result_annotated)
     write.table(fisher_data, out_fisher, sep = "\t", quote = FALSE, row.names = FALSE)

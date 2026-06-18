@@ -827,9 +827,14 @@ compute_lfc_summary <- function(splitcnts, pseudocount = 1L,
                           (.data[[paste0("mean_diff_", cond_ref)]] + pseudocount)),
       lfc_ref      = log2((.data[[paste0("mean_ref_",  cond_trt)]] + pseudocount) /
                           (.data[[paste0("mean_ref_",  cond_ref)]] + pseudocount)),
-      lfc_diff_net = abs(lfc_diff) - abs(lfc_ref)
+      lfc_diff_net = abs(lfc_diff) - abs(lfc_ref),
+      psi_trt      = .data[[paste0("mean_diff_", cond_trt)]] /
+                       (.data[[paste0("mean_diff_", cond_trt)]] + .data[[paste0("mean_ref_", cond_trt)]]),
+      psi_ref      = .data[[paste0("mean_diff_", cond_ref)]] /
+                       (.data[[paste0("mean_diff_", cond_ref)]] + .data[[paste0("mean_ref_", cond_ref)]]),
+      delta_psi    = psi_trt - psi_ref
     ) %>%
-    dplyr::select(gene, event, lfc_diff, lfc_ref, lfc_diff_net)
+    dplyr::select(gene, event, lfc_diff, lfc_ref, lfc_diff_net, psi_trt, psi_ref, delta_psi)
 }
 
 #' Annotate test results with denominator-effect flag columns
@@ -843,4 +848,190 @@ compute_lfc_summary <- function(splitcnts, pseudocount = 1L,
 #' @export
 posthoc_lfc_summary <- function(results, lfc_summary) {
   dplyr::left_join(results, lfc_summary, by = c("gene", "event"))
+}
+
+#' Add a significant column to test results
+#'
+#' @param res data frame with padj, lfc_diff_net, delta_psi columns
+#' @param padj_thr FDR threshold
+#' @param delta minimum lfc_diff_net (directionality filter; events with lfc_diff_net <= delta excluded)
+#' @param min_dpsi minimum |delta_psi| (effect size filter)
+#' @export
+add_significant <- function(res, padj_thr, delta, min_dpsi = 0.1) {
+  has_lfc <- "lfc_diff_net" %in% names(res)
+  lfc_ok <- if (has_lfc) {
+    (res$lfc_diff_net > delta) | is.na(res$lfc_diff_net)
+  } else {
+    TRUE
+  }
+  has_dpsi <- "delta_psi" %in% names(res)
+  dpsi_ok <- if (has_dpsi) {
+    (abs(res$delta_psi) >= min_dpsi) | is.na(res$delta_psi)
+  } else {
+    TRUE
+  }
+  res$significant <- !is.na(res$padj) & res$padj < padj_thr & lfc_ok & dpsi_ok
+  res
+}
+
+#' Impute missing z_mod values with per-comparison or global median fallback
+#'
+#' @param df data frame with comparison and z_mod columns
+#' @param p_table phi table with z_mod values used for fallback
+#' @export
+impute_z_mod <- function(df, p_table) {
+  if (nrow(df) == 0) return(df)
+  comp_name  <- df$comparison[1]
+  fallback_z <- median(p_table$z_mod[p_table$comparison == comp_name], na.rm = TRUE)
+  if (is.na(fallback_z)) fallback_z <- median(p_table$z_mod, na.rm = TRUE)
+  if (is.na(fallback_z)) fallback_z <- 0
+  df$z_mod[is.na(df$z_mod)] <- fallback_z
+  df
+}
+
+#' Run a test function over events in chunked parallel batches with checkpointing
+#'
+#' @param sc split counts data frame
+#' @param test_fn function applied per event
+#' @param err_log path to error log file
+#' @param chunk_size number of events per parallel batch
+#' @param checkpoint_prefix prefix for checkpoint RDS files; NULL disables checkpointing
+#' @param mc_cores number of parallel cores
+#' @export
+run_one_comparison <- function(sc, test_fn, err_log, ..., chunk_size = 10000L,
+                               checkpoint_prefix = NULL, mc_cores = 1L) {
+  if (nrow(sc) == 0) return(NULL)
+  gd <- group_by_event(sc, 'diff', 'n')
+  n_events <- length(gd)
+  chunk_starts <- seq(1L, n_events, by = chunk_size)
+  n_chunks <- length(chunk_starts)
+  all_results <- vector("list", n_chunks)
+  for (ci in seq_along(chunk_starts)) {
+    ckpt_file <- if (!is.null(checkpoint_prefix))
+      sprintf("%s_chunk%dof%d.rds", checkpoint_prefix, ci, n_chunks) else NULL
+    if (!is.null(ckpt_file) && file.exists(ckpt_file)) {
+      all_results[[ci]] <- readRDS(ckpt_file)
+      message(sprintf("[%s] LRT chunk %d/%d loaded from checkpoint",
+                      format(Sys.time(), "%H:%M:%S"), ci, n_chunks))
+      next
+    }
+    idx <- chunk_starts[ci]:min(chunk_starts[ci] + chunk_size - 1L, n_events)
+    chunk_res <- parallel::mclapply(gd[idx], function(dd) {
+      result <- tryCatch(test_fn(dd, ...), error = function(e) {
+        msg <- sprintf("[%s] ERROR gene=%s event=%s (PID %d): %s\n",
+                       format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
+                       dd$gene[1], dd$event[1], Sys.getpid(), conditionMessage(e))
+        cat(msg, file = err_log, append = TRUE)
+        NULL
+      })
+      if (!is.null(result) && "comparison" %in% names(dd))
+        result$comparison <- dd$comparison[1]
+      result
+    }, mc.cores = mc_cores)
+    all_results[[ci]] <- dplyr::bind_rows(Filter(Negate(is.null), chunk_res))
+    if (!is.null(ckpt_file)) saveRDS(all_results[[ci]], ckpt_file)
+    message(sprintf("[%s] LRT testing chunk %d/%d done (%d events)",
+                    format(Sys.time(), "%H:%M:%S"), ci, n_chunks, length(idx)))
+  }
+  res <- dplyr::bind_rows(all_results)
+  if (nrow(res) > 0 && !"comparison" %in% names(res))
+    res$comparison <- sc$comparison[1]
+  res
+}
+
+#' Run phi_map_glmmTMB in parallel for one comparison with checkpointing
+#'
+#' @param sc split counts data frame for one comparison
+#' @param comp_name comparison label (e.g. "diff1_vs_ref")
+#' @param prior_fn function taking a grouped event data frame, returning phi_map_glmmTMB result
+#' @param err_log path to error log file
+#' @param checkpoint_prefix prefix for checkpoint RDS files; NULL disables checkpointing
+#' @param mc_cores number of parallel cores
+#' @export
+run_map_for_comparison <- function(sc, comp_name, prior_fn, err_log,
+                                   checkpoint_prefix = NULL, mc_cores = 1L) {
+  gd <- group_by_event(sc, 'diff', 'n')
+  n_events     <- length(gd)
+  chunk_size   <- 10000L
+  chunk_starts <- seq(1L, n_events, by = chunk_size)
+  n_chunks     <- length(chunk_starts)
+  chunks <- vector("list", n_chunks)
+  for (ci in seq_along(chunk_starts)) {
+    ckpt_file <- if (!is.null(checkpoint_prefix))
+      sprintf("%s_chunk%dof%d.rds", checkpoint_prefix, ci, n_chunks) else NULL
+    if (!is.null(ckpt_file) && file.exists(ckpt_file)) {
+      chunks[[ci]] <- readRDS(ckpt_file)
+      message(sprintf("[%s] MAP phi chunk %d/%d loaded from checkpoint (%s)",
+                      format(Sys.time(), "%H:%M:%S"), ci, n_chunks, comp_name))
+      next
+    }
+    idx <- chunk_starts[ci]:min(chunk_starts[ci] + chunk_size - 1L, n_events)
+    chunks[[ci]] <- parallel::mclapply(gd[idx], function(dd) {
+      result <- tryCatch(prior_fn(dd), error = function(e) {
+        cat(sprintf("[%s] WARN gene=%s event=%s: %s\n",
+                    format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
+                    dd$gene[1], dd$event[1], conditionMessage(e)),
+            file = err_log, append = TRUE)
+        NULL
+      })
+      if (!is.null(result)) result$comparison <- comp_name
+      result
+    }, mc.cores = mc_cores)
+    if (!is.null(ckpt_file)) saveRDS(chunks[[ci]], ckpt_file)
+    message(sprintf("[%s] MAP phi moderation chunk %d/%d done (%d events, %s)",
+                    format(Sys.time(), "%H:%M:%S"), ci, n_chunks, length(idx), comp_name))
+  }
+  dplyr::bind_rows(Filter(Negate(is.null), unlist(chunks, recursive = FALSE)))
+}
+
+#' Estimate phi (overdispersion) for all events in one comparison using glmmTMB
+#'
+#' @param sc split counts data frame for one comparison
+#' @param comp_name comparison label used for log file names
+#' @param outdir output directory for progress and error logs
+#' @param mc_cores number of parallel cores
+#' @export
+estimate_phi_for_comparison <- function(sc, comp_name, outdir, mc_cores = 1L) {
+  if (nrow(sc) == 0) return(NULL)
+  grouped_data      <- group_by_event(sc, 'diff', 'n')
+  phi_progress_file <- file.path(outdir, paste0("phi_progress_", comp_name, ".log"))
+  error_log_file    <- paste0("phi.glmmtmb.errors.", comp_name, ".log")
+
+  n_events     <- length(grouped_data)
+  chunk_size   <- 10000L
+  chunk_starts <- seq(1L, n_events, by = chunk_size)
+  phi_chunks   <- vector("list", length(chunk_starts))
+  for (ci in seq_along(chunk_starts)) {
+    idx <- chunk_starts[ci]:min(chunk_starts[ci] + chunk_size - 1L, n_events)
+    phi_chunks[[ci]] <- parallel::mclapply(grouped_data[idx], function(dd) {
+      result <- withCallingHandlers(
+        tryCatch({
+          phi_estimate_glmmTMB(dd)
+        }, error = function(e) {
+          msg <- sprintf("[%s] ERROR gene=%s event=%s (PID %d): %s\n",
+                         format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
+                         dd$gene[1], dd$event[1], Sys.getpid(), conditionMessage(e))
+          cat(msg, file = error_log_file, append = TRUE)
+          NULL
+        }),
+        warning = function(w) {
+          msg <- sprintf("[%s] WARN  gene=%s event=%s (PID %d): %s\n",
+                         format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
+                         dd$gene[1], dd$event[1], Sys.getpid(), conditionMessage(w))
+          cat(msg, file = error_log_file, append = TRUE)
+          invokeRestart("muffleWarning")
+        }
+      )
+      cat(sprintf("%s\t%s\n", dd$gene[1], dd$event[1]),
+          file = phi_progress_file, append = TRUE)
+      result
+    }, mc.cores = mc_cores)
+    message(sprintf("[%s] phi chunk %d/%d done (%d events)",
+                    format(Sys.time(), "%H:%M:%S"), ci,
+                    length(chunk_starts), length(idx)))
+  }
+  phi_list     <- unlist(phi_chunks, recursive = FALSE)
+  phi_df_comp  <- dplyr::bind_rows(Filter(Negate(is.null), phi_list))
+  if (nrow(phi_df_comp) > 0) phi_df_comp$comparison <- comp_name
+  phi_df_comp
 }

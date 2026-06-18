@@ -91,19 +91,6 @@ delta            <- as.double(opt$delta)
 outdir <- path.expand(outdir)
 countdir <- path.expand(countdir)
 
-# Add a 'significant' column: padj < padj_thr AND (lfc_diff_net > delta OR lfc_diff_net absent/NA)
-add_significant <- function(res, padj_thr, delta) {
-  has_lfc <- "lfc_diff_net" %in% names(res)
-  lfc_ok <- if (has_lfc) {
-    # Events are significant if lfc_diff_net > delta.
-    # If lfc_diff_net is NA, it's not filtered out.
-    (res$lfc_diff_net > delta) | is.na(res$lfc_diff_net)
-  } else {
-    TRUE # No LFC info, don't filter
-  }
-  res$significant <- !is.na(res$padj) & res$padj < padj_thr & lfc_ok
-  res
-}
 if (!dir.exists(outdir)) {
   dir.create(outdir, recursive = TRUE)
 }
@@ -169,60 +156,11 @@ if (model == 'betabinom_EBmap' || model == 'betabinom_EBapprox') {
   if (file.exists(paste0(outdir, "/", phifile))) {
     phi_df <- read.table(paste0(outdir,'/', phifile), header=TRUE, row.names=NULL)
   } else {
-    # Estimate phi for each comparison separately
-    estimate_phi_for_comparison <- function(sc, comp_name) {
-      if (nrow(sc) == 0) return(NULL)
-      grouped_data <- group_by_event(sc, 'diff', 'n')
-      phi_progress_file <- paste0(outdir, "/phi_progress_", comp_name, ".log")
-      error_log_file <- paste0("phi.glmmtmb.errors.", comp_name, ".log")
-
-      n_events <- length(grouped_data)
-      chunk_size <- 10000L
-      chunk_starts <- seq(1L, n_events, by = chunk_size)
-      phi_chunks <- vector("list", length(chunk_starts))
-      for (ci in seq_along(chunk_starts)) {
-        idx <- chunk_starts[ci]:min(chunk_starts[ci] + chunk_size - 1L, n_events)
-        phi_chunks[[ci]] <- mclapply(grouped_data[idx], function(dd) {
-          result <- withCallingHandlers(
-            tryCatch({
-              phi_estimate_glmmTMB(dd)
-            }, error = function(e) {
-              msg <- sprintf("[%s] ERROR gene=%s event=%s (PID %d): %s\n",
-                             format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
-                             dd$gene[1], dd$event[1], Sys.getpid(), conditionMessage(e))
-              cat(msg, file = error_log_file, append = TRUE)
-              NULL
-            }),
-            warning = function(w) {
-              msg <- sprintf("[%s] WARN  gene=%s event=%s (PID %d): %s\n",
-                             format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
-                             dd$gene[1], dd$event[1], Sys.getpid(), conditionMessage(w))
-              cat(msg, file = error_log_file, append = TRUE)
-              invokeRestart("muffleWarning")
-            }
-          )
-          cat(sprintf("%s\t%s\n", dd$gene[1], dd$event[1]),
-              file = phi_progress_file, append = TRUE)
-          result
-        }, mc.cores = 32)
-        message(sprintf("[%s] phi chunk %d/%d done (%d events)",
-                        format(Sys.time(), "%H:%M:%S"), ci,
-                        length(chunk_starts), length(idx)))
-      }
-      phi_list <- unlist(phi_chunks, recursive = FALSE)
-
-      phi_df_comp <- bind_rows(Filter(Negate(is.null), phi_list))
-      if (nrow(phi_df_comp) > 0) {
-        phi_df_comp$comparison <- comp_name
-      }
-      return(phi_df_comp)
-    }
-
     # Estimate phi once from d1d2 (non-degenerate even when ref=0) and share
     # across all three comparisons -- d1r and d2r have n=diff when ref=0,
     # making their dispersion estimates unreliable.
     message("Estimating phi from diff2 vs diff1 (shared across all comparisons)...")
-    phi_d1d2 <- estimate_phi_for_comparison(sc_d1d2, "diff2_vs_diff1")
+    phi_d1d2 <- estimate_phi_for_comparison(sc_d1d2, "diff2_vs_diff1", outdir = outdir, mc_cores = mc_cores)
 
     phi_df <- bind_rows(
       phi_d1d2 %>% mutate(comparison = "diff1_vs_ref"),
@@ -287,41 +225,6 @@ if (model == 'betabinom_EBmap' || model == 'betabinom_EBapprox') {
   rm(baseMean_df_all)
 }
 
-# Helper: run one comparison through group_by_event + chunked mclapply.
-# Processing in chunks of chunk_size avoids each worker accumulating a huge
-# result list before sendMaster(), which causes SIGPIPE on large datasets.
-run_one_comparison <- function(sc, test_fn, err_log, ..., chunk_size = 10000L) {
-  if (nrow(sc) == 0) return(NULL)
-  gd <- group_by_event(sc, 'diff', 'n')
-  n_events <- length(gd)
-  chunk_starts <- seq(1L, n_events, by = chunk_size)
-  n_chunks <- length(chunk_starts)
-  all_results <- vector("list", n_chunks)
-  for (ci in seq_along(chunk_starts)) {
-    idx <- chunk_starts[ci]:min(chunk_starts[ci] + chunk_size - 1L, n_events)
-    chunk_res <- mclapply(gd[idx], function(dd) {
-      result <- tryCatch(test_fn(dd, ...), error = function(e) {
-        msg <- sprintf("[%s] ERROR gene=%s event=%s (PID %d): %s\n",
-                       format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
-                       dd$gene[1], dd$event[1], Sys.getpid(), conditionMessage(e))
-        cat(msg, file = err_log, append = TRUE)
-        NULL
-      })
-      if (!is.null(result) && "comparison" %in% names(dd))
-        result$comparison <- dd$comparison[1]
-      result
-    }, mc.cores = 32)
-    all_results[[ci]] <- bind_rows(Filter(Negate(is.null), chunk_res))
-    message(sprintf("[%s] LRT testing chunk %d/%d done (%d events)",
-                    format(Sys.time(), "%H:%M:%S"), ci, n_chunks, length(idx)))
-  }
-  res <- bind_rows(all_results)
-  # fallback for callers that pass a single-comparison sc (no comparison column in dd)
-  if (nrow(res) > 0 && !"comparison" %in% names(res))
-    res$comparison <- sc$comparison[1]
-  res
-}
-
 # Per Gene Model Estimation
 if (model == 'betabinom_EBmap') {
   # Prior parameters from MLE phi estimates
@@ -330,34 +233,6 @@ if (model == 'betabinom_EBmap') {
   fit_logphi   <- fitdistr(log_phi_vals, "normal")
   mean_logphi  <- fit_logphi$estimate["mean"]
   sd_logphi    <- fit_logphi$estimate["sd"]
-
-  # Helper: run phi_map_glmmTMB in parallel for one comparison.
-  # prior_fn takes a grouped dd and returns phi_map_glmmTMB result or NULL.
-  run_map_for_comparison <- function(sc, comp_name, prior_fn, err_log) {
-    gd <- group_by_event(sc, 'diff', 'n')
-    n_events    <- length(gd)
-    chunk_size  <- 10000L
-    chunk_starts <- seq(1L, n_events, by = chunk_size)
-    chunks <- vector("list", length(chunk_starts))
-    for (ci in seq_along(chunk_starts)) {
-      idx <- chunk_starts[ci]:min(chunk_starts[ci] + chunk_size - 1L, n_events)
-      chunks[[ci]] <- mclapply(gd[idx], function(dd) {
-        result <- tryCatch(prior_fn(dd), error = function(e) {
-          cat(sprintf("[%s] WARN gene=%s event=%s: %s\n",
-                      format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
-                      dd$gene[1], dd$event[1], conditionMessage(e)),
-              file = err_log, append = TRUE)
-          NULL
-        })
-        if (!is.null(result)) result$comparison <- comp_name
-        result
-      }, mc.cores = 32)
-      message(sprintf("[%s] MAP phi moderation chunk %d/%d done (%d events, %s)",
-                      format(Sys.time(), "%H:%M:%S"), ci,
-                      length(chunk_starts), length(idx), comp_name))
-    }
-    bind_rows(Filter(Negate(is.null), unlist(chunks, recursive = FALSE)))
-  }
 
   if (phi_trend) {
     message("Using loess trend for betabinom_EBmap prior parameters.")
@@ -414,11 +289,14 @@ if (model == 'betabinom_EBmap') {
     }
 
     phi_map_d1r  <- run_map_for_comparison(sc_d1r_aug,  "diff1_vs_ref",
-                                           prior_fn_trend, "phi_map.errors.log")
+                                           prior_fn_trend, "phi_map.errors.log",
+                                           mc_cores = mc_cores)
     phi_map_d2r  <- run_map_for_comparison(sc_d2r_aug,  "diff2_vs_ref",
-                                           prior_fn_trend, "phi_map.errors.log")
+                                           prior_fn_trend, "phi_map.errors.log",
+                                           mc_cores = mc_cores)
     phi_map_d1d2 <- run_map_for_comparison(sc_d1d2_aug, "diff2_vs_diff1",
-                                           prior_fn_trend, "phi_map.errors.log")
+                                           prior_fn_trend, "phi_map.errors.log",
+                                           mc_cores = mc_cores)
     phi_map_df   <- bind_rows(phi_map_d1r, phi_map_d2r, phi_map_d1d2)
 
     # Fallback: EBapprox trend z_mod where MAP failed
@@ -467,11 +345,14 @@ if (model == 'betabinom_EBmap') {
     prior_fn_global <- function(dd) phi_map_glmmTMB(dd, prior_disp)
 
     phi_map_d1r  <- run_map_for_comparison(sc_d1r,  "diff1_vs_ref",
-                                           prior_fn_global, "phi_map.errors.log")
+                                           prior_fn_global, "phi_map.errors.log",
+                                           mc_cores = mc_cores)
     phi_map_d2r  <- run_map_for_comparison(sc_d2r,  "diff2_vs_ref",
-                                           prior_fn_global, "phi_map.errors.log")
+                                           prior_fn_global, "phi_map.errors.log",
+                                           mc_cores = mc_cores)
     phi_map_d1d2 <- run_map_for_comparison(sc_d1d2, "diff2_vs_diff1",
-                                           prior_fn_global, "phi_map.errors.log")
+                                           prior_fn_global, "phi_map.errors.log",
+                                           mc_cores = mc_cores)
     phi_map_df   <- bind_rows(phi_map_d1r, phi_map_d2r, phi_map_d1d2)
 
     # MAP preferred; EBapprox fallback for events where MAP failed
@@ -485,16 +366,6 @@ if (model == 'betabinom_EBmap') {
     } else {
       message("WARNING: no MAP phi estimates obtained; using EBapprox fallback. Check phi_map.errors.log.")
       phi_final <- phi_approx
-    }
-
-    impute_z_mod <- function(df, p_table) {
-      if (nrow(df) == 0) return(df)
-      comp_name  <- df$comparison[1]
-      fallback_z <- median(p_table$z_mod[p_table$comparison == comp_name], na.rm = TRUE)
-      if (is.na(fallback_z)) fallback_z <- median(p_table$z_mod, na.rm = TRUE)
-      if (is.na(fallback_z)) fallback_z <- 0
-      df$z_mod[is.na(df$z_mod)] <- fallback_z
-      df
     }
 
     sc_d1r_eb  <- sc_d1r  %>%
@@ -519,7 +390,8 @@ if (model == 'betabinom_EBmap') {
   results <- run_one_comparison(sc_both_eb,
                                 test_fn = test_model_glmmTMB_EB,
                                 err_log = "glmmtmb_EBmap.errors.log",
-                                model_label = "betabinom_EBmap")
+                                model_label = "betabinom_EBmap",
+                                mc_cores = mc_cores)
   rm(sc_both_eb)
 
   results <- results %>%
@@ -570,15 +442,6 @@ if (model == 'betabinom_EBmap') {
     sc_d1d2_eb <- sc_d1d2 %>% left_join(phi_table, by = c("gene", "event", "comparison"))
 
     # Impute missing z_mod with the median of the comparison group.
-    impute_z_mod <- function(df, p_table) {
-        if (nrow(df) == 0) return(df)
-        comp_name <- df$comparison[1]
-        fallback_z <- median(p_table$z_mod[p_table$comparison == comp_name], na.rm = TRUE)
-        if (is.na(fallback_z)) fallback_z <- median(p_table$z_mod, na.rm = TRUE) # Global fallback
-        if (is.na(fallback_z)) fallback_z <- 0 # Ultimate fallback log(1)
-        df$z_mod[is.na(df$z_mod)] <- fallback_z
-        df
-    }
     sc_d1r_eb  <- impute_z_mod(sc_d1r_eb,  phi_table)
     sc_d2r_eb  <- impute_z_mod(sc_d2r_eb,  phi_table)
     sc_d1d2_eb <- impute_z_mod(sc_d1d2_eb, phi_table)
@@ -593,7 +456,8 @@ if (model == 'betabinom_EBmap') {
   results <- run_one_comparison(sc_both_eb,
                                 test_fn = test_model_glmmTMB_EB,
                                 err_log = "glmmtmb_EB.errors.log",
-                                model_label = "betabinom_EBapprox")
+                                model_label = "betabinom_EBapprox",
+                                mc_cores = mc_cores)
   rm(sc_both_eb)
   results <- results %>%
     left_join(baseMean_df, by = c("gene", "event")) %>%
@@ -657,7 +521,8 @@ if (model == 'betabinom_EBmap') {
 
   results <- run_one_comparison(bind_rows(comparisons_list),
                                 test_fn = test_model_wilcoxon,
-                                err_log = "wilcoxon.errors.log")
+                                err_log = "wilcoxon.errors.log",
+                                mc_cores = mc_cores)
   results <- results %>%
     left_join(baseMean_df, by = c("gene", "event")) %>%
     left_join(lfc_summary_all, by = c("gene", "event", "comparison"))
@@ -676,7 +541,8 @@ if (model == 'betabinom_EBmap') {
 
   results <- run_one_comparison(bind_rows(comparisons_list),
                                 test_fn = function(dd) suppressMessages(test_model_glmmTMB_without_prior(dd)),
-                                err_log = "glmmtmb_noprior.errors.log")
+                                err_log = "glmmtmb_noprior.errors.log",
+                                mc_cores = mc_cores)
   results <- results %>%
     left_join(baseMean_df, by = c("gene", "event")) %>%
     left_join(lfc_summary_all, by = c("gene", "event", "comparison"))
