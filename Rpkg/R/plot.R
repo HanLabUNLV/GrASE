@@ -74,8 +74,16 @@ increase_curve_shortest_edges <- function(g, coords, ec) {
 #' @param gene Character string. Gene identifier.
 #' @param outdir Character string. Path to output directory where the PDF plot
 #'   is written.
+#' @param node_range Integer vector of length 2 c(n_min, n_max). If provided,
+#'   only nodes with sg_id in [n_min, n_max] are shown; R and L are excluded.
 #' @export
-style_and_plot <- function(g, gene, outdir) {
+style_and_plot <- function(g, gene, outdir, node_range = NULL) {
+  if (!is.null(node_range)) {
+    sg_ids <- as.integer(igraph::V(g)$sg_id)
+    keep   <- sg_ids >= node_range[1] & sg_ids <= node_range[2]
+    g <- igraph::induced_subgraph(g, igraph::V(g)[keep])
+  }
+
   color_dict <- c("ex" = "darkorange", "in" = "black", "R" = "black", "L" = "black", "ex_part" = "dark green")
   width_dict <- c("ex" = 1, "in" = 1.2, "R" = 1.2, "L" = 1.2, "ex_part" = 1)
   lty_dict <- c("ex" = "solid", "in" = "dotted", "R" = "dotted", "L" = "dotted", "ex_part" ="solid")
@@ -86,7 +94,10 @@ style_and_plot <- function(g, gene, outdir) {
     igraph::layout.kamada.kawai(...)
   }
    
-  grDevices::pdf(file = file.path(outdir, paste0(gene, ".pdf")), width = 32, height = 8) 
+  n_v   <- igraph::vcount(g)
+  pdf_w <- max(24, n_v * 0.48)
+  pdf_h <- max(8, n_v * 0.11)
+  grDevices::pdf(file = file.path(outdir, paste0(gene, ".pdf")), width = pdf_w, height = pdf_h)
 
   layers_num <- as.integer(igraph::V(g)$sg_id)
   sug <- igraph::layout_with_sugiyama(g, layers = layers_num)$layout
@@ -102,9 +113,9 @@ style_and_plot <- function(g, gene, outdir) {
     sug_lr[,1] <- -sug_lr[,1]
   }
 
-  # circles sized to fit labels
+  # circles sized to fit labels; shrinks for denser graphs, caps at 2
   lbl   <- as.character(igraph::V(g)$name)
-  vsize <- 2 # tweak if labels feel tight
+  vsize <- min(2, max(1.2, 100 / n_v))
 
   # Inspect
   sug_lr <- pull_vertical_outlier_toward_neighbors(g, sug_lr, alpha = 0.7)
@@ -153,6 +164,12 @@ style_and_plot <- function(g, gene, outdir) {
 #'   returned by \code{as.data.frame(SplicingGraphs::sgedges(...))}.
 #' @param gene_nodes A character vector of splice graph node names for the
 #'   gene, as returned by \code{SplicingGraphs::sgnodes(...)}.
+#' @param node_range Integer vector of length 2 c(n_min, n_max). If provided,
+#'   only nodes with numeric sg_id in [n_min, n_max] are shown. R and L edges
+#'   are dropped and original node numbers are used as axis labels.
+#' @param g Optional igraph splicing graph (from \code{igraph::read_graph}).
+#'   If provided, exonic part labels (DEXSeq fragment numbers) are drawn below
+#'   the node row.
 #' @export
 #' @examples
 #' \dontrun{
@@ -165,70 +182,109 @@ style_and_plot <- function(g, gene, outdir) {
 #' grase::plottx("ENSG00000000003.14", outdir = tempdir(),
 #'               gene_edges = gene_edges, gene_nodes = gene_nodes)
 #' }
-plottx <- function (gene, outdir, gene_edges, gene_nodes) {
+plottx <- function (gene, outdir, gene_edges, gene_nodes, node_range = NULL, g = NULL) {
+
+  if (!is.null(node_range)) {
+    n_min    <- node_range[1]
+    n_max    <- node_range[2]
+    from_num <- suppressWarnings(as.integer(gene_edges$from))
+    to_num   <- suppressWarnings(as.integer(gene_edges$to))
+    # drop R/L edges; keep only edges fully within the numeric range
+    keep       <- !is.na(from_num) & !is.na(to_num) &
+                  from_num >= n_min & to_num <= n_max
+    gene_edges <- gene_edges[keep, ]
+    gene_nodes <- as.character(n_min:n_max)
+    # x positions use original sg_id: node "k" plots at x = k + 1
+    x_node  <- as.numeric(gene_nodes) + 1
+    x_lim   <- c(n_min + 1, n_max + 1)
+    x_label <- gene_nodes          # show original node numbers on axis
+    x_label_offset <- n_min        # for transcript label placement
+  } else {
+    x_node  <- seq_along(gene_nodes)
+    x_lim   <- c(1, length(gene_nodes))
+    x_label <- c("R", seq_len(length(gene_nodes) - 2), "L")
+    x_label_offset <- 0
+  }
 
   exon_edges <- gene_edges %>% dplyr::filter(ex_or_in %in% "ex")
   tx_list <- c()
-  for(i in 1:length(gene_edges$tx_id)){
+  for(i in seq_along(gene_edges$tx_id)){
     tx_list <- c(tx_list, gene_edges$tx_id[[i]])
   }
   tx_list <- unique(tx_list)
 
-  grDevices::pdf(file = file.path(outdir, paste0(gene, ".tx.pdf")), width = 24, height = 6)
-  #initiate splicing graph plot
-  par(mar=c(7,10,7,1), bty="n")
-  plot(0,0, type="n",xaxt="n", yaxt="n", xlab=gene, ylab="",
-      xlim=c(1,length(gene_nodes)), ylim=c(-(nrow(gene_edges)/10),length(tx_list)+2))
+  n_nodes  <- length(gene_nodes)
+  n_tx     <- length(tx_list)
+  tx_step  <- 1.0
+  pdf_w    <- max(24, n_nodes * 0.27)
+  pdf_h    <- min(10, max(6, n_tx * 0.35 + 3))
+  grDevices::pdf(file = file.path(outdir, paste0(gene, ".tx.pdf")), width = pdf_w, height = pdf_h)
+  par(mar=c(10, 10, 7, 1), bty="n")
+  plot(0, 0, type="n", xaxt="n", yaxt="n", xlab=gene, ylab="",
+       xlim = x_lim,
+       ylim = c(-(nrow(gene_edges)/10), n_tx * tx_step + 2))
 
-  x <- 1:length(gene_nodes)
-  y <- rep(1, length(gene_nodes))
+  y_nodes <- rep(1, length(x_node))
+  points(x_node, y_nodes, cex=2.5, col="black")
+  text(x_node, y_nodes, labels=x_label, cex=0.7)
 
-  #splice junctions as points
-  points(x, y+0*2, cex=3, col="black")
-  text(x,y,labels=c("R",1:(length(gene_nodes)-2),"L"))
+  # exonic part labels from graphml ex_part edges
+  if (!is.null(g)) {
+    gel <- igraph::as_data_frame(g, what="edges")
+    ep  <- gel[gel$ex_or_in == "ex_part" & gel$dexseq_fragment != "", ]
+    ep$from_n <- suppressWarnings(as.integer(ep$from))
+    ep$to_n   <- suppressWarnings(as.integer(ep$to))
+    if (!is.null(node_range)) {
+      ep <- ep[!is.na(ep$from_n) & !is.na(ep$to_n) &
+               ep$from_n >= node_range[1] & ep$to_n <= node_range[2], ]
+    }
+    ep$mid_x <- (ep$from_n + ep$to_n) / 2 + 1
+    text(ep$mid_x, y = -1.5, labels = paste0("E", ep$dexseq_fragment),
+         srt = 90, cex = 0.6, adj = c(1, 0.5))
+  }
 
   iArrows <- igraph_arrows
 
   for(i in 1:nrow(gene_edges)) {
-    #exons
     if(gene_edges$ex_or_in[i]=="ex"){
       iArrows(as.numeric(gene_edges$from[i])+1, 1, as.numeric(gene_edges$to[i])+1, 1,
               h.lwd=0.25, sh.lwd=1, sh.col="darkgreen",
               width=2, size=0.01)
     }
-    #introns
     if(gene_edges$ex_or_in[i]=="in"){
       iArrows(as.numeric(gene_edges$from[i])+1, 1, as.numeric(gene_edges$to[i])+1, 1,
               h.lwd=0.25, sh.lwd=1, sh.col="dimgrey",
               width=2, size=0.01, curve=0.3 - (i %% 2), sh.lty=2)
     }
-    #introns connecting artificial root node (R)
-    if(gene_edges$ex_or_in[i]=="" & gene_edges$from[i]=="R"){
-      iArrows(1, 1, as.numeric(gene_edges$to[i])+1, 1,
-              h.lwd=0.25, sh.lwd=1, sh.col="dimgrey",
-              width=2, size=0.01, curve=0.3 - (i %% 2), sh.lty=2,)
-    }
-    #introns connecting artificial leaf node (L)
-    if(gene_edges$ex_or_in[i]=="" & gene_edges$to[i]=="L"){
-      iArrows(as.numeric(gene_edges$from[i])+1, 1, length(gene_nodes), 1,
-              h.lwd=0.25, sh.lwd=1, sh.col="dimgrey",
-              width=2, size=0.01, curve=0.3 - (i %% 2), sh.lty=2)
+    if(is.null(node_range)){
+      if(gene_edges$ex_or_in[i]=="" & gene_edges$from[i]=="R"){
+        iArrows(1, 1, as.numeric(gene_edges$to[i])+1, 1,
+                h.lwd=0.25, sh.lwd=1, sh.col="dimgrey",
+                width=2, size=0.01, curve=0.3 - (i %% 2), sh.lty=2)
+      }
+      if(gene_edges$ex_or_in[i]=="" & gene_edges$to[i]=="L"){
+        iArrows(as.numeric(gene_edges$from[i])+1, 1, length(gene_nodes), 1,
+                h.lwd=0.25, sh.lwd=1, sh.col="dimgrey",
+                width=2, size=0.01, curve=0.3 - (i %% 2), sh.lty=2)
+      }
     }
   }
 
-  #transcript segments
-  count = 0
-  for(i in 1:length(tx_list)){
+  count <- 0
+  for(i in seq_along(tx_list)){
     x0 <- c()
     x1 <- c()
-    y <- rep(2+count, length(grep(tx_list[i], exon_edges$tx_id)))
+    y_pos <- 2 + count
+    y <- rep(y_pos, length(grep(tx_list[i], exon_edges$tx_id)))
     for(j in grep(tx_list[i], exon_edges$tx_id)){
       x0 <- c(x0, as.numeric(exon_edges$from[j])+1)
       x1 <- c(x1, as.numeric(exon_edges$to[j])+1)
     }
-    text(x=-1, y=y, tx_list[i], cex=0.8, xpd = TRUE)
-    segments(x0 = x0, y0 = y, x1 = x1, y1 = y, col="darkorange", lwd=2)
-    count = count + 1
+    if (length(x0) > 0) {
+      text(x = x_lim[1] - 1, y = y_pos, tx_list[i], cex=0.8, xpd=TRUE)
+      segments(x0=x0, y0=y, x1=x1, y1=y, col="darkorange", lwd=2)
+    }
+    count <- count + 1
   }
 
   grDevices::dev.off()
