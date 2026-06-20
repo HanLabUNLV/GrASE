@@ -74,8 +74,8 @@ increase_curve_shortest_edges <- function(g, coords, ec) {
 #' @param gene Character string. Gene identifier.
 #' @param outdir Character string. Path to output directory where the PDF plot
 #'   is written.
-#' @param node_range Integer vector of length 2 c(n_min, n_max). If provided,
-#'   only nodes with sg_id in [n_min, n_max] are shown; R and L are excluded.
+#' @param node_range Integer vector of length 2 giving the lower and upper sg_id bounds. If provided,
+#'   only nodes within that range are shown; R and L are excluded.
 #' @export
 style_and_plot <- function(g, gene, outdir, node_range = NULL) {
   if (!is.null(node_range)) {
@@ -164,8 +164,8 @@ style_and_plot <- function(g, gene, outdir, node_range = NULL) {
 #'   returned by \code{as.data.frame(SplicingGraphs::sgedges(...))}.
 #' @param gene_nodes A character vector of splice graph node names for the
 #'   gene, as returned by \code{SplicingGraphs::sgnodes(...)}.
-#' @param node_range Integer vector of length 2 c(n_min, n_max). If provided,
-#'   only nodes with numeric sg_id in [n_min, n_max] are shown. R and L edges
+#' @param node_range Integer vector of length 2 giving the lower and upper sg_id bounds. If provided,
+#'   only nodes within that range are shown. R and L edges
 #'   are dropped and original node numbers are used as axis labels.
 #' @param g Optional igraph splicing graph (from \code{igraph::read_graph}).
 #'   If provided, exonic part labels (DEXSeq fragment numbers) are drawn below
