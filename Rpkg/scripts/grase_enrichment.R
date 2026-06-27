@@ -45,6 +45,12 @@ option_list <- list(
                          "Two columns: gene (Ensembl ID, with or without version)",
                          "and count (raw or normalized counts). If omitted,",
                          "total_expr = sum(baseMean) across events from --file.")),
+  make_option(c("--exclude_genes"), type="character", default=NULL,
+              help=paste("optional file with one Ensembl gene ID per line",
+                         "(version tolerant). These genes are removed from BOTH",
+                         "the significant set and the background universe before",
+                         "the PWF fit and GOseq test. Use to exclude DE genes for",
+                         "a splicing-only enrichment.")),
   make_option(c("--ont"), type="character", default="BP",
               help="GO ontology: BP, MF, or CC [default: BP]"),
   make_option(c("--alpha"), type="double", default=0.05,
@@ -78,6 +84,22 @@ if (!is.null(opt$contrast)) {
 }
 
 res$gene_base <- sub("\\.[0-9]+$", "", res$gene)
+
+# ---------- 1b. Exclude genes (e.g. DE genes for splicing-only) ----------
+# Removed from BOTH foreground and background, so the GOseq universe becomes
+# "tested genes that are not in the exclude list" and the enrichment question
+# is conditional: among non-excluded genes, are significant genes GO-enriched?
+if (!is.null(opt$exclude_genes)) {
+  excl <- readLines(opt$exclude_genes)
+  excl <- sub("\\.[0-9]+$", "", trimws(excl))
+  excl <- unique(excl[nzchar(excl)])
+  n_before  <- length(unique(res$gene_base))
+  res       <- res[!(res$gene_base %in% excl), ]
+  if (nrow(res) == 0) stop("All genes removed by --exclude_genes")
+  n_after   <- length(unique(res$gene_base))
+  cat(sprintf("Excluded genes: %d in list | universe %d -> %d genes (%d removed)\n",
+              length(excl), n_before, n_after, n_before - n_after))
+}
 
 # Per gene: significant if ANY event is significant; n_events = tests done.
 # total_expr = mean(baseMean) across events.  Using mean (not sum) keeps
