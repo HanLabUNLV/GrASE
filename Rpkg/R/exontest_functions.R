@@ -670,7 +670,7 @@ test_model_wilcoxon <- function(dd) {
     )
     
     if (!is.null(res)) {
-        # Calculate Delta PSI (Difference in Means)
+        # Calculate Delta pi (path proportion; difference in means)
         # Using factor levels to determine order: Level 2 - Level 1
         grps <- levels(factor(dd$groups))
         m1_val <- mean(dd$prop[dd$groups == grps[1]])
@@ -828,13 +828,13 @@ compute_lfc_summary <- function(splitcnts, pseudocount = 1L,
       lfc_ref      = log2((.data[[paste0("mean_ref_",  cond_trt)]] + pseudocount) /
                           (.data[[paste0("mean_ref_",  cond_ref)]] + pseudocount)),
       lfc_diff_net = abs(lfc_diff) - abs(lfc_ref),
-      psi_trt      = .data[[paste0("mean_diff_", cond_trt)]] /
+      pi_trt       = .data[[paste0("mean_diff_", cond_trt)]] /
                        (.data[[paste0("mean_diff_", cond_trt)]] + .data[[paste0("mean_ref_", cond_trt)]]),
-      psi_ref      = .data[[paste0("mean_diff_", cond_ref)]] /
+      pi_ref       = .data[[paste0("mean_diff_", cond_ref)]] /
                        (.data[[paste0("mean_diff_", cond_ref)]] + .data[[paste0("mean_ref_", cond_ref)]]),
-      delta_psi    = psi_trt - psi_ref
+      delta_pi     = pi_trt - pi_ref
     ) %>%
-    dplyr::select(gene, event, lfc_diff, lfc_ref, lfc_diff_net, psi_trt, psi_ref, delta_psi)
+    dplyr::select(gene, event, lfc_diff, lfc_ref, lfc_diff_net, pi_trt, pi_ref, delta_pi)
 }
 
 #' Annotate test results with denominator-effect flag columns
@@ -852,25 +852,25 @@ posthoc_lfc_summary <- function(results, lfc_summary) {
 
 #' Add a significant column to test results
 #'
-#' @param res data frame with padj, lfc_diff_net, delta_psi columns
+#' @param res data frame with padj, lfc_diff_net, delta_pi columns
 #' @param padj_thr FDR threshold
 #' @param delta minimum lfc_diff_net (directionality filter; events with lfc_diff_net <= delta excluded)
-#' @param min_dpsi minimum |delta_psi| (effect size filter)
+#' @param min_dpi minimum |delta_pi| (path-proportion effect size filter)
 #' @export
-add_significant <- function(res, padj_thr, delta, min_dpsi = 0.1) {
+add_significant <- function(res, padj_thr, delta, min_dpi = 0.1) {
   has_lfc <- "lfc_diff_net" %in% names(res)
   lfc_ok <- if (has_lfc) {
     (res$lfc_diff_net > delta) | is.na(res$lfc_diff_net)
   } else {
     TRUE
   }
-  has_dpsi <- "delta_psi" %in% names(res)
-  dpsi_ok <- if (has_dpsi) {
-    (abs(res$delta_psi) >= min_dpsi) | is.na(res$delta_psi)
+  has_dpi <- "delta_pi" %in% names(res)
+  dpi_ok <- if (has_dpi) {
+    (abs(res$delta_pi) >= min_dpi) | is.na(res$delta_pi)
   } else {
     TRUE
   }
-  res$significant <- !is.na(res$padj) & res$padj < padj_thr & lfc_ok & dpsi_ok
+  res$significant <- !is.na(res$padj) & res$padj < padj_thr & lfc_ok & dpi_ok
   res
 }
 

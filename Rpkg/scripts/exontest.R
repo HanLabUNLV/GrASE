@@ -52,8 +52,8 @@ make_option(c("--use_prec_loess"), action="store_true", default=FALSE,
               help="padj threshold for the significant column [default: 0.05]", metavar="double"),
   make_option(c("--delta"), type="double", default=0,
               help="lfc_diff_net threshold for the significant column; events with lfc_diff_net <= delta are not significant [default: 0]", metavar="double"),
-  make_option(c("--min_dpsi"), type="double", default=0.1,
-              help="minimum |delta_psi| for the significant column; events with |delta_psi| < min_dpsi are not significant [default: 0.1]", metavar="double"),
+  make_option(c("--min_dpi"), type="double", default=0.1,
+              help="minimum |delta_pi| (path proportion effect size) for the significant column; events with |delta_pi| < min_dpi are not significant [default: 0.1]", metavar="double"),
   make_option(c("--mc_cores"), type="integer", default=32L,
               help="number of parallel worker processes for mclapply [default: %default]", metavar="integer")
 );
@@ -107,7 +107,7 @@ prec_trend       <- isTRUE(opt$use_prec_loess)
 padj_thr         <- as.double(opt$padj_threshold)
 delta            <- as.double(opt$delta)
 padj_method      <- as.character(opt$padj_method)
-min_dpsi         <- as.double(opt$min_dpsi)
+min_dpi          <- as.double(opt$min_dpi)
 
 # Expand tilde in paths
 outdir <- path.expand(outdir)
@@ -448,7 +448,7 @@ if (model == 'betabinom_EBmap') {
       ungroup()
   }
 
-  results <- add_significant(results, padj_thr, delta, min_dpsi)
+  results <- add_significant(results, padj_thr, delta, min_dpi)
   write.table(results, file = out_resultfile, quote = FALSE, sep = "\t", row.names = FALSE)
 
 } else if (model == 'betabinom_EBapprox') {
@@ -516,7 +516,7 @@ if (model == 'betabinom_EBmap') {
       ungroup()
   }
 
-  results <- add_significant(results, padj_thr, delta, min_dpsi)
+  results <- add_significant(results, padj_thr, delta, min_dpi)
   write.table(results, file = out_resultfile, quote = FALSE, sep = "\t", row.names = FALSE)
 
 } else if (model == 'dirmult_EBplugin') {
@@ -559,7 +559,7 @@ if (model == 'betabinom_EBmap') {
     res$pvalue <- res$p.value
     res <- adjust_pvalues(res, independentFiltering = FALSE, alpha = 0.05, method = padj_method)
     res$pvalue <- NULL
-    add_significant(res, padj_thr, delta, min_dpsi)
+    add_significant(res, padj_thr, delta, min_dpi)
   })
   results <- bind_rows(contrast_results)
   write.table(results, file = out_resultfile, sep = "\t", quote = FALSE, row.names = FALSE)
@@ -586,7 +586,7 @@ if (model == 'betabinom_EBmap') {
     res$pvalue <- res$p.value
     res <- adjust_pvalues(res, independentFiltering = indep_filter, alpha = 0.05, method = padj_method)
     res$pvalue <- NULL
-    add_significant(res, padj_thr, delta, min_dpsi)
+    add_significant(res, padj_thr, delta, min_dpi)
   })
   results <- bind_rows(contrast_results)
   write.table(results, file = out_resultfile, quote = FALSE, sep = "\t", row.names = FALSE)
@@ -615,7 +615,7 @@ if (model == 'betabinom_EBmap') {
       ungroup()
   }
 
-  results <- add_significant(results, padj_thr, delta, min_dpsi)
+  results <- add_significant(results, padj_thr, delta, min_dpi)
   write.table(results, file = out_resultfile, quote = FALSE, sep = "\t", row.names = FALSE)
 
 } else {
@@ -732,7 +732,7 @@ if (split == 'bipartition' || split == 'n_choose_2') {
       min_data$pvalue <- NULL
     }
 
-    min_data <- add_significant(min_data, padj_thr, delta, min_dpsi)
+    min_data <- add_significant(min_data, padj_thr, delta, min_dpi)
     out_mincomb <- sub("\\.annotated\\.txt$", ".mincomb.annotated.txt",
                       out_result_annotated)
     write.table(min_data, out_mincomb, sep = "\t", quote = FALSE, row.names = FALSE)
@@ -766,7 +766,7 @@ if (split == 'bipartition' || split == 'n_choose_2') {
       fisher_data$pvalue <- NULL
     }
 
-    fisher_data <- add_significant(fisher_data, padj_thr, delta, min_dpsi)
+    fisher_data <- add_significant(fisher_data, padj_thr, delta, min_dpi)
     out_fisher <- sub("\\.annotated\\.txt$", ".fisher_combined.annotated.txt",
                       out_result_annotated)
     write.table(fisher_data, out_fisher, sep = "\t", quote = FALSE, row.names = FALSE)

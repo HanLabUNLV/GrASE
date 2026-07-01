@@ -4,16 +4,16 @@
 \alias{add_significant}
 \title{Add a significant column to test results}
 \usage{
-add_significant(res, padj_thr, delta, min_dpsi = 0.1)
+add_significant(res, padj_thr, delta, min_dpi = 0.1)
 }
 \arguments{
-\item{res}{data frame with padj, lfc_diff_net, delta_psi columns}
+\item{res}{data frame with padj, lfc_diff_net, delta_pi columns}
 
 \item{padj_thr}{FDR threshold}
 
 \item{delta}{minimum lfc_diff_net (directionality filter; events with lfc_diff_net <= delta excluded)}
 
-\item{min_dpsi}{minimum |delta_psi| (effect size filter)}
+\item{min_dpi}{minimum |delta_pi| (path-proportion effect size filter)}
 }
 \description{
 Add a significant column to test results
