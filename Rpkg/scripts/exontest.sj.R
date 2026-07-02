@@ -109,12 +109,7 @@ if (file.exists(exoncnt_master)) {
   stop()
 }
 
-# baseMean: total per-event coverage across both diffs and ref
 if (split != "multinomial") {
-  baseMean_df <- splitcnts %>%
-    mutate(n_total = rowSums(cbind(diff1, diff2, ref), na.rm = TRUE)) %>%
-    group_by(gene, event) %>%
-    summarise(baseMean = mean(n_total, na.rm = TRUE), .groups = "drop")
 
   make_comparison <- function(sc, diff_col, ref_col, comp_name) {
     sc %>%
@@ -128,6 +123,16 @@ if (split != "multinomial") {
   sc_d1r  <- make_comparison(splitcnts, "diff1", "ref",   "diff1_vs_ref")
   sc_d2r  <- make_comparison(splitcnts, "diff2", "ref",   "diff2_vs_ref")
   sc_d1d2 <- make_comparison(splitcnts, "diff2", "diff1", "diff2_vs_diff1")
+
+  # baseMean: per-comparison coverage n (raw, before pseudocount), keyed by
+  # (gene, event, comparison). n = diff_i + ref for the ref comparisons and
+  # diff1 + diff2 for diff2_vs_diff1 -- each is the beta-binomial test's denominator
+  # and the correct independent-filtering statistic.
+  baseMean_df <- bind_rows(
+    sc_d1r  %>% group_by(gene, event, comparison) %>% summarise(baseMean = mean(n, na.rm = TRUE), .groups = "drop"),
+    sc_d2r  %>% group_by(gene, event, comparison) %>% summarise(baseMean = mean(n, na.rm = TRUE), .groups = "drop"),
+    sc_d1d2 %>% group_by(gene, event, comparison) %>% summarise(baseMean = mean(n, na.rm = TRUE), .groups = "drop")
+  )
 
   # pseudocount: applied to ref-based comparisons only; d1d2 uses count data
   if (pseudocount > 0L) {
@@ -395,7 +400,7 @@ if (model == 'betabinom_EBmap') {
   rm(sc_both_eb)
 
   results <- results %>%
-    left_join(baseMean_df, by = c("gene", "event")) %>%
+    left_join(baseMean_df, by = c("gene", "event", "comparison")) %>%
     left_join(lfc_summary_all, by = c("gene", "event", "comparison"))
 
   if (exists("pvalueAdjustment") && nrow(results) > 0) {
@@ -460,7 +465,7 @@ if (model == 'betabinom_EBmap') {
                                 mc_cores = mc_cores)
   rm(sc_both_eb)
   results <- results %>%
-    left_join(baseMean_df, by = c("gene", "event")) %>%
+    left_join(baseMean_df, by = c("gene", "event", "comparison")) %>%
     left_join(lfc_summary_all, by = c("gene", "event", "comparison"))
 
   if (exists("pvalueAdjustment") && nrow(results) > 0) {
@@ -524,7 +529,7 @@ if (model == 'betabinom_EBmap') {
                                 err_log = "wilcoxon.errors.log",
                                 mc_cores = mc_cores)
   results <- results %>%
-    left_join(baseMean_df, by = c("gene", "event")) %>%
+    left_join(baseMean_df, by = c("gene", "event", "comparison")) %>%
     left_join(lfc_summary_all, by = c("gene", "event", "comparison"))
 
   if (exists("pvalueAdjustment") && nrow(results) > 0) {
@@ -544,7 +549,7 @@ if (model == 'betabinom_EBmap') {
                                 err_log = "glmmtmb_noprior.errors.log",
                                 mc_cores = mc_cores)
   results <- results %>%
-    left_join(baseMean_df, by = c("gene", "event")) %>%
+    left_join(baseMean_df, by = c("gene", "event", "comparison")) %>%
     left_join(lfc_summary_all, by = c("gene", "event", "comparison"))
 
   if (exists("pvalueAdjustment") && nrow(results) > 0) {
