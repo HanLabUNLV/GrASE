@@ -406,8 +406,27 @@ prec_estimate_plugin_dm <- function(dd) {
     var_log_prec <- 1 / (-d2_dlogalpha2)
     if (!is.finite(var_log_prec) || var_log_prec <= 0) return(NULL)
 
+    # --- 6. Identifiability: DM vs multinomial (alpha -> Inf) LRT ---
+    # The multinomial limit is the null with no over-dispersion (rho -> 0).
+    # Its log-likelihood is the closed-form multinomial LL at pi_hat. Events
+    # whose DM fit is not significantly better than multinomial (or whose alpha
+    # ran to the optimizer's upper boundary) are non-identifiable: their
+    # precision carries no over-dispersion information and would bias the global
+    # shrinkage target if included. We flag them so the moderation step can
+    # exclude them from prior estimation while still returning a precision.
+    multinom_ll <- sum(Y * log(matrix(pi_hat, nrow = N, ncol = ncol(Y),
+                                      byrow = TRUE)), na.rm = TRUE)
+    LR      <- 2 * (opt$objective - multinom_ll)
+    # Boundary of the optimize() interval (see step 4); a fit that reaches it is
+    # unidentified regardless of the LRT.
+    at_boundary <- log_alpha_hat >= 12 - 1e-3
+    identifiable <- is.finite(LR) && LR > 0 &&
+                    pchisq(LR, df = 1, lower.tail = FALSE) < 0.05 &&
+                    !at_boundary
+
     data.frame(gene = gene, event = event,
-               log_prec = log_alpha_hat, var_log_prec = var_log_prec)
+               log_prec = log_alpha_hat, var_log_prec = var_log_prec,
+               identifiable = identifiable)
 }
 
 
@@ -428,7 +447,15 @@ moderate_prec_log_scale <- function(prec_table) {
   # log_prec is logit(rho). Values like -2e6 are numerical garbage.
   # var_log_prec > 1000 indicates essentially no information.
   valid_subset <- prec_table$var_log_prec < 1000 & abs(prec_table$log_prec) < 50
-  
+  # Additionally restrict to events with an identifiable DM precision (when the
+  # flag is available): events at the multinomial (no-over-dispersion) boundary
+  # pass the var/magnitude filter but form a spurious second mode that biases
+  # z_bar and tau2. They still receive a moderated precision below.
+  if ("identifiable" %in% names(prec_table)) {
+    ident_valid <- valid_subset & (prec_table$identifiable %in% TRUE)
+    if (sum(ident_valid, na.rm = TRUE) >= 10) valid_subset <- ident_valid
+  }
+
   # If too few valid points, fallback to simple median or original
   if (sum(valid_subset, na.rm=TRUE) < 10) {
       z_bar <- median(prec_table$log_prec, na.rm=TRUE)
@@ -506,6 +533,13 @@ moderate_prec_trend <- function(prec_df, baseMean_df, span = 0.5) {
     join_cols <- c(join_cols, "comparison")
 
   valid     <- abs(prec_df$log_prec) < 50 & prec_df$var_log_prec < 1000
+  # Restrict the trend/prior-fitting set to identifiable events when flagged:
+  # boundary (multinomial-limit) estimates would otherwise distort the trend
+  # and inflate tau2. All events still receive a moderated precision below.
+  if ("identifiable" %in% names(prec_df) &&
+      sum(valid & (prec_df$identifiable %in% TRUE), na.rm = TRUE) >= 10) {
+    valid <- valid & (prec_df$identifiable %in% TRUE)
+  }
   prec_est  <- prec_df[valid, ] %>%
     left_join(baseMean_df, by = join_cols) %>%
     filter(!is.na(baseMean) & baseMean > 0)
