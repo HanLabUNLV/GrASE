@@ -40,8 +40,9 @@ option_list = list(
               help="comma-separated contrasts in trt:ref format, e.g. B:A,C:A (overrides --cond1/--cond2 for multi-group runs)", metavar="character"),
   make_option(c("--use_phi_loess"), action="store_true", default=FALSE,
               help="use loess phi trend (log(phi) ~ log(baseMean)) as EB shrinkage target instead of global median"),
-  make_option(c("--independent_filtering"), action="store_true", default=TRUE,
-              help="use DESeq2-style independent filtering (filter on baseMean) before FDR correction [default: TRUE]"),
+  make_option(c("--no_independent_filtering"), action="store_false", default=TRUE,
+              dest="independent_filtering",
+              help="disable DESeq2-style independent filtering (filter on baseMean) before FDR correction (on by default)"),
   make_option(c("--padj_method"), type="character", default="nested_BH",
               help="p-value adjustment method: nested_BH (default) or any p.adjust method e.g. BH", metavar="character"),
   make_option(c("--pseudocount"), type="integer", default=0L,
@@ -268,8 +269,22 @@ if (model == 'betabinom_EBmap' || model == 'betabinom_EBapprox') {
 
 # Per Gene Model Estimation
 if (model == 'betabinom_EBmap') {
-  # Prior parameters from MLE phi estimates
-  phi_trimmed  <- phi_df[!is.na(phi_df$phi) & phi_df$phi < 1e+10 & phi_df$phi > 0, 'phi']
+  # Prior parameters from MLE phi estimates.
+  # Restrict to events with an identifiable beta-binomial dispersion when that
+  # flag is available: boundary/non-identifiable events (phi at the binomial
+  # limit) form a spurious second mode that drags the fitted mean up and
+  # inflates the sd, weakening the prior.  They are still tested (moderated),
+  # just excluded from defining the prior.
+  phi_prior_df <- phi_df[!is.na(phi_df$phi) & phi_df$phi < 1e+10 & phi_df$phi > 0, ]
+  if ("identifiable" %in% names(phi_prior_df)) {
+    phi_ident <- phi_prior_df[phi_prior_df$identifiable %in% TRUE, ]
+    if (nrow(phi_ident) >= 10) {
+      phi_prior_df <- phi_ident
+    } else {
+      warning("Fewer than 10 identifiable phi estimates; using all events for the prior.")
+    }
+  }
+  phi_trimmed  <- phi_prior_df$phi
   log_phi_vals <- log(phi_trimmed)
   fit_logphi   <- fitdistr(log_phi_vals, "normal")
   mean_logphi  <- fit_logphi$estimate["mean"]
@@ -297,11 +312,18 @@ if (model == 'betabinom_EBmap') {
     # EBapprox trend moderation (fallback for MAP failures)
     phi_table_trend <- moderate_phi_trend(phi_df, baseMean_df_all)
 
-    # Residual SD around trend, per comparison
+    # Residual SD around trend, per comparison.
+    # Restrict to identifiable events (when flagged): boundary events sit far
+    # above the trend and would inflate the residual SD used as the prior width.
     phi_df_with_trend <- phi_df %>%
       left_join(phi_table_trend %>% select(gene, event, comparison, z_trend),
                 by = c("gene", "event", "comparison")) %>%
-      filter(!is.na(phi) & phi > 0 & !is.na(z_trend)) %>%
+      filter(!is.na(phi) & phi > 0 & !is.na(z_trend))
+    if ("identifiable" %in% names(phi_df_with_trend) &&
+        sum(phi_df_with_trend$identifiable %in% TRUE) >= 10) {
+      phi_df_with_trend <- phi_df_with_trend %>% filter(identifiable %in% TRUE)
+    }
+    phi_df_with_trend <- phi_df_with_trend %>%
       mutate(resid = log(phi) - z_trend)
 
     prior_params <- phi_df_with_trend %>%
@@ -328,7 +350,7 @@ if (model == 'betabinom_EBmap') {
     if (!exists("phi_map_df")) {
       prior_fn_trend <- function(dd) {
         pd <- data.frame(prior = sprintf("normal(%g,%g)", dd$z_trend[1], dd$sd_resid[1]),
-                         class = "fixef_disp", coef = "", stringsAsFactors = FALSE)
+                         class = "fixef_disp", coef = "1", stringsAsFactors = FALSE)
         phi_map_glmmTMB(dd, pd)
       }
 
@@ -382,7 +404,7 @@ if (model == 'betabinom_EBmap') {
       # Global prior for all events
       prior_disp <- data.frame(
         prior = sprintf("normal(%g,%g)", mean_logphi, sd_logphi),
-        class = "fixef_disp", coef = "", stringsAsFactors = FALSE
+        class = "fixef_disp", coef = "1", stringsAsFactors = FALSE
       )
       print(prior_disp)
 

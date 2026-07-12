@@ -53,6 +53,12 @@ phi_estimate_glmmTMB <- function(dd) {
     dd <- dd[dd$n > 0, ]
     if (nrow(dd) < 2) return(NULL)
 
+    # Binomial null: used only to test whether the beta-binomial dispersion is
+    # identifiable for this event (see 'identifiable' flag below).
+    m0 <- tryCatch(
+      glmmTMB(cbind(y, n - y) ~ 1, data = dd, family = binomial(link = "logit")),
+      error = function(e) NULL
+    )
     m1 <- tryCatch(
       glmmTMB(
         cbind(y, n - y) ~ 1,
@@ -73,7 +79,26 @@ phi_estimate_glmmTMB <- function(dd) {
         ## Delta method: Var(phi) = phi^2 * Var(log(phi))
         var_phi <- (phi_hat^2) * var_log_phi
       }
-      return(data.frame(gene = gene, event = event, phi = phi_hat, var_phi = var_phi))
+
+      # LRT: is the beta-binomial dispersion identifiable (i.e. is there
+      # significant overdispersion relative to binomial)?  Events that fail
+      # this are indistinguishable from binomial; their phi runs to the
+      # +Inf (binomial-limit) boundary and carries no information about the
+      # typical dispersion.  We flag them so they can be excluded when
+      # estimating the global shrinkage target / prior, while still keeping
+      # phi (they are tested with the moderated target, never dropped or
+      # sent to a binomial GLM).
+      identifiable <- FALSE
+      if (!is.null(m0) && !is.na(logLik(m0))) {
+        test <- tryCatch(anova(m1, m0, test = "LRT"), error = function(e) NULL)
+        if (!is.null(test) && !is.na(test$`Pr(>Chisq)`[2]) &&
+            test$`Pr(>Chisq)`[2] < 0.05) {
+          identifiable <- TRUE
+        }
+      }
+
+      return(data.frame(gene = gene, event = event, phi = phi_hat,
+                        var_phi = var_phi, identifiable = identifiable))
     }
     return(NULL)
 }
@@ -145,12 +170,25 @@ moderate_phi_log_scale <- function(phi_table, trimming_limit = 1e+10) {
   phi_table$var_z <- phi_table$var_phi / (phi_table$phi^2)
   
   # 4. Global Estimates (Using Medians in Log-Space)
-  z_bar      <- median(phi_table$z, na.rm = TRUE)
-  s2_z       <- var(phi_table$z, na.rm = TRUE)
+  # Only events with an identifiable beta-binomial dispersion (significantly
+  # overdispersed vs binomial) are allowed to define the global target and the
+  # biological variance.  Boundary/non-identifiable events (phi at the binomial
+  # limit) would otherwise inflate both z_bar and tau2_z (bimodal spread) and
+  # prevent shrinkage.  All events still receive a z_mod below.
+  if ("identifiable" %in% names(phi_table)) {
+    use <- which(phi_table$identifiable %in% TRUE)
+  } else {
+    use <- seq_len(nrow(phi_table))
+  }
+  # Safety fallback: if too few identifiable events, use all of them.
+  if (length(use) < 10) use <- seq_len(nrow(phi_table))
+
+  z_bar      <- median(phi_table$z[use], na.rm = TRUE)
+  s2_z       <- var(phi_table$z[use], na.rm = TRUE)
   # Use the median of sampling variances to represent the 'typical' noise
   # this will likely be ~1.0 instead of 51,000,000
-  typical_var_z <- median(phi_table$var_z, na.rm = TRUE)
-  
+  typical_var_z <- median(phi_table$var_z[use], na.rm = TRUE)
+
   # 5. Biological Variance (tau^2) in Log-Space
   # We subtract the average sampling error from the total observed variance
   tau2_z <- max(s2_z - typical_var_z, 0)
@@ -220,9 +258,19 @@ moderate_phi_trend <- function(phi_df, baseMean_df, span = 0.5,
   phi_est$log_bm <- log(phi_est$baseMean)
 
   # -- Step 2: fit loess trend on reliable estimates --
-  # Exclude the noisiest 10 % of estimates when fitting the trend
+  # Exclude the noisiest 10 % of estimates when fitting the trend, and restrict
+  # to events with an identifiable beta-binomial dispersion when that flag is
+  # available (boundary/non-identifiable events at the binomial limit carry no
+  # dispersion information and would distort the trend and tau^2).
+  if ("identifiable" %in% names(phi_est)) {
+    ident <- phi_est$identifiable %in% TRUE
+    # Safety fallback: if too few identifiable events, keep all of them.
+    if (sum(ident, na.rm = TRUE) < 10) ident <- rep(TRUE, nrow(phi_est))
+  } else {
+    ident <- rep(TRUE, nrow(phi_est))
+  }
   var_z_thresh <- quantile(phi_est$var_z, 0.9, na.rm = TRUE)
-  reliable     <- is.finite(phi_est$z) & !is.na(phi_est$var_z) &
+  reliable     <- ident & is.finite(phi_est$z) & !is.na(phi_est$var_z) &
                   phi_est$var_z < var_z_thresh
   z_bar <- median(phi_est$z[reliable], na.rm = TRUE)
 
@@ -247,8 +295,11 @@ moderate_phi_trend <- function(phi_df, baseMean_df, span = 0.5,
   }
 
   # -- Step 4: estimate biological variance tau^2 --
-  typical_var_z <- median(phi_est$var_z, na.rm = TRUE)
-  s2_z          <- var(phi_est$z, na.rm = TRUE)
+  # Estimate the typical sampling noise and total variance from identifiable
+  # events only, so the bimodal spread introduced by boundary estimates does
+  # not inflate tau^2 (which would suppress shrinkage).
+  typical_var_z <- median(phi_est$var_z[ident], na.rm = TRUE)
+  s2_z          <- var(phi_est$z[ident], na.rm = TRUE)
   tau2_z        <- max(s2_z - typical_var_z, 0)
 
   # -- Step 5: join phi estimates onto all events, compute shrinkage --
