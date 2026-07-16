@@ -1,7 +1,7 @@
 # GrASE
 Graph of Alternative Splice junctions and Exonic parts
 
-> **Note:** If you are looking for the source code for the paper [GrASE: Graph of Alternative Splice junctions and Exonic parts](https://academic.oup.com/bib/article/26/3/bbaf204/8127326), please check the [`archive/v1-archive` branch](https://github.com/HanLabUNLV/GrASE/tree/archive/v1-archive) or the [`v1.0` tag](https://github.com/HanLabUNLV/GrASE/releases/tag/v1.0).
+> **Note:** If you are looking for the source code for the paper [A novel splicing graph allows a direct comparison between exon-based and splice junction–based approaches to alternative splicing detection](https://academic.oup.com/bib/article/26/3/bbaf204/8127326), please check the [`archive/v1-archive` branch](https://github.com/HanLabUNLV/GrASE/tree/archive/v1-archive) or the [`v1.0` tag](https://github.com/HanLabUNLV/GrASE/releases/tag/v1.0).
 
 ## About
 GrASE (**Gr**aph of **A**lternative **S**plice Junctions and **E**xonic Parts) is a graph-based framework for detecting differential alternative splicing between two conditions from RNA-seq data.
@@ -20,9 +20,9 @@ GrASE (**Gr**aph of **A**lternative **S**plice Junctions and **E**xonic Parts) i
 
 **Filtering by event class.** Bubbles touching the leftmost graph node (L representing the Transcription Start Site) and the rightmost graph node (R representing the Transcription Termination Site) are classified as alternative TSS/TTS events; all others are internal alternative splicing events. Both categories are tested independently.
 
-**Statistical models.** Differential exon usage is tested with a beta-binomial model (via glmmTMB or VGAM), with overdispersion (phi) regularised by either a MAP prior or Empirical Bayes shrinkage. A non-parametric Wilcoxon fallback is also available.
+**Statistical models.** Differential exon usage is tested with a beta-binomial model (via glmmTMB or VGAM), with overdispersion (phi) regularised with Empirical Bayes shrinkage. A non-parametric Wilcoxon fallback is also available.
 
-**Workflow.** The five-stage pipeline goes from raw per-gene splicing graphs (GraphML) → bubble enumeration → event-type filtering → DEXSeq count aggregation → statistical testing. It ingests DEXSeq per-sample read counts directly and can compare its results to rMATS or DEXSeq/Saturn output.
+**Workflow.** The five-stage pipeline goes from raw per-gene splicing graphs (GraphML) → bubble enumeration → event-type filtering → DEXSeq count aggregation → statistical testing. It ingests DEXSeq per-sample read counts directly and can compare its results to rMATS or DEXSeq output.
 
 * Container used for running GrASE can be found here: [GrASE Container](https://drive.google.com/drive/folders/10H6NxN0T1cP0O68VwhCh55KVVb08Iqzb)
 
