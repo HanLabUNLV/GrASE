@@ -4,13 +4,16 @@
 \alias{style_and_plot}
 \title{Style and plot}
 \usage{
-style_and_plot(g, gene, outdir)
+style_and_plot(g, gene, outdir, node_range = NULL)
 }
 \arguments{
 \item{gene}{Character string. Gene identifier.}
 
 \item{outdir}{Character string. Path to output directory where the PDF plot
 is written.}
+
+\item{node_range}{Integer vector of length 2 giving the lower and upper sg_id bounds. If provided,
+only nodes within that range are shown; R and L are excluded.}
 }
 \description{
 Style and plot

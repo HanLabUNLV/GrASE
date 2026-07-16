@@ -53,15 +53,28 @@ phi_estimate_glmmTMB <- function(dd) {
     dd <- dd[dd$n > 0, ]
     if (nrow(dd) < 2) return(NULL)
 
-    # Binomial null: used only to test whether the beta-binomial dispersion is
-    # identifiable for this event (see 'identifiable' flag below).
+    # Estimate the single dispersion under the FULL design (mean modeled by
+    # ~groups) rather than the intercept-only null (~1). Estimating dispersion
+    # under ~1 lets a real group effect inflate the apparent overdispersion,
+    # which biases the fixed-dispersion test toward being conservative under
+    # the alternative (edgeR/DESeq2 estimate dispersion under the full design
+    # for the same reason). The dispersion formula stays ~1, so this is still a
+    # single phi -- just estimated controlling for the group means. Falls back
+    # to ~1 when only one group is present.
+    if ("groups" %in% names(dd)) dd$groups <- droplevels(factor(dd$groups))
+    full_design <- "groups" %in% names(dd) && length(unique(dd$groups)) >= 2
+    mean_form <- if (full_design) cbind(y, n - y) ~ groups else cbind(y, n - y) ~ 1
+
+    # Binomial null (same mean design): used only to test whether the
+    # beta-binomial dispersion is identifiable (significant overdispersion
+    # beyond the group means; see 'identifiable' flag below).
     m0 <- tryCatch(
-      glmmTMB(cbind(y, n - y) ~ 1, data = dd, family = binomial(link = "logit")),
+      glmmTMB(mean_form, data = dd, family = binomial(link = "logit")),
       error = function(e) NULL
     )
     m1 <- tryCatch(
       glmmTMB(
-        cbind(y, n - y) ~ 1,
+        mean_form,
         data = dd,
         family = glmmTMB::betabinomial(link = "logit")
       ),
@@ -124,9 +137,17 @@ phi_map_glmmTMB <- function(dd, prior_disp) {
     dd <- dd[dd$n > 0, ]
     if (nrow(dd) < 2) return(NULL)
 
+    # MAP dispersion estimated under the FULL design (mean ~groups), matching
+    # phi_estimate_glmmTMB, so the dispersion that EBmap fixes in the test is
+    # not inflated by an unmodeled group effect. Dispersion formula stays ~1
+    # (single phi); the prior on coef="1" still targets the dispersion intercept.
+    if ("groups" %in% names(dd)) dd$groups <- droplevels(factor(dd$groups))
+    full_design <- "groups" %in% names(dd) && length(unique(dd$groups)) >= 2
+    mean_form <- if (full_design) cbind(y, n - y) ~ groups else cbind(y, n - y) ~ 1
+
     m <- tryCatch(
       glmmTMB(
-        cbind(y, n - y) ~ 1,
+        mean_form,
         data = dd,
         family = glmmTMB::betabinomial(link = "logit"),
         priors = prior_disp

@@ -4,7 +4,7 @@
 \alias{plottx}
 \title{Style and tx structure}
 \usage{
-plottx(gene, outdir, gene_edges, gene_nodes)
+plottx(gene, outdir, gene_edges, gene_nodes, node_range = NULL, g = NULL)
 }
 \arguments{
 \item{gene}{Character string. Gene identifier.}
@@ -17,6 +17,14 @@ returned by \code{as.data.frame(SplicingGraphs::sgedges(...))}.}
 
 \item{gene_nodes}{A character vector of splice graph node names for the
 gene, as returned by \code{SplicingGraphs::sgnodes(...)}.}
+
+\item{node_range}{Integer vector of length 2 giving the lower and upper sg_id bounds. If provided,
+only nodes within that range are shown. R and L edges
+are dropped and original node numbers are used as axis labels.}
+
+\item{g}{Optional igraph splicing graph (from \code{igraph::read_graph}).
+If provided, exonic part labels (DEXSeq fragment numbers) are drawn below
+the node row.}
 }
 \description{
 Style and tx structure
