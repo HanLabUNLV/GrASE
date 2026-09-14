@@ -1,16 +1,36 @@
 #!/usr/bin/env Rscript
 # grase_enrichment.R
 # GO enrichment for GrASE significant AS genes, controlling for:
-#   (1) number of exon-event tests per gene (n_events)
-#   (2) gene expression level (total_expr, from baseMean in test file or
-#       an external count file supplied via --expr_file)
+#   (1) number of exon-event tests per gene (n_events)   [always]
+#   (2) gene expression level (total_expr)               [opt-in only]
 #
-# Both covariates are fitted jointly via logistic regression with natural
-# splines: glm(is_sig ~ ns(log(n_events)) + ns(log(total_expr)), binomial).
-# Fitted probabilities serve as per-gene weights fed to goseq's Wallenius
-# non-central hypergeometric test (same as the nullp() PWF, but multi-variate).
-# If --expr_file is omitted, total_expr = sum of baseMean across all events
-# for that gene (a reasonable within-file proxy).
+# The probability weighting function is fitted by logistic regression with
+# natural splines and fed to goseq's Wallenius test (same role as nullp()'s
+# PWF, but multivariate).  Which model is fitted depends on the covariate
+# source chosen:
+#
+#   default                  glm(is_sig ~ ns(log(n_events)))
+#   --expr_file FILE         glm(is_sig ~ ns(log(n_events)) + ns(log(total_expr)))
+#                            with total_expr from the external file
+#   --internal_expr          glm(is_sig ~ ns(log(n_events)) + ns(log(total_expr)))
+#                            with total_expr = mean(baseMean) across the gene's
+#                            events, computed from --file
+#
+# total_expr is ALWAYS computed as mean(baseMean) across a gene's events (not
+# sum: sum grows with n_events and duplicates that covariate).  Under the
+# default it is computed but NOT used in the model; with --expr_file it is
+# overwritten by the external value, falling back to mean(baseMean) for genes
+# absent from that file; with --internal_expr it is used as computed.
+#
+# Choosing a covariate source:
+#   mean(baseMean) is within-event read depth and strongly predicts
+#   significance (AIC improvement ~2300) because depth drives power.
+#   Correcting for it is conservative and can remove genuine housekeeping
+#   signal (translation, splicing) along with the detectability bias, since
+#   it is partly downstream of the splicing being tested.  External
+#   normalized gene counts measure expression independently of how reads
+#   distribute across a gene's bipartitions, and are the preferred covariate
+#   when a power correction is wanted.  Report which was used.
 #
 # Required packages: goseq, org.Hs.eg.db, GO.db, AnnotationDbi,
 #                    splines, dplyr, ggplot2, optparse
@@ -44,7 +64,12 @@ option_list <- list(
               help=paste("optional tab-separated file with per-gene expression.",
                          "Two columns: gene (Ensembl ID, with or without version)",
                          "and count (raw or normalized counts). If omitted,",
-                         "total_expr = sum(baseMean) across events from --file.")),
+                         "total_expr = mean(baseMean) across events from --file.")),
+  make_option(c("--internal_expr"), action="store_true", default=FALSE,
+              help=paste("use total_expr = mean(baseMean) from --file as the",
+                         "expression covariate. Conservative: baseMean is",
+                         "within-event depth and partly downstream of the",
+                         "splicing tested. Ignored if --expr_file is given.")),
   make_option(c("--exclude_genes"), type="character", default=NULL,
               help=paste("optional file with one Ensembl gene ID per line",
                          "(version tolerant). These genes are removed from BOTH",
@@ -186,14 +211,20 @@ cat(sprintf("Genes with Entrez mapping: %d / %d (%.1f%%)\n",
 
 gene_summary$log_n <- log(pmax(gene_summary$n_events, 1))
 
-if (!is.null(opt$expr_file)) {
-  cat("Fitting P(sig) ~ ns(log(n_events)) + ns(log(total_expr))...\n")
-  gene_summary$log_exp <- log(pmax(gene_summary$total_expr, 1))
-  glm_fit <- glm(is_sig ~ ns(log_n, df=3) + ns(log_exp, df=3),
+expr_source <- if (!is.null(opt$expr_file)) "external" else
+               if (isTRUE(opt$internal_expr)) "internal" else "none"
+if (!is.null(opt$expr_file) && isTRUE(opt$internal_expr))
+  cat("NOTE: --expr_file supplied; --internal_expr ignored.\n")
+
+if (expr_source == "none") {
+  cat("Fitting P(sig) ~ ns(log(n_events))   [no expression covariate]\n")
+  glm_fit <- glm(is_sig ~ ns(log_n, df=3),
                  data=gene_summary, family=binomial())
 } else {
-  cat("Fitting P(sig) ~ ns(log(n_events))...\n")
-  glm_fit <- glm(is_sig ~ ns(log_n, df=3),
+  cat(sprintf("Fitting P(sig) ~ ns(log(n_events)) + ns(log(total_expr))   [%s expression]\n",
+              expr_source))
+  gene_summary$log_exp <- log(pmax(gene_summary$total_expr, 1))
+  glm_fit <- glm(is_sig ~ ns(log_n, df=3) + ns(log_exp, df=3),
                  data=gene_summary, family=binomial())
 }
 cat("GLM converged:", glm_fit$converged, "\n")
@@ -211,7 +242,7 @@ pwf <- data.frame(
 # ---------- 5. PWF diagnostic plot ----------
 
 pwf_plot_file <- file.path(opt$outdir, "pwf_fit.pdf")
-use_expr <- !is.null(opt$expr_file)
+use_expr <- expr_source != "none"
 pdf(pwf_plot_file, width=if (use_expr) 9 else 5, height=4)
 par(mfrow=c(1, if (use_expr) 2 else 1))
 
@@ -317,7 +348,10 @@ if (nrow(top_terms) == 0) {
   cat(sprintf("No terms significant at FDR < %.2f -- skipping dotplot.\n",
               opt$alpha))
 } else {
-  expr_label <- if (!is.null(opt$expr_file)) "external counts" else "mean(baseMean)"
+  expr_label <- switch(expr_source,
+                       external = "n_events + total_expr (external counts)",
+                       internal = "n_events + total_expr (mean(baseMean))",
+                       "n_events only")
   p <- ggplot(top_terms,
               aes(x=GeneRatio,
                   y=reorder(Description, -log10(p.adjust)),
@@ -329,8 +363,7 @@ if (nrow(top_terms) == 0) {
       x        = sprintf("Gene ratio (sig in term / %d total sig)", n_sig),
       y        = NULL,
       title    = sprintf("GO %s enrichment", opt$ont),
-      subtitle = sprintf("GOseq Wallenius; covariates: n_events + total_expr (%s)",
-                         expr_label)
+      subtitle = sprintf("GOseq Wallenius; covariates: %s", expr_label)
     ) +
     theme_bw(base_size=11) +
     theme(axis.text.y=element_text(size=9))
