@@ -129,6 +129,7 @@ count_bipartition_sj <- function(splits_df, sj_mat, sampleinfo, outdir, outfiles
                             is.na(splits_df$intron_distinct2)), ]
   if (nrow(splits_df) == 0L) return(invisible(NULL))
 
+
   gene       <- splits_df$gene[1L]
   n_samples  <- ncol(sj_mat)
   sample_names <- colnames(sj_mat)
@@ -155,12 +156,13 @@ count_bipartition_sj <- function(splits_df, sj_mat, sampleinfo, outdir, outfiles
   rownames(diff2_mat) <- splits_df$event
   rownames(ref_mat)   <- splits_df$event
 
-  always_cols   <- c("gene","event","source","sink",
-                     "intron_distinct1","intron_distinct2","intron_shared")
-  optional_cols <- intersect(c("ref_ex_part","setdiff1","setdiff2",
-                                "transcripts1","transcripts2","path1","path2"),
-                             names(splits_df))
-  meta_cols <- c(always_cols, optional_cols)
+  ## COLUMN SLIMMING. Per-event metadata was repeated on every sample row; with
+  ## 1,255 DICE samples that made it 99% of the file (path1 alone 39.7%,
+  ## intron_distinct1 36.8%), while the actual counts were 0.6%. The merge joins
+  ## sjcnt onto the exon file by (gene, event) and takes source/sink/ref_ex_part/
+  ## setdiff/transcripts/path from THERE, so none of it is needed here. The
+  ## junction ids are written once per event to a .sjmeta.txt sidecar instead.
+  meta_cols <- c("gene","event")
   diff1_mat$event <- splits_df$event
   diff2_mat$event <- splits_df$event
   ref_mat$event   <- splits_df$event
@@ -175,6 +177,11 @@ count_bipartition_sj <- function(splits_df, sj_mat, sampleinfo, outdir, outfiles
     write_sjcnt_wide(ref_mat, diff1_mat, diff2_mat,
       events=splits_df$event, gene_name=gene,
       sampleinfo=sampleinfo, outfilesuffix=outfilesuffix, outdir=outdir)
+    ## one row per event: the junction ids the merge needs
+    write.table(splits_df[, c("gene","event","intron_distinct1",
+                              "intron_distinct2","intron_shared")],
+      file=file.path(outdir, paste0(gene, ".", outfilesuffix, ".sjmeta.txt")),
+      sep="\t", quote=FALSE, row.names=FALSE)
   }
   invisible(NULL)
 }

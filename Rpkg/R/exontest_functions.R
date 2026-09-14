@@ -963,7 +963,17 @@ posthoc_lfc_summary <- function(results, lfc_summary) {
 #' @param delta minimum lfc_diff_net (directionality filter; events with lfc_diff_net <= delta excluded)
 #' @param min_dpi minimum |delta_pi| (path-proportion effect size filter)
 #' @export
-add_significant <- function(res, padj_thr, delta, min_dpi = 0.1) {
+#' @param min_dpi_sj Numeric. |delta_pi| threshold for sides whose distinct set
+#'   came from SPLIT READS rather than exonic parts (merged exon+SJ runs). Split
+#'   -read distinct counts sit on a much lower pi scale than the exonic shared
+#'   reference -- measured mean pi_ref 0.120 vs 0.332 on the DICE internal arm --
+#'   so one absolute threshold is not scale-fair: |delta_pi| >= 0.1 demands a
+#'   2.07x odds shift from a junction-sourced side against 1.53x from an exonic
+#'   one, and passes them at 3.7% vs 14.7%. 0.05 at pi 0.120 is an odds ratio of
+#'   1.47, which matches the exonic side's 1.53 at 0.1. Source is detected from
+#'   setdiff1/setdiff2 being NA; when those columns are absent (pre-annotation
+#'   call sites) every row uses min_dpi.
+add_significant <- function(res, padj_thr, delta, min_dpi = 0.1, min_dpi_sj = 0.05) {
   has_lfc <- "lfc_diff_net" %in% names(res)
   lfc_ok <- if (has_lfc) {
     (res$lfc_diff_net > delta) | is.na(res$lfc_diff_net)
@@ -972,7 +982,13 @@ add_significant <- function(res, padj_thr, delta, min_dpi = 0.1) {
   }
   has_dpi <- "delta_pi" %in% names(res)
   dpi_ok <- if (has_dpi) {
-    (abs(res$delta_pi) >= min_dpi) | is.na(res$delta_pi)
+    thr <- rep(min_dpi, nrow(res))
+    if (all(c("comparison", "setdiff1", "setdiff2") %in% names(res))) {
+      sd <- ifelse(grepl("diff1", res$comparison), res$setdiff1, res$setdiff2)
+      # nzchar(NA) is TRUE, so test is.na() explicitly rather than relying on it
+      thr[is.na(sd) | sd %in% c("NA", "")] <- min_dpi_sj
+    }
+    (abs(res$delta_pi) >= thr) | is.na(res$delta_pi)
   } else {
     TRUE
   }

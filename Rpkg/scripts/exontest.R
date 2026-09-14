@@ -50,9 +50,15 @@ option_list = list(
 make_option(c("--use_prec_loess"), action="store_true", default=FALSE,
               help="use loess prec trend (log(prec) ~ log(baseMean)) as EB shrinkage target instead of global mean (multinomial models)"),
   make_option(c("--padj_threshold"), type="double", default=0.01,
-              help="padj threshold for the significant column [default: 0.01]", metavar="double"),
+              help=paste("padj threshold for the significant column AND the nested_BH gene screen;",
+                         "both stages use this value [default: 0.01]"), metavar="double"),
   make_option(c("--delta"), type="double", default=0,
               help="lfc_diff_net threshold for the significant column; events with lfc_diff_net <= delta are not significant [default: 0]", metavar="double"),
+  make_option(c("--min_dpi_sj"), type="double", default=0.05,
+              help=paste("as --min_dpi but for sides whose distinct set came from split reads",
+                         "(merged exon+SJ runs). Split-read counts sit on a lower pi scale than",
+                         "the exonic reference, so one absolute threshold is not scale-fair",
+                         "[default: 0.05]"), metavar="double"),
   make_option(c("--min_dpi"), type="double", default=0.1,
               help="minimum |delta_pi| (path proportion effect size) for the significant column; events with |delta_pi| < min_dpi are not significant [default: 0.1]", metavar="double"),
   make_option(c("--mc_cores"), type="integer", default=32L,
@@ -109,6 +115,7 @@ padj_thr         <- as.double(opt$padj_threshold)
 delta            <- as.double(opt$delta)
 padj_method      <- as.character(opt$padj_method)
 min_dpi          <- as.double(opt$min_dpi)
+min_dpi_sj       <- as.double(opt$min_dpi_sj)
 
 # Expand tilde in paths
 outdir <- path.expand(outdir)
@@ -470,13 +477,13 @@ if (model == 'betabinom_EBmap') {
       group_by(contrast) %>%
       group_modify(~ {
         r <- .x; r$pvalue <- r$p.value
-        r <- adjust_pvalues(r, independentFiltering = indep_filter, alpha = 0.05, method = padj_method)
+        r <- adjust_pvalues(r, independentFiltering = indep_filter, alpha = padj_thr, method = padj_method)
         r$pvalue <- NULL; r
       }) %>%
       ungroup()
   }
 
-  results <- add_significant(results, padj_thr, delta, min_dpi)
+  results <- add_significant(results, padj_thr, delta, min_dpi, min_dpi_sj)
   write.table(results, file = out_resultfile, quote = FALSE, sep = "\t", row.names = FALSE)
 
 } else if (model == 'betabinom_EBapprox') {
@@ -538,13 +545,13 @@ if (model == 'betabinom_EBmap') {
       group_by(contrast) %>%
       group_modify(~ {
         r <- .x; r$pvalue <- r$p.value
-        r <- adjust_pvalues(r, independentFiltering = indep_filter, alpha = 0.05, method = padj_method)
+        r <- adjust_pvalues(r, independentFiltering = indep_filter, alpha = padj_thr, method = padj_method)
         r$pvalue <- NULL; r
       }) %>%
       ungroup()
   }
 
-  results <- add_significant(results, padj_thr, delta, min_dpi)
+  results <- add_significant(results, padj_thr, delta, min_dpi, min_dpi_sj)
   write.table(results, file = out_resultfile, quote = FALSE, sep = "\t", row.names = FALSE)
 
 } else if (model == 'dirmult_EBplugin') {
@@ -585,9 +592,9 @@ if (model == 'betabinom_EBmap') {
     if (is.null(res) || nrow(res) == 0) return(NULL)
     res$contrast <- ctr_name
     res$pvalue <- res$p.value
-    res <- adjust_pvalues(res, independentFiltering = FALSE, alpha = 0.05, method = padj_method)
+    res <- adjust_pvalues(res, independentFiltering = FALSE, alpha = padj_thr, method = padj_method)
     res$pvalue <- NULL
-    add_significant(res, padj_thr, delta, min_dpi)
+    add_significant(res, padj_thr, delta, min_dpi, min_dpi_sj)
   })
   results <- bind_rows(contrast_results)
   write.table(results, file = out_resultfile, sep = "\t", quote = FALSE, row.names = FALSE)
@@ -612,9 +619,9 @@ if (model == 'betabinom_EBmap') {
       left_join(baseMean_df, by = c("gene", "event", "comparison")) %>%
       left_join(lfc_summary_all, by = c("gene", "event", "comparison", "contrast"))
     res$pvalue <- res$p.value
-    res <- adjust_pvalues(res, independentFiltering = indep_filter, alpha = 0.05, method = padj_method)
+    res <- adjust_pvalues(res, independentFiltering = indep_filter, alpha = padj_thr, method = padj_method)
     res$pvalue <- NULL
-    add_significant(res, padj_thr, delta, min_dpi)
+    add_significant(res, padj_thr, delta, min_dpi, min_dpi_sj)
   })
   results <- bind_rows(contrast_results)
   write.table(results, file = out_resultfile, quote = FALSE, sep = "\t", row.names = FALSE)
@@ -637,13 +644,13 @@ if (model == 'betabinom_EBmap') {
       group_by(contrast) %>%
       group_modify(~ {
         r <- .x; r$pvalue <- r$p.value
-        r <- adjust_pvalues(r, independentFiltering = indep_filter, alpha = 0.05, method = padj_method)
+        r <- adjust_pvalues(r, independentFiltering = indep_filter, alpha = padj_thr, method = padj_method)
         r$pvalue <- NULL; r
       }) %>%
       ungroup()
   }
 
-  results <- add_significant(results, padj_thr, delta, min_dpi)
+  results <- add_significant(results, padj_thr, delta, min_dpi, min_dpi_sj)
   write.table(results, file = out_resultfile, quote = FALSE, sep = "\t", row.names = FALSE)
 
 } else {
@@ -718,6 +725,13 @@ message("Merging data...")
 merged_data <- left_join(tests, splits, by = c("gene", "event"))
 message(paste("Merged dataset has", nrow(merged_data), "rows."))
 
+# `significant` was set before the annotation merge, where setdiff1/setdiff2 did
+# not exist yet, so every row got the exonic min_dpi. Now that the merge has
+# attached them, recompute so junction-sourced sides use min_dpi_sj.
+if (nrow(merged_data) > 0 && all(c("setdiff1", "setdiff2") %in% names(merged_data))) {
+  merged_data <- add_significant(merged_data, padj_thr, delta, min_dpi, min_dpi_sj)
+}
+
 # Write output
 write.table(merged_data, out_result_annotated, sep = "\t", quote = FALSE, row.names = FALSE)
 message(paste("Successfully wrote annotated tests to", out_result_annotated))
@@ -756,11 +770,11 @@ if (split == 'bipartition' || split == 'n_choose_2') {
 
     if (nrow(min_data) > 0) {
       min_data$pvalue <- min_data$p.value
-      min_data <- adjust_pvalues(min_data, independentFiltering = indep_filter, alpha = 0.05, method = padj_method)
+      min_data <- adjust_pvalues(min_data, independentFiltering = indep_filter, alpha = padj_thr, method = padj_method)
       min_data$pvalue <- NULL
     }
 
-    min_data <- add_significant(min_data, padj_thr, delta, min_dpi)
+    min_data <- add_significant(min_data, padj_thr, delta, min_dpi, min_dpi_sj)
     out_mincomb <- sub("\\.annotated\\.txt$", ".mincomb.annotated.txt",
                       out_result_annotated)
     write.table(min_data, out_mincomb, sep = "\t", quote = FALSE, row.names = FALSE)
@@ -790,11 +804,11 @@ if (split == 'bipartition' || split == 'n_choose_2') {
 
     if (nrow(fisher_data) > 0) {
       fisher_data$pvalue <- fisher_data$p.value
-      fisher_data <- adjust_pvalues(fisher_data, independentFiltering = indep_filter, alpha = 0.05, method = padj_method)
+      fisher_data <- adjust_pvalues(fisher_data, independentFiltering = indep_filter, alpha = padj_thr, method = padj_method)
       fisher_data$pvalue <- NULL
     }
 
-    fisher_data <- add_significant(fisher_data, padj_thr, delta, min_dpi)
+    fisher_data <- add_significant(fisher_data, padj_thr, delta, min_dpi, min_dpi_sj)
     out_fisher <- sub("\\.annotated\\.txt$", ".fisher_combined.annotated.txt",
                       out_result_annotated)
     write.table(fisher_data, out_fisher, sep = "\t", quote = FALSE, row.names = FALSE)

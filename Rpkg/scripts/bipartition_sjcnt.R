@@ -17,6 +17,12 @@ option_list <- list(
               help="condition 1 name (subdir under sjdir)"),
   make_option(c("-2", "--cond2"),     type="character", metavar="character",
               help="condition 2 name (subdir under sjdir)"),
+  make_option(c("--conditions"),      type="character", default=NULL,
+              metavar="character",
+              help=paste("comma-separated list of ALL conditions, e.g.",
+                         "B,CD4,CD8,NK,MONO.CLASSIC -- overrides --cond1/--cond2.",
+                         "Mirrors the same option in exoncnt.R, so a multi-group",
+                         "design (DICE has 13 cell types) can be counted in one pass")),
   make_option(c("-o", "--output"),    type="character", metavar="character",
               help="output directory"),
   make_option(c("-t", "--type"),      type="character", metavar="character",
@@ -26,15 +32,23 @@ option_list <- list(
               metavar="integer",
               help="number of parallel cores [default: 32]"),
   make_option(c("--multi"),           action="store_true", default=FALSE,
-              help="add n_multi to n_uniq counts (default: n_uniq only)")
+              help="add n_multi to n_uniq counts (default: n_uniq only)"),
+  make_option(c("--combine"),         action="store_true", default=FALSE,
+              help=paste("also write bipartition.sjcnt.combined.txt.",
+                         "OFF by default: merge_exon_sj_counts.R reads the",
+                         "PER-GENE files, and only the abandoned exontest.sj.R",
+                         "path ever consumed the combined one. On DICE it was",
+                         "74.6 GB of output that nothing downstream read"))
 )
 
 opt_parser <- OptionParser(option_list=option_list)
 opt        <- parse_args(opt_parser)
 
-if (any(sapply(list(opt$inputdir, opt$graphmldir, opt$gff,
-                    opt$sjdir, opt$cond1, opt$cond2, opt$output), is.null))) {
-  stop("--inputdir, --graphmldir, --gff, --sjdir, --cond1, --cond2, --output are all required")
+need <- list(opt$inputdir, opt$graphmldir, opt$gff, opt$sjdir, opt$output)
+if (is.null(opt$conditions)) need <- c(need, list(opt$cond1, opt$cond2))
+if (any(sapply(need, is.null))) {
+  stop("--inputdir, --graphmldir, --gff, --sjdir, --output are required, plus ",
+       "either --conditions or both --cond1 and --cond2")
 }
 
 input_dir   <- path.expand(opt$inputdir)
@@ -43,6 +57,9 @@ gff_path    <- path.expand(opt$gff)
 sj_dir      <- path.expand(opt$sjdir)
 cond1       <- opt$cond1
 cond2       <- opt$cond2
+all_conditions <- if (!is.null(opt$conditions))
+  trimws(strsplit(opt$conditions, ",")[[1]]) else c(cond1, cond2)
+all_conditions <- all_conditions[nzchar(all_conditions)]
 output_dir  <- path.expand(opt$output)
 bp_type     <- opt$type
 n_cores     <- opt$cores
@@ -55,27 +72,30 @@ if (!dir.exists(output_dir)) dir.create(output_dir, recursive=TRUE)
 cat("Parsing chromosome map from GFF:", gff_path, "\n")
 chr_map <- parse_gff_chr_map(gff_path)
 
-sj_dir1 <- file.path(sj_dir, cond1)
-sj_dir2 <- file.path(sj_dir, cond2)
-cat("Building SJ matrix for", cond1, "from:", sj_dir1, "\n")
-sj1 <- build_sj_matrix(sj_dir1, use_multi=use_multi)
-cat("Building SJ matrix for", cond2, "from:", sj_dir2, "\n")
-sj2 <- build_sj_matrix(sj_dir2, use_multi=use_multi)
+## One SJ matrix per condition, then a single union-keyed matrix over all of
+## them. Sample columns are named "<condition>_<file basename>", which is how
+## exoncnt.R names its samples -- the merge joins the two on that name, so the
+## SJ files must be laid out as <sjdir>/<condition>/<sample>.SJ.out.tab.
+sj_list <- lapply(all_conditions, function(cd) {
+  d <- file.path(sj_dir, cd)
+  cat("Building SJ matrix for", cd, "from:", d, "\n")
+  m <- build_sj_matrix(d, use_multi=use_multi)
+  colnames(m$mat) <- paste0(cd, "_", m$samples)
+  m$mat
+})
+names(sj_list) <- all_conditions
 
-colnames(sj1$mat) <- paste0(cond1, "_", sj1$samples)
-colnames(sj2$mat) <- paste0(cond2, "_", sj2$samples)
-
-all_keys <- union(rownames(sj1$mat), rownames(sj2$mat))
-sj_mat   <- matrix(0L, nrow=length(all_keys),
-                   ncol=ncol(sj1$mat) + ncol(sj2$mat),
-                   dimnames=list(all_keys,
-                                 c(colnames(sj1$mat), colnames(sj2$mat))))
-sj_mat[rownames(sj1$mat), colnames(sj1$mat)] <- sj1$mat
-sj_mat[rownames(sj2$mat), colnames(sj2$mat)] <- sj2$mat
+all_keys <- Reduce(union, lapply(sj_list, rownames))
+all_cols <- unlist(lapply(sj_list, colnames), use.names=FALSE)
+sj_mat   <- matrix(0L, nrow=length(all_keys), ncol=length(all_cols),
+                   dimnames=list(all_keys, all_cols))
+for (m in sj_list) sj_mat[rownames(m), colnames(m)] <- m
 
 sample_names <- colnames(sj_mat)
-conditions   <- c(rep(cond1, ncol(sj1$mat)), rep(cond2, ncol(sj2$mat)))
+conditions   <- rep(all_conditions, vapply(sj_list, ncol, integer(1)))
 sampleinfo   <- setNames(conditions, sample_names)
+cat(sprintf("Conditions: %s\n", paste(all_conditions, collapse=", ")))
+cat(sprintf("Samples: %d, junctions: %d\n", ncol(sj_mat), nrow(sj_mat)))
 
 # --- per-gene input files ---
 
@@ -113,6 +133,11 @@ res <- mclapply(in_files, function(fpath) {
 
 # --- combine per-gene output files ---
 
+if (!isTRUE(opt$combine)) {
+  cat("\nSkipping combine (--combine not set).\n")
+  cat("Done.\n")
+  quit(save="no", status=0)
+}
 cat("\nCombining output files...\n")
 out_files <- list.files(output_dir, pattern="\\.bipartition\\.sjcnt\\.txt$",
                         full.names=TRUE)
