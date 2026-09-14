@@ -85,7 +85,7 @@ style_and_plot <- function(g, gene, outdir, node_range = NULL) {
   }
 
   color_dict <- c("ex" = "darkorange", "in" = "black", "R" = "black", "L" = "black", "ex_part" = "dark green")
-  width_dict <- c("ex" = 1, "in" = 1.2, "R" = 1.2, "L" = 1.2, "ex_part" = 1)
+  width_dict <- c("ex" = 2, "in" = 2.4, "R" = 2.4, "L" = 2.4, "ex_part" = 2)
   lty_dict <- c("ex" = "solid", "in" = "dotted", "R" = "dotted", "L" = "dotted", "ex_part" ="solid")
 
   layout.kamada.kawai.deterministic <- function(...)
@@ -115,19 +115,50 @@ style_and_plot <- function(g, gene, outdir, node_range = NULL) {
 
   # circles sized to fit labels; shrinks for denser graphs, caps at 2
   lbl   <- as.character(igraph::V(g)$name)
-  vsize <- min(2, max(1.2, 100 / n_v))
+  vsize <- 2 * min(2, max(1.2, 100 / n_v))
 
-  # Inspect
   sug_lr <- pull_vertical_outlier_toward_neighbors(g, sug_lr, alpha = 0.7)
+
+  # Seed a Kamada-Kawai (force-directed) layout from the sugiyama layout
+  # above, with x fixed to sugiyama's genomic order via minx/maxx, and let
+  # y relax locally. This turns sugiyama's long sweeping arcs between
+  # alternate paths into compact triangular "bubbles" at branch points,
+  # while a cold-started kk (no seed, no x constraint) sprawled badly and
+  # lost genomic ordering.
+  sug_lr <- igraph::layout_with_kk(g, coords = sug_lr,
+                                    minx = sug_lr[,1], maxx = sug_lr[,1])
+  if (!is.na(iR) && !is.na(iL) && sug_lr[iR,1] > sug_lr[iL,1]) {
+    sug_lr[,1] <- -sug_lr[,1]
+  }
+
+  # kk's free relaxation can push a lone node further from its row than
+  # sugiyama did (e.g. a node whose only neighbors are several layers away);
+  # pull any remaining strong outliers back toward their sg_id neighbors'
+  # average height. Applied several times since it only corrects the single
+  # worst outlier per call.
+  for (i in 1:5) sug_lr <- pull_vertical_outlier_toward_neighbors(g, sug_lr, alpha = 0.8)
+
   base_curve <- 0.30
-  ec <- igraph::curve_multiple(g, base_curve)                    
+  ec <- igraph::curve_multiple(g, base_curve)
   ec [ec == 0] = base_curve
   ec <- increase_curve_shortest_edges(g, sug_lr, ec)
+  ec[igraph::E(g)$ex_or_in == "ex_part"] <- 0  # exonic-part edges drawn straight
+
+  # Normalize the layout ourselves (with igraph's own normalization function,
+  # to the same [-1,1] range igraph would use internally under the default
+  # rescale = TRUE), then plot with rescale = FALSE so no further internal
+  # transform happens. This lets us compute edge-label positions from the
+  # exact coordinates on screen instead of reconstructing them afterward,
+  # which is what let the labels drift out of sync with the drawn edges.
+  sug_norm <- igraph::norm_coords(sug_lr, xmin = -1, xmax = 1, ymin = -1, ymax = 1)
 
   plot(
-    g,  
-    layout = sug_lr,
-    main   = paste(gene, "(sugiyama by sg_id)"),
+    g,
+    layout = sug_norm,
+    rescale = FALSE,
+    xlim = c(-1, 1),
+    ylim = c(-1, 1),
+    main   = gene,
     asp = 0,
 
     # nodes: circles
@@ -137,21 +168,40 @@ style_and_plot <- function(g, gene, outdir, node_range = NULL) {
     vertex.frame.width = 1.4,
     vertex.color       = grDevices::adjustcolor("white", alpha.f = 1), # filled
     vertex.label       = lbl,
-    vertex.label.cex   = 1,
+    vertex.label.cex   = 2,
     vertex.label.color = "black",
     vertex.label.dist  = 0,
+    vertex.label.family = "sans",
 
-    # edges: all curved + green labels
+    # edges: all curved, built-in label placement suppressed (edge.label = NA)
+    # in favor of the curvature-aware placement below
     edge.curved        = ec,              # all edges curved
-    edge.label         = igraph::E(g)$dexseq_fragment,
-    edge.label.cex     = 1,
-    edge.label.color   = "darkgreen",       # green edge labels
+    edge.label         = NA,
     edge.arrow.size    = 0.4,
     edge.color         = sapply(igraph::E(g)$ex_or_in, function(x) color_dict[x]),
     edge.width         = sapply(igraph::E(g)$ex_or_in, function(x) width_dict[x]),
     edge.lty = sapply(igraph::E(g)$ex_or_in, function(x) lty_dict[x])
 
   )
+
+  # -- edge labels, offset slightly above each curved edge --
+  # igraph's edge.label places text exactly on the edge line; since edges are
+  # drawn curved (edge.curved = ec above), a plain straight-line midpoint of
+  # the two endpoints is NOT where the visible line sits, so the label is
+  # placed on the same quadratic-Bezier-approximated curve point instead,
+  # then nudged up by a small offset for legibility.
+  el <- igraph::as_edgelist(g, names = FALSE)
+  frag <- igraph::E(g)$dexseq_fragment
+  OFFSET_FRAC <- 0.02  # fraction of the (fixed, -1..1) axis range to nudge up
+  A <- sug_norm[el[,1], , drop = FALSE]
+  B <- sug_norm[el[,2], , drop = FALSE]
+  d <- B - A
+  edge_len <- sqrt(rowSums(d^2)); edge_len[edge_len == 0] <- 1e-9
+  perp <- cbind(-d[,2], d[,1]) / edge_len
+  curved_mid <- (A + B) / 2 + 0.5 * ec * edge_len * perp
+  text(curved_mid[,1], curved_mid[,2] + OFFSET_FRAC * 2,
+       labels = frag, cex = 2, col = "darkgreen")
+
   grDevices::dev.off()
   return(0)
 }
@@ -219,14 +269,14 @@ plottx <- function (gene, outdir, gene_edges, gene_nodes, node_range = NULL, g =
   pdf_w    <- max(24, n_nodes * 0.27)
   pdf_h    <- min(10, max(6, n_tx * 0.35 + 3))
   grDevices::pdf(file = file.path(outdir, paste0(gene, ".tx.pdf")), width = pdf_w, height = pdf_h)
-  par(mar=c(10, 10, 7, 1), bty="n")
+  par(mar=c(10, 24, 7, 1), bty="n")
   plot(0, 0, type="n", xaxt="n", yaxt="n", xlab=gene, ylab="",
        xlim = x_lim,
        ylim = c(-(nrow(gene_edges)/10), n_tx * tx_step + 2))
 
   y_nodes <- rep(1, length(x_node))
-  points(x_node, y_nodes, cex=2.5, col="black")
-  text(x_node, y_nodes, labels=x_label, cex=0.7)
+  points(x_node, y_nodes, cex=5, col="black")
+  text(x_node, y_nodes, labels=x_label, cex=1.4)
 
   # exonic part labels from graphml ex_part edges
   if (!is.null(g)) {
@@ -239,8 +289,8 @@ plottx <- function (gene, outdir, gene_edges, gene_nodes, node_range = NULL, g =
                ep$from_n >= node_range[1] & ep$to_n <= node_range[2], ]
     }
     ep$mid_x <- (ep$from_n + ep$to_n) / 2 + 1
-    text(ep$mid_x, y = -1.5, labels = paste0("E", ep$dexseq_fragment),
-         srt = 90, cex = 0.6, adj = c(1, 0.5))
+    text(ep$mid_x, y = -0.5, labels = paste0("E", ep$dexseq_fragment),
+         srt = 90, cex = 1.2, adj = c(1, 0.5))
   }
 
   iArrows <- igraph_arrows
@@ -248,23 +298,23 @@ plottx <- function (gene, outdir, gene_edges, gene_nodes, node_range = NULL, g =
   for(i in 1:nrow(gene_edges)) {
     if(gene_edges$ex_or_in[i]=="ex"){
       iArrows(as.numeric(gene_edges$from[i])+1, 1, as.numeric(gene_edges$to[i])+1, 1,
-              h.lwd=0.25, sh.lwd=1, sh.col="darkgreen",
+              h.lwd=0.25, sh.lwd=2, sh.col="darkgreen",
               width=2, size=0.01)
     }
     if(gene_edges$ex_or_in[i]=="in"){
       iArrows(as.numeric(gene_edges$from[i])+1, 1, as.numeric(gene_edges$to[i])+1, 1,
-              h.lwd=0.25, sh.lwd=1, sh.col="dimgrey",
+              h.lwd=0.25, sh.lwd=2, sh.col="dimgrey",
               width=2, size=0.01, curve=0.3 - (i %% 2), sh.lty=2)
     }
     if(is.null(node_range)){
       if(gene_edges$ex_or_in[i]=="" & gene_edges$from[i]=="R"){
         iArrows(1, 1, as.numeric(gene_edges$to[i])+1, 1,
-                h.lwd=0.25, sh.lwd=1, sh.col="dimgrey",
+                h.lwd=0.25, sh.lwd=2, sh.col="dimgrey",
                 width=2, size=0.01, curve=0.3 - (i %% 2), sh.lty=2)
       }
       if(gene_edges$ex_or_in[i]=="" & gene_edges$to[i]=="L"){
         iArrows(as.numeric(gene_edges$from[i])+1, 1, length(gene_nodes), 1,
-                h.lwd=0.25, sh.lwd=1, sh.col="dimgrey",
+                h.lwd=0.25, sh.lwd=2, sh.col="dimgrey",
                 width=2, size=0.01, curve=0.3 - (i %% 2), sh.lty=2)
       }
     }
@@ -281,8 +331,8 @@ plottx <- function (gene, outdir, gene_edges, gene_nodes, node_range = NULL, g =
       x1 <- c(x1, as.numeric(exon_edges$to[j])+1)
     }
     if (length(x0) > 0) {
-      text(x = x_lim[1] - 1, y = y_pos, tx_list[i], cex=0.8, xpd=TRUE)
-      segments(x0=x0, y0=y, x1=x1, y1=y, col="darkorange", lwd=2)
+      text(x = x_lim[1] - 1.5, y = y_pos, tx_list[i], adj = 1, cex=1.6, xpd=TRUE)
+      segments(x0=x0, y0=y, x1=x1, y1=y, col="darkorange", lwd=4)
     }
     count <- count + 1
   }
