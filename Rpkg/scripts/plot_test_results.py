@@ -143,12 +143,22 @@ def read_gene_rows(andir, kind, gene_base):
         break
     return rows
 
-def is_sig(r, padj_thr, dpi_thr):
-    try:
-        return (float(r["padj"]) < padj_thr and float(r["lfc_diff_net"]) > 0
-                and abs(float(r["delta_pi"])) >= dpi_thr)
-    except (ValueError, TypeError, KeyError):
-        return False
+def is_sig(r):
+    """Read the call exontest.R made. This script does not decide significance.
+
+    The `significant` column comes from add_significant() / is_significant() in
+    the grase package, which is the single authoritative rule: padj, the signed
+    lfc_diff_net > delta test, the source-aware dpi floor (min_dpi for exonic
+    sides, min_dpi_sj for junction-sourced ones) and the read-support floor.
+    A visualisation must not re-derive any of that -- thresholds passed here
+    could and did disagree with exontest.R's --padj_threshold, marking calls
+    SIG that the pipeline does not make.
+    """
+    v = r.get("significant")
+    if v is None or v == "":
+        sys.exit("no `significant` column in the annotated table: re-run "
+                 "exontest.R to produce the calls before plotting them")
+    return v == "TRUE"
 
 def main():
     ap = argparse.ArgumentParser()
@@ -180,10 +190,6 @@ def main():
                     help="node name -> genomic position, for panel E's routes")
     ap.add_argument("--stack_kinds", default="internal,TSSTTS",
                     help="which bipartition files to draw in panel B")
-    ap.add_argument("--sig_padj", type=float, default=0.01,
-                    help="padj threshold used to mark rows in panel B [0.01]")
-    ap.add_argument("--sig_dpi", type=float, default=0.1,
-                    help="min |delta_pi| used to mark rows in panel B [0.1]")
     ap.add_argument("--max_stack", type=int, default=0,
                     help="if >0, panel B shows only the N bipartitions whose spans "
                          "are nearest the focal test (dense loci can exceed 90 rows)")
@@ -289,9 +295,16 @@ def main():
         def eff(r):
             try: return abs(float(r["delta_pi"])) if float(r["padj"]) < 0.05 else -1.0
             except (ValueError, TypeError, KeyError): return -1.0
+        # padj is the STRING "NA" for any side exontest.R did not test -- the
+        # read-support filter (--min_reads) sets p.value <- NA before adjustment,
+        # so this is common, not rare. "NA" is truthy, so `or 1` does not catch
+        # it and float() raises; sort those to the back instead.
+        def padj_or_1(r):
+            try: return float(r.get("padj"))
+            except (ValueError, TypeError): return 1.0
         cand = max(rows, key=eff)
         comp = cand["comparison"] if eff(cand) > 0 else \
-               min(rows, key=lambda r: float(r.get("padj") or 1))["comparison"]
+               min(rows, key=padj_or_1)["comparison"]
     rows = [r for r in rows if r["comparison"] == comp]
     if not rows: sys.exit(f"no rows for comparison {comp}")
 
@@ -315,7 +328,7 @@ def main():
     # support (XBP1 event 5: 7 of 10 by padj, 4 under the rule).
     nsig = sum(1 for r in rows
                if r["contrast"] in best and r["comparison"] == comp
-               and is_sig(r, a.sig_padj, a.sig_dpi))
+               and is_sig(r))
 
     bips = read_bipartitions(bipdir, gv, [k.strip() for k in a.stack_kinds.split(",")])
     stack = []
@@ -357,7 +370,7 @@ def main():
     sig_D = {}
     for k, rs in all_rows.items():
         for r in rs:
-            if is_sig(r, a.sig_padj, a.sig_dpi):
+            if is_sig(r):
                 bkey = _key(r["ref_ex_part"], r["setdiff1"], r["setdiff2"])
                 wd = "D1" if "diff1" in r["comparison"] else "D2"
                 sig_D.setdefault(bkey, set()).add(wd)
@@ -488,8 +501,8 @@ def main():
                   f"ordered by span containment", loc="left", fontsize=10.5)
     axB.set_xlabel("exonic parts, genomic order  ->", fontsize=8.5)
     axB.annotate(f"each row = one tested bipartition; rows nest where spans are contained\n"
-                 f"*D1 / *D2 / *D1/D2 = significant (padj<{a.sig_padj:g}, "
-                 f"|delta pi|>={a.sig_dpi:g}) in at least one contrast, labelled by "
+                 f"*D1 / *D2 / *D1/D2 = significant (exontest.R call rule) "
+                 f"in at least one contrast, labelled by "
                  f"which distinct set drove it [{n_marked} of {len(stack)} shown]",
                  (.012, .01), xycoords="axes fraction", fontsize=7.8, color="#555555")
 
@@ -521,7 +534,7 @@ def main():
     axD.text(0, .64, desc, fontsize=8.5, va="top")
     lo_c, hi_c = conds[0], conds[-1]
     axD.text(0, .34, f"$\\pi$ {pi[lo_c]:.3f} ({lo_c}) $\\rightarrow$ {pi[hi_c]:.3f} ({hi_c})\n"
-                     f"significant (padj<{a.sig_padj:g}) in {nsig} of {len(best)} contrasts",
+                     f"significant (exontest.R call) in {nsig} of {len(best)} contrasts",
              fontsize=8.5, va="top")
 
     # A side whose exonic distinct set is EMPTY contributes no exonic parts to

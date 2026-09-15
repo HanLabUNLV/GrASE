@@ -973,26 +973,91 @@ posthoc_lfc_summary <- function(results, lfc_summary) {
 #'   1.47, which matches the exonic side's 1.53 at 0.1. Source is detected from
 #'   setdiff1/setdiff2 being NA; when those columns are absent (pre-annotation
 #'   call sites) every row uses min_dpi.
-add_significant <- function(res, padj_thr, delta, min_dpi = 0.1, min_dpi_sj = 0.05) {
-  has_lfc <- "lfc_diff_net" %in% names(res)
-  lfc_ok <- if (has_lfc) {
+#' The GrASE call rule, as a predicate
+#'
+#' The single authoritative definition of "significant". A call requires an
+#' adjusted p-value below \code{padj_thr}, a net log fold change above
+#' \code{delta}, and an absolute path-proportion shift of at least the dpi
+#' threshold. Returns a logical vector so callers sweeping a threshold grid
+#' (PR curves, ROC, metric tables) use the same rule as the tool itself
+#' instead of re-implementing it.
+#'
+#' @param res data frame with \code{padj}, and optionally \code{lfc_diff_net},
+#'   \code{delta_pi}, \code{comparison}, \code{setdiff1}, \code{setdiff2}.
+#'   Absent columns drop their condition rather than failing.
+#' @param padj_thr adjusted p-value threshold.
+#' @param delta minimum \code{lfc_diff_net}. Note this is SIGNED and that is
+#'   deliberate: \code{lfc_diff_net = abs(lfc_diff) - abs(lfc_ref)}, so the
+#'   magnitudes are already inside the quantity and it is positive when the
+#'   distinct set moved more than the shared reference. Do not wrap in abs().
+#' @param min_dpi minimum \code{abs(delta_pi)} for exon-sourced sides.
+#' @param min_dpi_sj minimum \code{abs(delta_pi)} for sides whose distinct set
+#'   came from split reads. DEFAULTS TO \code{min_dpi} (a uniform gate). Set it
+#'   lower for a scale-fair gate: split-read distinct counts sit on a lower pi
+#'   scale than the exonic reference, so one absolute threshold demands a larger
+#'   odds shift from a junction-sourced side than an exonic one.
+#' @param min_reads minimum read support for the tested distinct set, required
+#'   in AT LEAST ONE of the two groups being contrasted. Read from a
+#'   \code{d_support} column (the max over the contrast's two group means);
+#'   no-op when that column is absent.
+#'
+#'   EITHER, not both: requiring both groups would exclude on/off switches -- a
+#'   path absent in one condition by design -- which is the strongest splicing
+#'   signal there is and which the ground truth scores as maximal movement. On
+#'   the simulation a both-groups bar at 10 reads discarded 169 more true
+#'   positives than an either-group bar, for one extra false positive.
+#'
+#'   Applied to every side, not only split-read-sourced ones: restricting it to
+#'   junction sides saved only 16 true positives out of 692 at identical
+#'   precision, which does not justify a source-dependent rule.
+#' @param padj optional vector to use in place of \code{res$padj} -- for a
+#'   two-stage nested-BH sweep, pass \code{pmax(within_gene_BH, padj_gene)}.
+#' @return logical vector, one element per row of \code{res}.
+#'
+#' @details NA handling: a missing \code{lfc_diff_net} or \code{delta_pi}
+#'   PASSES its condition, so the call rests on padj alone. A missing padj never
+#'   passes. This is the tool's long-standing convention and is preserved here;
+#'   on the current simulation no row has either NA, so it is latent.
+#' @export
+is_significant <- function(res, padj_thr, delta = 0, min_dpi = 0.1,
+                           min_dpi_sj = min_dpi, min_reads = 0, padj = NULL) {
+  pv <- if (is.null(padj)) res$padj else padj
+  n  <- nrow(res)
+
+  lfc_ok <- if ("lfc_diff_net" %in% names(res)) {
     (res$lfc_diff_net > delta) | is.na(res$lfc_diff_net)
-  } else {
-    TRUE
-  }
-  has_dpi <- "delta_pi" %in% names(res)
-  dpi_ok <- if (has_dpi) {
-    thr <- rep(min_dpi, nrow(res))
-    if (all(c("comparison", "setdiff1", "setdiff2") %in% names(res))) {
+  } else TRUE
+
+  dpi_ok <- if ("delta_pi" %in% names(res)) {
+    thr <- rep(min_dpi, n)
+    if (!identical(min_dpi_sj, min_dpi) &&
+        all(c("comparison", "setdiff1", "setdiff2") %in% names(res))) {
       sd <- ifelse(grepl("diff1", res$comparison), res$setdiff1, res$setdiff2)
       # nzchar(NA) is TRUE, so test is.na() explicitly rather than relying on it
       thr[is.na(sd) | sd %in% c("NA", "")] <- min_dpi_sj
     }
     (abs(res$delta_pi) >= thr) | is.na(res$delta_pi)
-  } else {
-    TRUE
-  }
-  res$significant <- !is.na(res$padj) & res$padj < padj_thr & lfc_ok & dpi_ok
+  } else TRUE
+
+  ## read support for the tested distinct set, in EITHER contrasted group.
+  ## Applied to every side regardless of source: restricting it to junction
+  ## sides saved only 16 of 692 true positives at identical precision.
+  sup_ok <- if (min_reads > 0 && "d_support" %in% names(res)) {
+    !is.na(res$d_support) & res$d_support >= min_reads
+  } else TRUE
+
+  !is.na(pv) & pv < padj_thr & lfc_ok & dpi_ok & sup_ok
+}
+
+#' Add the significant column
+#'
+#' Thin wrapper on \code{\link{is_significant}}, which holds the rule.
+#' @inheritParams is_significant
+#' @return \code{res} with a logical \code{significant} column.
+#' @export
+add_significant <- function(res, padj_thr, delta, min_dpi = 0.1, min_dpi_sj = 0.05,
+                            min_reads = 10) {
+  res$significant <- is_significant(res, padj_thr, delta, min_dpi, min_dpi_sj, min_reads)
   res
 }
 

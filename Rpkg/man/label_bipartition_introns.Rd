@@ -4,7 +4,15 @@
 \alias{label_bipartition_introns}
 \title{Label intronic edges of one bipartition as distinct or shared}
 \usage{
-label_bipartition_introns(ge, tx1_set, tx2_set, chr, bubble_verts = NULL)
+label_bipartition_introns(
+  ge,
+  tx1_set,
+  tx2_set,
+  chr,
+  bubble_verts = NULL,
+  pairs1 = NULL,
+  pairs2 = NULL
+)
 }
 \arguments{
 \item{ge}{Precomputed gene graph list from \code{precompute_gene_graph}.}
@@ -16,16 +24,41 @@ label_bipartition_introns(ge, tx1_set, tx2_set, chr, bubble_verts = NULL)
 \item{chr}{Chromosome string (e.g. "chr1").}
 
 \item{bubble_verts}{Integer vector of sg_id values for all vertices in the
-bubble (source through sink, both paths). NULL disables the filter.}
+bubble (source through sink, both paths). NULL disables the filter. Used by
+the transcript rule only; the path rule is already route-bounded.}
+
+\item{pairs1, pairs2}{Two-column integer matrices of consecutive sg_id node
+pairs over every route of path1 / path2 (see
+\code{label_all_bipartition_introns}). Supplying both selects the path rule.}
 }
 \value{
 Named list with elements distinct1, distinct2, shared -- each a
 comma-separated string of "chr:start:end" junction identifiers, or NA.
 }
 \description{
-Uses the precomputed gene graph cache from \code{precompute_gene_graph} and the
-transcript sets that define the two paths of a bipartition to classify each
-intronic ("in") edge as distinct to path1, distinct to path2, or shared.
-Only introns with both endpoints within the bubble (vertices in bubble_verts)
-are considered. Introns flanking the bubble from outside are excluded.
+Uses the precomputed gene graph cache from \code{precompute_gene_graph} to
+classify each intronic ("in") edge as distinct to path1, distinct to path2, or
+shared.
+}
+\details{
+PATH RULE (default when \code{pairs1}/\code{pairs2} are supplied): an intron
+is distinct to side 1 iff it lies on at least one of side 1's ROUTES and on
+none of side 2's. This mirrors how the exonic distinct sets are built in
+\code{bipartition_analysis.R}, which derives them from the route node
+sequences rather than from transcript membership.
+
+TRANSCRIPT RULE (fallback when no route pairs are given): an intron is
+distinct to side 1 iff SOME side-1 transcript uses it and NO side-2
+transcript does, restricted to introns whose endpoints are both bubble
+vertices. This was the original rule. It is a strict SUPERSET of the path
+rule: measured over 2,272 sides, the two agree on 95.8\% overall and on
+100.0\% of the sides that are actually substituted (those with an empty exonic
+distinct set). Every disagreement is a transcript in \code{transcripts1}
+whose route through the bubble is not among the listed \code{path1} routes.
+
+Either way the junction identity is the same: "chr:start:end" from the edge
+from_pos/to_pos, and a side's count sums over ALL its distinct introns, which
+is what makes the intron D set an equivalent measure to the exonic one -- the
+routes partition themselves among those introns, so every transcript of the
+partition contributes.
 }
