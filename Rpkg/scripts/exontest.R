@@ -102,15 +102,49 @@ if (!is.null(opt$cond2)) {
 }
 if (!is.null(opt$contrasts)) {
   contrast_specs <- trimws(strsplit(opt$contrasts, ",")[[1]])
+  ## Two contrast forms:
+  ##   trt:ref      pairwise, 1 df -- unchanged, still the default
+  ##   A+B+C        omnibus over K groups, K-1 df
+  ## The omnibus form exists because the model is already cbind(y, n-y) ~ 0 +
+  ## groups over every group in the run, so a K-1 df Wald test needs no refit.
+  ## Its effect-size gates stay PAIRWISE (see is_significant): a range over K
+  ## groups is an extreme-order statistic and drifts badly with K -- measured on
+  ## DICE, median |dpi| range grows 7x from K=2 to K=13 and the share clearing
+  ## 0.1 goes from 7.5% to 32.5%, so a fixed floor silently loosens as groups
+  ## are added.
   contrasts <- lapply(contrast_specs, function(s) {
-    parts <- trimws(strsplit(s, ":")[[1]])
-    if (length(parts) != 2) stop("each contrast must be trt:ref, got: ", s)
-    list(trt = parts[1], ref = parts[2])
+    if (grepl("+", s, fixed = TRUE)) {
+      grps <- trimws(strsplit(s, "+", fixed = TRUE)[[1]])
+      grps <- grps[nzchar(grps)]
+      if (length(grps) < 2) stop("omnibus contrast needs >= 2 groups, got: ", s)
+      if (anyDuplicated(grps)) stop("duplicate group in omnibus contrast: ", s)
+      list(type = "omnibus", groups = grps,
+           name = paste0("omnibus_", paste(grps, collapse = ".")))
+    } else {
+      parts <- trimws(strsplit(s, ":")[[1]])
+      if (length(parts) != 2) stop("each pairwise contrast must be trt:ref, got: ", s)
+      list(type = "pair", trt = parts[1], ref = parts[2],
+           groups = c(parts[1], parts[2]),
+           name = paste0(parts[1], "_vs_", parts[2]))
+    }
   })
 } else {
-  contrasts <- list(list(trt = cond1, ref = cond2))
+  contrasts <- list(list(type = "pair", trt = cond1, ref = cond2,
+                        groups = c(cond1, cond2),
+                        name = paste0(cond1, "_vs_", cond2)))
 }
-all_groups <- unique(c(sapply(contrasts, `[[`, "ref"), sapply(contrasts, `[[`, "trt")))
+all_groups <- unique(unlist(lapply(contrasts, `[[`, "groups")))
+
+## Omnibus contrasts need the contrast-matrix path, which only the glmmTMB
+## beta-binomial models take. dirmult_EBplugin and wilcoxon instead SUBSET the
+## data to the contrast's two groups, so an omnibus there would filter to an
+## empty frame and yield nothing -- fail loudly instead.
+if (any(vapply(contrasts, function(ct) identical(ct$type, "omnibus"), logical(1))) &&
+    !model %in% c("betabinom_EBmap", "betabinom_EBapprox", "betabinom_MLE")) {
+  stop("omnibus contrasts (A+B+C) are supported only by betabinom_EBmap, ",
+       "betabinom_EBapprox and betabinom_MLE; model '", model,
+       "' tests each contrast by subsetting to two groups.")
+}
 phi_trend        <- isTRUE(opt$use_phi_loess)
 indep_filter     <- isTRUE(opt$independent_filtering)
 pseudocount      <- as.integer(opt$pseudocount)
@@ -152,16 +186,54 @@ if (file.exists(exoncnt_master)) {
   d_grp$gene <- as.character(d_grp$gene); d_grp$event <- as.character(d_grp$event)
   message(sprintf("Support table: %d (gene,event,side,group) means", nrow(d_grp)))
 
-  # Contrast matrix L: rows = "groups<level>", one column per contrast.
-  L <- matrix(0L, nrow = length(all_groups), ncol = length(contrasts),
-              dimnames = list(
-                paste0("groups", all_groups),
-                sapply(contrasts, function(ct) paste0(ct$trt, "_vs_", ct$ref))
-              ))
-  for (ki in seq_along(contrasts)) {
-    L[paste0("groups", contrasts[[ki]]$ref), ki] <- -1L
-    L[paste0("groups", contrasts[[ki]]$trt), ki] <-  1L
-  }
+  ## L: a NAMED LIST of contrast matrices, columns = "groups<level>".
+  ## A pairwise contrast is one row (+1 trt, -1 ref) and reproduces the former
+  ## 1-df (est/se)^2 exactly. An omnibus over K groups is K-1 rows of successive
+  ## differences, giving a full-rank K-1 df Wald test; wald_contrast() takes the
+  ## numerical rank, so a gene missing one of the groups simply loses a df
+  ## instead of failing.
+  cols <- paste0("groups", all_groups)
+  L <- lapply(contrasts, function(ct) {
+    if (identical(ct$type, "omnibus")) {
+      g <- paste0("groups", ct$groups)
+      C <- matrix(0L, nrow = length(g) - 1L, ncol = length(cols),
+                  dimnames = list(NULL, cols))
+      for (i in seq_len(length(g) - 1L)) { C[i, g[i]] <- 1L; C[i, g[i + 1L]] <- -1L }
+      C
+    } else {
+      C <- matrix(0L, nrow = 1L, ncol = length(cols), dimnames = list(NULL, cols))
+      C[1, paste0("groups", ct$trt)] <-  1L
+      C[1, paste0("groups", ct$ref)] <- -1L
+      C
+    }
+  })
+  names(L) <- vapply(contrasts, `[[`, character(1), "name")
+
+  ## contrast name -> its group set, for add_support(). Previously the groups
+  ## were recovered by splitting the contrast NAME on "_vs_", which breaks
+  ## silently for a group whose own name contains "_vs_" (d_support becomes NA
+  ## and the read floor never fires) and cannot express an omnibus at all.
+  ctr_groups <- setNames(lapply(contrasts, `[[`, "groups"),
+                         vapply(contrasts, `[[`, character(1), "name"))
+
+  ## omnibus contrast name -> the names of the PAIRWISE contrasts it spans.
+  ## is_significant() gates an omnibus row on whether any of these clears the
+  ## effect-size floors, because the omnibus row itself has no single direction
+  ## (delta_pi and lfc_diff_net are NA there). Only pairs that were actually
+  ## requested can be used; an omnibus whose pairs were not also requested maps
+  ## to an empty vector, and its rows then fail closed rather than passing on
+  ## padj alone.
+  pair_names <- vapply(Filter(function(ct) identical(ct$type, "pair"), contrasts),
+                       `[[`, character(1), "name")
+  omnibus_pairs <- lapply(Filter(function(ct) identical(ct$type, "omnibus"), contrasts),
+    function(ct) {
+      cand <- c(outer(ct$groups, ct$groups, function(a, b) paste0(a, "_vs_", b)))
+      intersect(cand, pair_names)
+    })
+  names(omnibus_pairs) <- vapply(
+    Filter(function(ct) identical(ct$type, "omnibus"), contrasts),
+    `[[`, character(1), "name")
+  if (!length(omnibus_pairs)) omnibus_pairs <- NULL
 } else {
   print('exoncnt dataset file does not exist.')
   print('please combine the exoncounts into one file and specify the filename.')
@@ -184,14 +256,25 @@ add_support <- function(res, contrast = NULL) {
   ctr <- if (!is.null(contrast)) rep_len(as.character(contrast), nrow(res))
          else if ("contrast" %in% names(res)) as.character(res$contrast)
          else return(res)
-  side  <- sub("_vs_ref$", "", as.character(res$comparison))
-  parts <- strsplit(ctr, "_vs_", fixed = TRUE)
-  g_trt <- vapply(parts, function(p) if (length(p) == 2L) p[1] else NA_character_, character(1))
-  g_ref <- vapply(parts, function(p) if (length(p) == 2L) p[2] else NA_character_, character(1))
-  key <- paste(d_grp$gene, d_grp$event, d_grp$side, d_grp$groups, sep = "\r")
-  m1  <- d_grp$m[match(paste(res$gene, res$event, side, g_trt, sep = "\r"), key)]
-  m2  <- d_grp$m[match(paste(res$gene, res$event, side, g_ref, sep = "\r"), key)]
-  res$d_support <- pmax(m1, m2, na.rm = TRUE)
+  side <- sub("_vs_ref$", "", as.character(res$comparison))
+  key  <- paste(d_grp$gene, d_grp$event, d_grp$side, d_grp$groups, sep = "\r")
+
+  ## Groups come from ctr_groups (built with the contrasts), NOT from splitting
+  ## the contrast name. Name-splitting silently yielded NA -- and so skipped the
+  ## read floor entirely -- for any group containing "_vs_", and had no way to
+  ## express a K-group omnibus. Unknown contrast names still give NA support,
+  ## which leaves the row untested by the floor rather than wrongly filtered.
+  grp_sets <- if (exists("ctr_groups")) ctr_groups[ctr] else vector("list", length(ctr))
+
+  ## max over the contrast's groups: support in ANY ONE of them is enough.
+  ## min() would discard all-or-nothing switches, which is what the test is for
+  ## (measured: min cost 200 true positives vs 31 for max, at equal precision).
+  res$d_support <- vapply(seq_len(nrow(res)), function(i) {
+    gs <- grp_sets[[i]]
+    if (is.null(gs) || !length(gs)) return(NA_real_)
+    m <- d_grp$m[match(paste(res$gene[i], res$event[i], side[i], gs, sep = "\r"), key)]
+    if (all(is.na(m))) NA_real_ else max(m, na.rm = TRUE)
+  }, numeric(1))
   res
 }
 
@@ -251,14 +334,21 @@ if (split != "multinomial") {
     sc_d2r  <- apply_pseudo(sc_d2r)
   }
 
-  lfc_summary_all <- bind_rows(lapply(contrasts, function(ct) {
-    ctr_name <- paste0(ct$trt, "_vs_", ct$ref)
-    bind_rows(
-      compute_lfc_summary(sc_d1r, cond_ref = ct$ref, cond_trt = ct$trt) %>%
-        mutate(comparison = "diff1_vs_ref", contrast = ctr_name),
-      compute_lfc_summary(sc_d2r, cond_ref = ct$ref, cond_trt = ct$trt) %>%
-        mutate(comparison = "diff2_vs_ref", contrast = ctr_name)
-    )
+  ## PAIRWISE contrasts only. pi_trt, pi_ref, delta_pi, lfc_diff and lfc_ref are
+  ## all two-group quantities, so an omnibus contrast has none of them -- calling
+  ## compute_lfc_summary() with ct$trt = NULL builds the column name
+  ## "mean_diff_" and aborts. Omnibus rows therefore join to NA on these
+  ## columns, which is what is_significant() expects: it gates them on their
+  ## constituent pairwise contrasts instead (omnibus_pairs).
+  lfc_summary_all <- bind_rows(lapply(
+    Filter(function(ct) identical(ct$type, "pair"), contrasts), function(ct) {
+      ctr_name <- ct$name
+      bind_rows(
+        compute_lfc_summary(sc_d1r, cond_ref = ct$ref, cond_trt = ct$trt) %>%
+          mutate(comparison = "diff1_vs_ref", contrast = ctr_name),
+        compute_lfc_summary(sc_d2r, cond_ref = ct$ref, cond_trt = ct$trt) %>%
+          mutate(comparison = "diff2_vs_ref", contrast = ctr_name)
+      )
   }))
   comparisons_list <- list(sc_d1r, sc_d2r)
 }
@@ -546,7 +636,8 @@ if (model == 'betabinom_EBmap') {
       ungroup()
   }
 
-  results <- add_significant(add_support(results), padj_thr, delta, min_dpi, min_dpi_sj, min_reads)
+  results <- add_significant(add_support(results), padj_thr, delta, min_dpi, min_dpi_sj, min_reads,
+                               omnibus_pairs = omnibus_pairs)
   write.table(results, file = out_resultfile, quote = FALSE, sep = "\t", row.names = FALSE)
 
 } else if (model == 'betabinom_EBapprox') {
@@ -614,7 +705,8 @@ if (model == 'betabinom_EBmap') {
       ungroup()
   }
 
-  results <- add_significant(add_support(results), padj_thr, delta, min_dpi, min_dpi_sj, min_reads)
+  results <- add_significant(add_support(results), padj_thr, delta, min_dpi, min_dpi_sj, min_reads,
+                               omnibus_pairs = omnibus_pairs)
   write.table(results, file = out_resultfile, quote = FALSE, sep = "\t", row.names = FALSE)
 
 } else if (model == 'dirmult_EBplugin') {
@@ -657,7 +749,8 @@ if (model == 'betabinom_EBmap') {
     res$pvalue <- res$p.value
     res <- adjust_pvalues(filter_unsupported(res), independentFiltering = FALSE, alpha = padj_thr, method = padj_method)
     res$pvalue <- NULL
-    add_significant(add_support(res), padj_thr, delta, min_dpi, min_dpi_sj, min_reads)
+    add_significant(add_support(res), padj_thr, delta, min_dpi, min_dpi_sj, min_reads,
+                               omnibus_pairs = omnibus_pairs)
   })
   results <- bind_rows(contrast_results)
   write.table(results, file = out_resultfile, sep = "\t", quote = FALSE, row.names = FALSE)
@@ -684,7 +777,8 @@ if (model == 'betabinom_EBmap') {
     res$pvalue <- res$p.value
     res <- adjust_pvalues(filter_unsupported(res), independentFiltering = indep_filter, alpha = padj_thr, method = padj_method)
     res$pvalue <- NULL
-    add_significant(add_support(res), padj_thr, delta, min_dpi, min_dpi_sj, min_reads)
+    add_significant(add_support(res), padj_thr, delta, min_dpi, min_dpi_sj, min_reads,
+                               omnibus_pairs = omnibus_pairs)
   })
   results <- bind_rows(contrast_results)
   write.table(results, file = out_resultfile, quote = FALSE, sep = "\t", row.names = FALSE)
@@ -713,7 +807,8 @@ if (model == 'betabinom_EBmap') {
       ungroup()
   }
 
-  results <- add_significant(add_support(results), padj_thr, delta, min_dpi, min_dpi_sj, min_reads)
+  results <- add_significant(add_support(results), padj_thr, delta, min_dpi, min_dpi_sj, min_reads,
+                               omnibus_pairs = omnibus_pairs)
   write.table(results, file = out_resultfile, quote = FALSE, sep = "\t", row.names = FALSE)
 
 } else {
@@ -792,7 +887,8 @@ message(paste("Merged dataset has", nrow(merged_data), "rows."))
 # not exist yet, so every row got the exonic min_dpi. Now that the merge has
 # attached them, recompute so junction-sourced sides use min_dpi_sj.
 if (nrow(merged_data) > 0 && all(c("setdiff1", "setdiff2") %in% names(merged_data))) {
-  merged_data <- add_significant(add_support(merged_data), padj_thr, delta, min_dpi, min_dpi_sj, min_reads)
+  merged_data <- add_significant(add_support(merged_data), padj_thr, delta, min_dpi, min_dpi_sj, min_reads,
+                               omnibus_pairs = omnibus_pairs)
 }
 
 # Write output
@@ -837,7 +933,8 @@ if (split == 'bipartition' || split == 'n_choose_2') {
       min_data$pvalue <- NULL
     }
 
-    min_data <- add_significant(add_support(min_data), padj_thr, delta, min_dpi, min_dpi_sj, min_reads)
+    min_data <- add_significant(add_support(min_data), padj_thr, delta, min_dpi, min_dpi_sj, min_reads,
+                               omnibus_pairs = omnibus_pairs)
     out_mincomb <- sub("\\.annotated\\.txt$", ".mincomb.annotated.txt",
                       out_result_annotated)
     write.table(min_data, out_mincomb, sep = "\t", quote = FALSE, row.names = FALSE)
@@ -871,7 +968,8 @@ if (split == 'bipartition' || split == 'n_choose_2') {
       fisher_data$pvalue <- NULL
     }
 
-    fisher_data <- add_significant(add_support(fisher_data), padj_thr, delta, min_dpi, min_dpi_sj, min_reads)
+    fisher_data <- add_significant(add_support(fisher_data), padj_thr, delta, min_dpi, min_dpi_sj, min_reads,
+                               omnibus_pairs = omnibus_pairs)
     out_fisher <- sub("\\.annotated\\.txt$", ".fisher_combined.annotated.txt",
                       out_result_annotated)
     write.table(fisher_data, out_fisher, sep = "\t", quote = FALSE, row.names = FALSE)

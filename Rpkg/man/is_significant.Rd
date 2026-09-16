@@ -11,7 +11,8 @@ is_significant(
   min_dpi = 0.1,
   min_dpi_sj = min_dpi,
   min_reads = 0,
-  padj = NULL
+  padj = NULL,
+  omnibus_pairs = NULL
 )
 }
 \arguments{

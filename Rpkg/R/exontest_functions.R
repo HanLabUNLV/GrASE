@@ -655,23 +655,63 @@ test_model_glmmTMB_without_prior <- function(dd, L, model_label = "betabinom_MLE
     coef_nms <- names(beta)
     phi_val  <- sigma(m1)
 
-    results <- lapply(colnames(L), function(ctr_name) {
-      l_full  <- L[, ctr_name]
-      needed  <- names(l_full)[l_full != 0]
+    ## L is a named list of contrast MATRICES: 1 row for a pairwise trt-vs-ref
+    ## contrast, K-1 rows for a K-group omnibus. A 1-row matrix reproduces the
+    ## former (est/se)^2 with df = 1 exactly, so pairwise output is unchanged.
+    ## effect_size is the contrast estimate for a pair and NA for an omnibus,
+    ## which has no single direction -- the pairwise effect sizes of its
+    ## constituent pairs carry that information instead.
+    results <- lapply(names(L), function(ctr_name) {
+      C       <- L[[ctr_name]]
+      if (is.null(dim(C))) C <- matrix(C, nrow = 1L, dimnames = list(NULL, names(C)))
+      needed  <- colnames(C)[apply(C != 0, 2, any)]
       if (!all(needed %in% coef_nms)) return(NULL)
-      l_use   <- l_full[coef_nms]
-      est     <- as.numeric(l_use %*% beta)
-      se      <- sqrt(as.numeric(t(l_use) %*% V %*% l_use))
-      if (!is.finite(se) || se <= 0) return(NULL)
-      z2      <- (est / se)^2
+      C_use   <- C[, coef_nms, drop = FALSE]
+      w       <- wald_contrast(beta, V, C_use)
+      if (is.null(w) || !is.finite(w$stat)) return(NULL)
+      est     <- if (nrow(C_use) == 1L) as.numeric(C_use %*% beta[coef_nms]) else NA_real_
       data.frame(gene = gene, event = event, contrast = ctr_name,
-                 LRT = z2, p.value = pchisq(z2, df = 1, lower.tail = FALSE),
+                 LRT = w$stat, p.value = w$p, df = w$df,
                  model = model_label, phi = phi_val, effect_size = est,
                  stringsAsFactors = FALSE)
     })
     bind_rows(Filter(Negate(is.null), results))
 }
 
+
+#' Wald test for a contrast vector or a contrast matrix
+#'
+#' Generalises the 1-df contrast test to a K-1 df omnibus test over K groups.
+#' A contrast VECTOR reproduces the 1-df test exactly -- W = (est/se)^2 with
+#' df = 1 -- so pairwise results are unchanged to the last digit. A contrast
+#' MATRIX with r independent rows gives the omnibus statistic
+#'   W = (C b)' (C V C')^{-1} (C b),  df = rank(C).
+#'
+#' Uses an eigen-based generalised inverse because C V C' is rank-deficient
+#' whenever a group is absent or aliased in this gene/event, which is common:
+#' df is then the numerical rank, not nrow(C).
+#'
+#' @param beta named coefficient vector from the fitted model.
+#' @param V coefficient covariance matrix, dimnames matching \code{beta}.
+#' @param C contrast vector (named) or matrix (named columns).
+#' @return list(stat, df, p), or NULL when no direction is estimable.
+#' @export
+wald_contrast <- function(beta, V, C) {
+  if (is.null(dim(C))) C <- matrix(C, nrow = 1L, dimnames = list(NULL, names(C)))
+  keep <- colnames(C)
+  if (!all(keep %in% names(beta))) return(NULL)
+  est <- C %*% beta[keep]
+  M   <- C %*% V[keep, keep, drop = FALSE] %*% t(C)
+  ei  <- eigen(M, symmetric = TRUE)
+  tol <- max(ei$values) * 1e-10
+  pos <- ei$values > tol
+  if (!any(pos)) return(NULL)
+  U    <- ei$vectors[, pos, drop = FALSE]
+  Minv <- U %*% diag(1 / ei$values[pos], sum(pos)) %*% t(U)
+  W    <- as.numeric(t(est) %*% Minv %*% est)
+  df   <- sum(pos)
+  list(stat = W, df = df, p = stats::pchisq(W, df = df, lower.tail = FALSE))
+}
 
 # 2. Moderated glmmTMB Beta-Binomial EB (EBapprox or EBmap)
 #' Test differential exon usage with a beta-binomial glmmTMB model using fixed moderated dispersion.
@@ -718,17 +758,23 @@ test_model_glmmTMB_EB <- function(dd, L, model_label = "betabinom_EBapprox") {
     coef_nms <- names(beta)
     phi_val  <- sigma(m1)
 
-    results <- lapply(colnames(L), function(ctr_name) {
-      l_full  <- L[, ctr_name]
-      needed  <- names(l_full)[l_full != 0]
+    ## L is a named list of contrast MATRICES: 1 row for a pairwise trt-vs-ref
+    ## contrast, K-1 rows for a K-group omnibus. A 1-row matrix reproduces the
+    ## former (est/se)^2 with df = 1 exactly, so pairwise output is unchanged.
+    ## effect_size is the contrast estimate for a pair and NA for an omnibus,
+    ## which has no single direction -- the pairwise effect sizes of its
+    ## constituent pairs carry that information instead.
+    results <- lapply(names(L), function(ctr_name) {
+      C       <- L[[ctr_name]]
+      if (is.null(dim(C))) C <- matrix(C, nrow = 1L, dimnames = list(NULL, names(C)))
+      needed  <- colnames(C)[apply(C != 0, 2, any)]
       if (!all(needed %in% coef_nms)) return(NULL)
-      l_use   <- l_full[coef_nms]
-      est     <- as.numeric(l_use %*% beta)
-      se      <- sqrt(as.numeric(t(l_use) %*% V %*% l_use))
-      if (!is.finite(se) || se <= 0) return(NULL)
-      z2      <- (est / se)^2
+      C_use   <- C[, coef_nms, drop = FALSE]
+      w       <- wald_contrast(beta, V, C_use)
+      if (is.null(w) || !is.finite(w$stat)) return(NULL)
+      est     <- if (nrow(C_use) == 1L) as.numeric(C_use %*% beta[coef_nms]) else NA_real_
       data.frame(gene = gene, event = event, contrast = ctr_name,
-                 LRT = z2, p.value = pchisq(z2, df = 1, lower.tail = FALSE),
+                 LRT = w$stat, p.value = w$p, df = w$df,
                  model = model_label, phi = phi_val, effect_size = est,
                  stringsAsFactors = FALSE)
     })
@@ -1020,7 +1066,8 @@ posthoc_lfc_summary <- function(results, lfc_summary) {
 #'   on the current simulation no row has either NA, so it is latent.
 #' @export
 is_significant <- function(res, padj_thr, delta = 0, min_dpi = 0.1,
-                           min_dpi_sj = min_dpi, min_reads = 0, padj = NULL) {
+                           min_dpi_sj = min_dpi, min_reads = 0, padj = NULL,
+                           omnibus_pairs = NULL) {
   pv <- if (is.null(padj)) res$padj else padj
   n  <- nrow(res)
 
@@ -1046,6 +1093,46 @@ is_significant <- function(res, padj_thr, delta = 0, min_dpi = 0.1,
     !is.na(res$d_support) & res$d_support >= min_reads
   } else TRUE
 
+  ## K-group omnibus rows have no single direction, so delta_pi and
+  ## lfc_diff_net are NA and the two effect-size gates cannot be evaluated on
+  ## the row itself. Gate them instead on whether ANY constituent pairwise
+  ## contrast clears both, for the same gene/event/side. Those gates stay
+  ## pairwise deliberately: generalising delta_pi to a range over K groups
+  ## makes it an extreme-order statistic, and a fixed floor then loosens as K
+  ## grows (measured on DICE: the share clearing 0.1 rises from 7.5% at K=2 to
+  ## 32.5% at K=13). omnibus_pairs maps each omnibus contrast name to the
+  ## pairwise contrast names it spans; those rows must be present in `res`.
+  ## Identify omnibus rows from the test itself: df > 1 means a K-1 df Wald
+  ## contrast, which has no single direction. Do NOT rely on omnibus_pairs to
+  ## identify them -- delta_pi and lfc_diff_net are NA on such rows, and both
+  ## gates treat NA as a pass (so that frames lacking those columns are not
+  ## filtered), so an unidentified omnibus row would clear both vacuously.
+  is_omni <- if ("df" %in% names(res)) !is.na(res$df) & res$df > 1 else rep(FALSE, n)
+  if (any(is_omni) && is.null(omnibus_pairs)) {
+    ## Cannot verify the effect size for these rows: fail them rather than let
+    ## the NA-passes-through rule call them significant on padj alone.
+    if (length(lfc_ok) == 1L) lfc_ok <- rep(lfc_ok, n)
+    if (length(dpi_ok) == 1L) dpi_ok <- rep(dpi_ok, n)
+    lfc_ok[is_omni] <- FALSE; dpi_ok[is_omni] <- FALSE
+  }
+  if (!is.null(omnibus_pairs) && all(c("contrast", "gene", "event") %in% names(res))) {
+    is_omni <- is_omni | as.character(res$contrast) %in% names(omnibus_pairs)
+    if (any(is_omni)) {
+      pass_pair <- lfc_ok & dpi_ok
+      if (length(pass_pair) == 1L) pass_pair <- rep(pass_pair, n)
+      cmp <- if ("comparison" %in% names(res)) as.character(res$comparison) else rep("", n)
+      key <- paste(res$gene, res$event, cmp, res$contrast, sep = "\r")
+      lut <- stats::setNames(pass_pair, key)
+      for (i in which(is_omni)) {
+        prs <- omnibus_pairs[[as.character(res$contrast[i])]]
+        hit <- lut[paste(res$gene[i], res$event[i], cmp[i], prs, sep = "\r")]
+        ok  <- any(hit %in% TRUE)
+        if (length(lfc_ok) > 1L) lfc_ok[i] <- ok else lfc_ok <- replace(rep(lfc_ok, n), i, ok)
+        if (length(dpi_ok) > 1L) dpi_ok[i] <- ok else dpi_ok <- replace(rep(dpi_ok, n), i, ok)
+      }
+    }
+  }
+
   !is.na(pv) & pv < padj_thr & lfc_ok & dpi_ok & sup_ok
 }
 
@@ -1056,8 +1143,9 @@ is_significant <- function(res, padj_thr, delta = 0, min_dpi = 0.1,
 #' @return \code{res} with a logical \code{significant} column.
 #' @export
 add_significant <- function(res, padj_thr, delta, min_dpi = 0.1, min_dpi_sj = 0.05,
-                            min_reads = 10) {
-  res$significant <- is_significant(res, padj_thr, delta, min_dpi, min_dpi_sj, min_reads)
+                            min_reads = 10, omnibus_pairs = NULL) {
+  res$significant <- is_significant(res, padj_thr, delta, min_dpi, min_dpi_sj,
+                                    min_reads, omnibus_pairs = omnibus_pairs)
   res
 }
 

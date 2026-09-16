@@ -10,7 +10,8 @@ add_significant(
   delta,
   min_dpi = 0.1,
   min_dpi_sj = 0.05,
-  min_reads = 10
+  min_reads = 10,
+  omnibus_pairs = NULL
 )
 }
 \arguments{
