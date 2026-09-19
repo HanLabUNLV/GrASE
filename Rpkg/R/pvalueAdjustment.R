@@ -147,12 +147,24 @@ nested_bh <- function(res, alpha = 0.05) {
   names(padj_gene_vec)   <- genes
   res$padj_gene          <- padj_gene_vec[res$gene]
 
-  # Stage 2: within-gene BH only for genes passing stage 1
+  # Stage 2: within-gene BH only for genes passing stage 1.
+  #
+  # The row indices are precomputed ONCE with split(). The former
+  # `which(res$gene == g)` inside the loop rescanned every row for every
+  # selected gene -- O(selected x nrow) string comparisons, which on a
+  # 443k-row TSS/TTS arm with thousands of selected genes ran for hours in a
+  # single thread while producing no output. split() is O(nrow) total and the
+  # loop then does only the p.adjust work. Results are identical: the same
+  # rows, in the same order, get the same BH values.
   res$padj <- NA_real_
   selected <- names(padj_gene_vec)[!is.na(padj_gene_vec) & padj_gene_vec < alpha]
-  for (g in selected) {
-    idx          <- which(res$gene == g)
-    res$padj[idx] <- p.adjust(res$pvalue[idx], method = "BH")
+  if (length(selected)) {
+    idx_by_gene <- split(seq_len(nrow(res)), as.character(res$gene))
+    for (g in selected) {
+      idx <- idx_by_gene[[g]]
+      if (is.null(idx)) next
+      res$padj[idx] <- p.adjust(res$pvalue[idx], method = "BH")
+    }
   }
 
   res

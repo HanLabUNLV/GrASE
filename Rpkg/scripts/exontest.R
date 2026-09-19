@@ -269,12 +269,24 @@ add_support <- function(res, contrast = NULL) {
   ## max over the contrast's groups: support in ANY ONE of them is enough.
   ## min() would discard all-or-nothing switches, which is what the test is for
   ## (measured: min cost 200 true positives vs 31 for max, at equal precision).
-  res$d_support <- vapply(seq_len(nrow(res)), function(i) {
-    gs <- grp_sets[[i]]
-    if (is.null(gs) || !length(gs)) return(NA_real_)
-    m <- d_grp$m[match(paste(res$gene[i], res$event[i], side[i], gs, sep = "\r"), key)]
-    if (all(is.na(m))) NA_real_ else max(m, na.rm = TRUE)
-  }, numeric(1))
+  ## Loop over CONTRASTS (a handful), not rows. A per-row vapply does one
+  ## match() per row against a key vector with ~1.9M entries on the TSS/TTS
+  ## arm -- order 10^12 operations, which ran for hours single-threaded with no
+  ## output. Each contrast now contributes one vectorised match() per group,
+  ## which is what the original pairwise code did (two matches, trt and ref).
+  res$d_support <- NA_real_
+  for (cn in unique(ctr)) {
+    gs <- ctr_groups[[cn]]
+    if (is.null(gs) || !length(gs)) next
+    rows <- which(ctr == cn)
+    acc  <- rep(NA_real_, length(rows))
+    for (g in gs) {
+      m <- d_grp$m[match(paste(res$gene[rows], res$event[rows], side[rows], g,
+                               sep = "\r"), key)]
+      acc <- pmax(acc, m, na.rm = TRUE)
+    }
+    res$d_support[rows] <- acc
+  }
   res
 }
 
