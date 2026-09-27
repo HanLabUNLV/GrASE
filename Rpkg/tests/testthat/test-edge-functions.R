@@ -165,3 +165,117 @@ test_that("boundary_support reports no_coverage for an NA step", {
   cal <- calibrate_boundary(pos = c(0, 0), neg = c(0.5, 0.5))
   expect_equal(boundary_support(NA_real_, 1e4, cal), "no_coverage")
 })
+
+## --- graph-native geometry ---------------------------------------------------
+## The splice graph states the geometry directly, so none of it needs rederiving
+## from the flattened GFF. The conventions are NOT symmetric across strands and
+## a one-base error puts the flanking bin inside the exon, so both are pinned.
+##
+## Vertex `position` is a BOUNDARY in increasing-coordinate space:
+##   part extent  [min(pos_from,pos_to), max(pos_from,pos_to) - 1]
+##   TSS          pos - (strand == "-")
+##   TTS          pos - (strand == "+")
+
+mk_graph <- function(strand = "+") {
+  ## two exonic parts and a terminus, wired the way a real graphml is
+  if (strand == "+") {
+    ## part1 100-199, part2 200-299; TSS at 100, TTS at 299
+    pos <- c(100, 200, 300)
+    ed  <- rbind(c(1, 2), c(2, 3))          # ex_part edges
+    term <- rbind(c(4, 1), c(3, 5))         # R -> v1, v3 -> L
+  } else {
+    ## minus strand: positions descend along transcription
+    pos <- c(300, 200, 100)
+    ed  <- rbind(c(1, 2), c(2, 3))
+    term <- rbind(c(4, 1), c(3, 5))
+  }
+  g <- igraph::make_empty_graph(n = 5, directed = TRUE)
+  g <- igraph::add_edges(g, c(t(ed)))
+  g <- igraph::add_edges(g, c(t(term)))
+  igraph::V(g)$position <- c(pos, NA, NA)
+  igraph::V(g)$sg_id    <- c("1", "2", "3", "R", "L")
+  igraph::E(g)$ex_or_in <- c("ex_part", "ex_part", "R", "L")
+  igraph::E(g)$dexseq_fragment <- c("001", "002", NA, NA)
+  g
+}
+
+test_that("graph_exonic_parts derives part extents on the plus strand", {
+  p <- graph_exonic_parts(mk_graph("+"))
+  expect_equal(nrow(p), 2)
+  expect_equal(p$start, c(100, 200))
+  expect_equal(p$end,   c(199, 299))   # max - 1
+})
+
+test_that("graph_exonic_parts is strand-agnostic", {
+  p <- graph_exonic_parts(mk_graph("-"))
+  expect_equal(sort(p$start), c(100, 200))
+  expect_equal(sort(p$end),   c(199, 299))
+})
+
+test_that("TSS has no offset on the plus strand", {
+  t <- graph_terminal_positions(mk_graph("+"), "TSS", "+")
+  expect_equal(t$boundary, 100)
+})
+
+test_that("TSS is offset by one on the minus strand", {
+  ## R edge points at v1, position 300; the TSS itself is 299
+  t <- graph_terminal_positions(mk_graph("-"), "TSS", "-")
+  expect_equal(t$boundary, 299)
+})
+
+test_that("TTS offsets are the mirror of TSS", {
+  expect_equal(graph_terminal_positions(mk_graph("+"), "TTS", "+")$boundary, 299)
+  expect_equal(graph_terminal_positions(mk_graph("-"), "TTS", "-")$boundary, 100)
+})
+
+test_that("graph_side_boundary takes the OUTERMOST route terminus", {
+  g <- mk_graph("+")
+  ## two routes starting at different nodes: 1 (pos 100) and 2 (pos 200).
+  ## On the plus strand the outermost TSS is the smaller coordinate.
+  g <- igraph::add_edges(g, c(4, 2))
+  igraph::E(g)$ex_or_in[igraph::ecount(g)] <- "R"
+  expect_equal(graph_side_boundary(g, "R-1-2-3", "TSS", "+"), 100)
+  expect_equal(graph_side_boundary(g, "R-2-3",   "TSS", "+"), 200)
+  expect_equal(graph_side_boundary(g, "R-1-2-3, R-2-3", "TSS", "+"), 100)
+})
+
+test_that("graph_side_boundary returns NA when no terminus resolves", {
+  expect_true(is.na(graph_side_boundary(mk_graph("+"), "R-99", "TSS", "+")))
+})
+
+test_that("graph helpers tolerate a graph with no ex_part or R edges", {
+  g <- igraph::make_empty_graph(n = 2, directed = TRUE)
+  g <- igraph::add_edges(g, c(1, 2))
+  igraph::V(g)$position <- c(1, 2); igraph::V(g)$sg_id <- c("1", "2")
+  igraph::E(g)$ex_or_in <- "in"; igraph::E(g)$dexseq_fragment <- NA
+  expect_equal(nrow(graph_exonic_parts(g)), 0)
+  expect_equal(nrow(graph_terminal_positions(g, "TSS", "+")), 0)
+})
+
+test_that("graph_strand reads the stored graph attribute, not an inference", {
+  ## map_DEXSeq_from_gff records strand as a graph attribute at build time.
+  ## It must win even when the R/L geometry would suggest otherwise.
+  g <- mk_graph("+")
+  g <- igraph::set_graph_attr(g, "strand", "-")
+  expect_equal(graph_strand(g), "-")
+})
+
+test_that("graph_strand falls back to R/L geometry when the attribute is absent", {
+  expect_equal(graph_strand(mk_graph("+")), "+")
+  expect_equal(graph_strand(mk_graph("-")), "-")
+})
+
+test_that("graph_chrom reads the stored chromosome attribute", {
+  g <- igraph::set_graph_attr(mk_graph("+"), "chrom", "chr7")
+  expect_equal(graph_chrom(g), "chr7")
+})
+
+test_that("graph_chrom returns NA for a graph built before chrom was stored", {
+  ## such graphs need the parse_gff_chr_map fallback, so NA must be detectable
+  expect_true(is.na(graph_chrom(mk_graph("+"))))
+})
+
+test_that("graph_chrom rejects an empty or missing attribute", {
+  g <- igraph::set_graph_attr(mk_graph("+"), "chrom", "")
+  expect_true(is.na(graph_chrom(g)))
+})

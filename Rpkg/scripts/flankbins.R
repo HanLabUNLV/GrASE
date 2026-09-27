@@ -18,9 +18,15 @@
 ## Do NOT fold these bins into the DEXSeq flattening: adding features changes
 ## read assignment for existing exonic parts, so every current count shifts.
 ##
+## Geometry comes from the SPLICE GRAPH, not the flattened GFF. The graph states
+## it directly: R/L edges are the distinct TSS/TTS positions, ex_part edges are
+## the exonic parts (coordinates from their endpoint vertices). Transcript
+## membership is not needed -- an R edge points at its route's first node, so
+## anything 5' of it is by definition off that path.
+##
 ## Usage:
 ##   Rscript scripts/flankbins.R --split_dir=<filtered splits> \
-##     --gff_dir=<per-gene dexseq gff> --gencode=<annotation.gff3> \
+##     --graphml_dir=<per-gene graphml> --gencode=<annotation.gff3> \
 ##     --outdir=<dir> [--width=100] [--min_width=50] [--n_calib=1500]
 
 suppressMessages({library(optparse)})
@@ -28,10 +34,12 @@ suppressMessages({library(optparse)})
 option_list <- list(
   make_option(c("-i", "--split_dir"), type = "character", default = NULL,
               help = "directory of filtered bipartition split tables"),
-  make_option(c("-g", "--gff_dir"), type = "character", default = NULL,
-              help = "directory of per-gene <gene>.dexseq.gff files"),
+  make_option(c("-g", "--graphml_dir"), type = "character", default = NULL,
+              help = "directory of per-gene <gene>.graphml files"),
   make_option(c("-a", "--gencode"), type = "character", default = NULL,
               help = "gencode annotation gff3, for single-promoter controls"),
+  make_option(c("-c", "--chr_gff"), type = "character", default = NULL,
+              help = "aggregate dexseq gff; needed ONLY for graphs built before chrom was stored on the graph"),
   make_option(c("-o", "--outdir"), type = "character", default = NULL,
               help = "output directory"),
   make_option(c("-w", "--width"), type = "integer", default = 100L,
@@ -42,7 +50,7 @@ option_list <- list(
               help = "calibration bins per class [default %default]")
 )
 opt <- parse_args(OptionParser(option_list = option_list))
-for (r in c("split_dir", "gff_dir", "outdir"))
+for (r in c("split_dir", "graphml_dir", "outdir"))
   if (is.null(opt[[r]])) stop("--", r, " must be specified", call. = FALSE)
 
 rdir <- file.path(dirname(dirname(normalizePath(
@@ -50,24 +58,30 @@ rdir <- file.path(dirname(dirname(normalizePath(
 if (!dir.exists(rdir)) rdir <- "R"
 for (f in list.files(rdir, pattern = "\\.R$", full.names = TRUE))
   try(source(f), silent = TRUE)
-stopifnot(exists("extend_contiguous_run"), exists("flank_bin"))
+suppressMessages(library(igraph))
+stopifnot(exists("graph_exonic_parts"), exists("graph_side_boundary"),
+          exists("flank_bin"))
 
 dir.create(opt$outdir, showWarnings = FALSE, recursive = TRUE)
 
-read_gene_parts <- function(gene) {
-  fn <- file.path(opt$gff_dir, paste0(gene, ".dexseq.gff"))
+## Newer graphs carry chrom, strand and gene as graph attributes, so nothing is
+## read from the annotation at all. --chr_gff is a fallback for graphs built
+## before chrom was recorded.
+chr_map <- if (!is.null(opt$chr_gff) && file.exists(opt$chr_gff)) {
+  m <- parse_gff_chr_map(opt$chr_gff)
+  message("chromosome fallback map: ", length(m), " genes")
+  m
+} else list()
+
+read_gene <- function(gene) {
+  fn <- file.path(opt$graphml_dir, paste0(gene, ".graphml"))
   if (!file.exists(fn)) return(NULL)
-  ## quote = "" is REQUIRED: GFF attributes are double-quoted and read.delim's
-  ## default quoting would mangle the attribute field.
-  x <- utils::read.delim(fn, header = FALSE, comment.char = "#",
-                         quote = "", stringsAsFactors = FALSE)
-  x <- x[x$V3 == "exonic_part", , drop = FALSE]
-  if (!nrow(x)) return(NULL)
-  n <- as.integer(sub('.*exonic_part_number "([^"]+)".*', "\\1", x$V9))
-  tx <- strsplit(sub('.*transcripts "([^"]+)".*', "\\1", x$V9), "\\+")
-  list(parts  = stats::setNames(Map(c, x$V4, x$V5), as.character(n)),
-       tx     = stats::setNames(tx, as.character(n)),
-       chrom  = x$V1[1], strand = x$V7[1])
+  g <- tryCatch(igraph::read_graph(fn, format = "graphml"), error = function(e) NULL)
+  if (is.null(g)) return(NULL)
+  p <- graph_exonic_parts(g)
+  if (!nrow(p)) return(NULL)
+  list(g = g, strand = graph_strand(g), chrom = graph_chrom(g),
+       parts = stats::setNames(Map(c, p$start, p$end), as.character(p$part)))
 }
 
 split_files <- list.files(opt$split_dir, pattern = "\\.txt$", full.names = TRUE)
@@ -83,32 +97,39 @@ for (sf in split_files) {
     kind <- if (identical(as.character(d$source[i]), "R")) "TSS" else
             if (identical(as.character(d$sink[i]), "L"))   "TTS" else NA
     if (is.na(kind)) next
-    g <- read_gene_parts(d$gene[i]); if (is.null(g)) next
-    dir <- free_end_direction(kind, g$strand)
+    gg <- read_gene(d$gene[i]); if (is.null(gg)) next
+    strand <- gg$strand
+    chrom  <- if (!is.na(gg$chrom)) gg$chrom else chr_map[[d$gene[i]]]
+    if (is.na(strand) || !strand %in% c("+", "-") || is.null(chrom)) next
+    dir <- free_end_direction(kind, strand)
     for (side in c(1L, 2L)) {
       sd <- if (side == 1L) d$setdiff1[i] else d$setdiff2[i]
       if (is.na(sd) || sd %in% c("", "NA")) next
       pn <- suppressWarnings(as.integer(sub("^E", "",
               trimws(strsplit(sd, ",")[[1]]))))
-      pn <- pn[!is.na(pn) & as.character(pn) %in% names(g$parts)]
+      pn <- pn[!is.na(pn) & as.character(pn) %in% names(gg$parts)]
       if (!length(pn)) next
-      b <- extend_contiguous_run(g$parts, g$tx, pn, dir)
+      ## the graph states the route's terminus outright -- no walk, no
+      ## transcript-sharing heuristic, and it is the transcript's real start
+      ## rather than the distinct set's edge
+      pf <- if (side == 1L) d$path1[i] else d$path2[i]
+      b <- graph_side_boundary(gg$g, pf, kind, strand)
       if (is.na(b)) next
-      fw <- flank_width(g$parts, b, dir)
+      fw <- flank_width(gg$parts, b, dir)
       fb <- flank_bin(b, dir, opt$width, fw, opt$min_width)
       if (fb$tier == "unscorable") { n_uns <- n_uns + 1L; next }
       k <- k + 1L
       id <- sprintf("F%07d", k)
-      len_d <- sum(vapply(g$parts[as.character(pn)],
+      len_d <- sum(vapply(gg$parts[as.character(pn)],
                           function(p) p[2] - p[1] + 1, numeric(1)))
       rows[[k]] <- data.frame(bin_id = id, row_type = "side", role = "ADJ",
         pair_id = id, gene = d$gene[i],
-        event = d$event[i], side = side, kind = kind, chrom = g$chrom,
-        strand = g$strand, boundary = b, flank_width = fw,
+        event = d$event[i], side = side, kind = kind, chrom = chrom,
+        strand = strand, boundary = b, flank_width = fw,
         len_ADJ = fb$width, len_D = len_d,
         distinct_parts = sd, tier = fb$tier, stringsAsFactors = FALSE)
-      saf[[k]] <- data.frame(GeneID = id, Chr = g$chrom, Start = fb$start,
-        End = fb$end, Strand = g$strand, stringsAsFactors = FALSE)
+      saf[[k]] <- data.frame(GeneID = id, Chr = chrom, Start = fb$start,
+        End = fb$end, Strand = strand, stringsAsFactors = FALSE)
     }
   }
 }
@@ -158,16 +179,20 @@ if (!is.null(opt$gencode) && file.exists(opt$gencode)) {
   npos <- 0L
   for (gene in names(sp)) {
     if (npos >= opt$n_calib) break
-    g <- read_gene_parts(gene); if (is.null(g)) next
-    if (length(g$parts) < 4L) next
+    gg <- read_gene(gene); if (is.null(gg)) next
+    if (length(gg$parts) < 4L) next
     outer <- sp[[gene]][1]
-    dir <- if (g$strand == "+") -1L else 1L
+    strand <- gg$strand
+    if (is.na(strand) || !strand %in% c("+", "-")) next
+    dir <- if (strand == "+") -1L else 1L
     fb <- flank_bin(outer, dir, opt$width, opt$width, opt$min_width)
     if (fb$tier == "unscorable") next
     ## D is the matched window INSIDE the terminal exon
     if (dir < 0) { ds <- outer; de <- outer + opt$width - 1L }
     else         { ds <- outer - opt$width + 1L; de <- outer }
-    add_control("calib_pos", gene, g$chrom, g$strand, fb$start, fb$end, ds, de)
+    pos_chrom <- if (!is.na(gg$chrom)) gg$chrom else chr_map[[gene]]
+    if (is.null(pos_chrom) || is.na(pos_chrom)) next
+    add_control("calib_pos", gene, pos_chrom, strand, fb$start, fb$end, ds, de)
     npos <- npos + 1L
   }
   message("calibration positive bins: ", npos)
@@ -180,15 +205,19 @@ for (sf in split_files) {
   if (inherits(d, "try-error") || !nrow(d)) next
   for (gene in unique(d$gene)) {
     if (nneg >= opt$n_calib) break
-    g <- read_gene_parts(gene); if (is.null(g)) next
-    lens <- vapply(g$parts, function(p) p[2] - p[1] + 1, numeric(1))
+    neg_chrom <- if (!is.na(gg$chrom)) gg$chrom else chr_map[[gene]]
+    if (is.null(neg_chrom) || is.na(neg_chrom)) next
+    gg <- read_gene(gene); if (is.null(gg)) next
+    neg_strand <- gg$strand
+    if (is.na(neg_strand) || !neg_strand %in% c("+", "-")) next
+    lens <- vapply(gg$parts, function(p) p[2] - p[1] + 1, numeric(1))
     big <- names(lens)[lens >= 2 * opt$width + 20]
     if (!length(big)) next
-    p <- g$parts[[big[ceiling(length(big) / 2)]]]
+    p <- gg$parts[[big[ceiling(length(big) / 2)]]]
     mid <- floor((p[1] + p[2]) / 2)
     ## both windows lie inside one continuous exon, so this is pure
     ## continuation and the step must come out near 0.5
-    add_control("calib_neg", gene, g$chrom, g$strand,
+    add_control("calib_neg", gene, neg_chrom, neg_strand,
                 mid - opt$width + 1L, mid, mid + 1L, mid + opt$width)
     nneg <- nneg + 1L
   }

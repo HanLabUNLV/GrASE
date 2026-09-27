@@ -227,3 +227,183 @@ boundary_support <- function(step, d_n, cal, adj_n = NULL, min_reads = 2,
   out[ok] <- lab
   out
 }
+
+## ---------------------------------------------------------------------------
+## Graph-native geometry.
+##
+## The splice graph already states everything the diagnostic needs, so none of
+## this has to be rederived from the flattened GFF:
+##
+##   vertices        `position` -- a BOUNDARY in increasing-coordinate space
+##   ex_part edges   `dexseq_fragment` plus a boolean per transcript; their own
+##                   from_pos/to_pos are NA, coordinates come from the endpoints
+##   R / L edges     one per distinct TSS / TTS
+##
+## Conventions, verified against the GFF on a plus-strand gene (FOS,
+## ENSG00000170345) and a minus-strand one (LCP2, ENSG00000043462):
+##
+##   part extent   [min(pos_from, pos_to), max(pos_from, pos_to) - 1]
+##   TSS           pos - (strand == "-")
+##   TTS           pos - (strand == "+")
+##
+## Transcript membership is NOT needed. An R edge points at its route's FIRST
+## node, so any exonic part 5' of that node is by definition not on that path --
+## there is nothing to check. And for the flank it is enough to know an exonic
+## part EXISTS beyond the boundary: if one does it belongs to another
+## transcript, which is exactly the confound, and whose it is does not change
+## the answer.
+##
+## The terminal offsets are NOT symmetric by accident: `position` marks the
+## lower bound of a feature, so a terminus that is the feature's UPPER bound is
+## stored one past it. A one-base error here puts the flanking bin inside the
+## exon, so the tests pin both strands.
+
+
+#' Exonic parts from the splice graph
+#'
+#' Replaces reading the flattened GFF. Coordinates come from the endpoint
+#' vertices because `ex_part` edges carry NA in their own from_pos/to_pos.
+#'
+#' @param g An igraph splice graph read from a per-gene \code{.graphml}.
+#' @return Data frame with part (integer), start, end -- 1-based inclusive.
+#' @export
+graph_exonic_parts <- function(g) {
+  ea  <- igraph::edge_attr(g)
+  if (is.null(ea$ex_or_in) || is.null(ea$dexseq_fragment))
+    return(data.frame(part = integer(0), start = numeric(0), end = numeric(0)))
+  el  <- igraph::as_edgelist(g, names = FALSE)
+  pos <- suppressWarnings(as.numeric(igraph::vertex_attr(g, "position")))
+  k   <- which(ea$ex_or_in == "ex_part")
+  if (!length(k))
+    return(data.frame(part = integer(0), start = numeric(0), end = numeric(0)))
+  a <- pos[el[k, 1L]]; b <- pos[el[k, 2L]]
+  out <- data.frame(part  = suppressWarnings(as.integer(ea$dexseq_fragment[k])),
+                    start = pmin(a, b),
+                    end   = pmax(a, b) - 1L)
+  out <- out[!is.na(out$part) & !is.na(out$start) & !is.na(out$end), , drop = FALSE]
+  out[order(out$start), , drop = FALSE]
+}
+
+
+#' Gene strand from the graph
+#'
+#' \code{map_DEXSeq_from_gff()} records strand as a GRAPH attribute at build
+#' time (\code{graph_utils.R}, \code{g$strand <- strand}), alongside
+#' \code{gene}. Read it rather than inferring anything.
+#'
+#' The fallback below exists only for a graph built before that attribute was
+#' written: transcription runs R to L, so R-edge positions sit below L-edge
+#' positions on the plus strand and above them on the minus. Verified against
+#' the GFF on 8 genes of both orientations, but the stored attribute is
+#' authoritative.
+#'
+#' CHROMOSOME is not stored on the graph and must still come from the
+#' annotation (see \code{parse_gff_chr_map}).
+#'
+#' @param g An igraph splice graph.
+#' @return "+" or "-", or NA if neither the attribute nor the fallback resolves.
+#' @export
+graph_strand <- function(g) {
+  st <- tryCatch(igraph::graph_attr(g, "strand"), error = function(e) NULL)
+  if (!is.null(st) && length(st) && !is.na(st[1]) && st[1] %in% c("+", "-"))
+    return(as.character(st[1]))
+  ea <- igraph::edge_attr(g)
+  if (is.null(ea$ex_or_in)) return(NA_character_)
+  el  <- igraph::as_edgelist(g, names = FALSE)
+  pos <- suppressWarnings(as.numeric(igraph::vertex_attr(g, "position")))
+  r <- which(ea$ex_or_in == "R"); l <- which(ea$ex_or_in == "L")
+  if (!length(r) || !length(l)) return(NA_character_)
+  rp <- pos[el[r, 2L]]; lp <- pos[el[l, 1L]]
+  rp <- rp[!is.na(rp)]; lp <- lp[!is.na(lp)]
+  if (!length(rp) || !length(lp)) return(NA_character_)
+  if (stats::median(rp) < stats::median(lp)) "+" else "-"
+}
+
+
+#' Chromosome from the graph
+#'
+#' \code{map_DEXSeq_from_gff()} records \code{chrom} as a graph attribute at
+#' build time, alongside \code{strand} and \code{gene}. Graphs built before
+#' that was added do not carry it, so callers should fall back to
+#' \code{parse_gff_chr_map()} when this returns NA and regenerate when
+#' convenient.
+#'
+#' @param g An igraph splice graph.
+#' @return Chromosome name, or NA for a graph built without it.
+#' @export
+graph_chrom <- function(g) {
+  v <- tryCatch(igraph::graph_attr(g, "chrom"), error = function(e) NULL)
+  if (is.null(v) || !length(v) || is.na(v[1]) || !nzchar(as.character(v[1])))
+    return(NA_character_)
+  as.character(v[1])
+}
+
+
+#' Distinct TSS or TTS positions from the graph's R / L edges
+#'
+#' These are the graph's own statement of where transcription starts or stops,
+#' so they replace inferring a boundary by walking exonic parts.
+#'
+#' @param g An igraph splice graph.
+#' @param kind "TSS" (R edges) or "TTS" (L edges).
+#' @param strand "+" or "-".
+#' @return Data frame with sg_id and boundary, the terminal base itself.
+#' @export
+graph_terminal_positions <- function(g, kind = c("TSS", "TTS"), strand) {
+  kind <- match.arg(kind)
+  stopifnot(strand %in% c("+", "-"))
+  ea  <- igraph::edge_attr(g)
+  if (is.null(ea$ex_or_in))
+    return(data.frame(sg_id = character(0), boundary = numeric(0)))
+  el  <- igraph::as_edgelist(g, names = FALSE)
+  pos <- suppressWarnings(as.numeric(igraph::vertex_attr(g, "position")))
+  sg  <- as.character(igraph::vertex_attr(g, "sg_id"))
+  if (kind == "TSS") {
+    k <- which(ea$ex_or_in == "R"); v <- if (length(k)) el[k, 2L] else integer(0)
+    off <- if (strand == "-") 1L else 0L
+  } else {
+    k <- which(ea$ex_or_in == "L"); v <- if (length(k)) el[k, 1L] else integer(0)
+    off <- if (strand == "+") 1L else 0L
+  }
+  if (!length(v)) return(data.frame(sg_id = character(0), boundary = numeric(0)))
+  d <- data.frame(sg_id = sg[v], boundary = pos[v] - off)
+  d[!is.na(d$boundary), , drop = FALSE]
+}
+
+
+#' Free end of a bipartition side, read from the graph
+#'
+#' For each of the side's routes, take the terminal node and look up its R (or
+#' L) edge boundary; the side's free end is the outermost of those. This is the
+#' graph stating the answer directly, rather than
+#' \code{extend_contiguous_run()} reconstructing it from part contiguity and a
+#' transcript-sharing heuristic.
+#'
+#' @param g An igraph splice graph.
+#' @param path_field The side's \code{path1} / \code{path2} string, routes
+#'   comma-separated and nodes "-" separated.
+#' @param kind "TSS" or "TTS".
+#' @param strand "+" or "-".
+#' @return Single boundary coordinate, or NA if no route terminus resolves.
+#' @export
+graph_side_boundary <- function(g, path_field, kind = c("TSS", "TTS"), strand) {
+  kind <- match.arg(kind)
+  term <- graph_terminal_positions(g, kind, strand)
+  if (!nrow(term)) return(NA_real_)
+  routes <- strsplit(as.character(path_field), ",")[[1]]
+  ends <- vapply(routes, function(rt) {
+    n <- trimws(strsplit(trimws(rt), "-")[[1]])
+    n <- n[nzchar(n)]
+    if (!length(n)) return(NA_real_)
+    ## the node adjacent to the virtual terminal: first for TSS, last for TTS
+    nd <- if (kind == "TSS") n[if (n[1] == "R" && length(n) > 1L) 2L else 1L]
+          else               n[if (utils::tail(n, 1) == "L" && length(n) > 1L)
+                                 length(n) - 1L else length(n)]
+    b <- term$boundary[term$sg_id == nd]
+    if (!length(b)) NA_real_ else b[1L]
+  }, numeric(1))
+  ends <- ends[!is.na(ends)]
+  if (!length(ends)) return(NA_real_)
+  ## outermost: away from the transcript body
+  if ((kind == "TSS") == (strand == "+")) min(ends) else max(ends)
+}

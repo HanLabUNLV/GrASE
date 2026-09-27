@@ -245,9 +245,14 @@ map_DEXSeq_from_gff <- function(g, gff) {
     gff_split <- strsplit(gff[x], "\t")[[1]]
     
     if (gff_split[3] == "aggregate_gene") {
-      # Extract strand and gene info
+      # Extract chromosome, strand and gene info. Chromosome is recorded so the
+      # graph is self-sufficient for genomic coordinates: without it, anything
+      # emitting BED/SAF from the graph has to re-read the annotation just to
+      # learn which sequence the positions are on.
+      chrom  <- gff_split[1]
       strand <- gff_split[7]
       gene <- gsub('"', '', gff_split[length(gff_split)])
+      g$chrom  <- chrom
       g$strand <- strand
       g$gene <- strsplit(gene, " ")[[1]][2]
     }
