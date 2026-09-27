@@ -93,6 +93,17 @@ SG2igraph <- function(geneID,  gene_sg, gene_graph) {
   nodes.df = data.frame(ID = as.character(node_coord$sgid), stringsAsFactors = FALSE)
   #write.table(nodes.df, paste0(geneID, ".vertices.txt"),  row.names=FALSE, sep="\t", quote=FALSE, col.names = TRUE)
 
+  ## seqnames carries the chromosome and is about to be dropped. Capture it
+  ## first: it is the authoritative genomic source (it comes from the TxDb /
+  ## GRanges), it is available here without the GFF, and without it anything
+  ## emitting BED/SAF from the graph has to re-read the annotation just to learn
+  ## which sequence the positions refer to.
+  chrom_from_sg <- if ("seqnames" %in% names(g1.df)) {
+    u <- unique(as.character(g1.df$seqnames))
+    u <- u[!is.na(u) & nzchar(u)]
+    if (length(u) == 1L) u else NA_character_   # a gene spanning >1 seq is not usable
+  } else NA_character_
+
   drops <- c("seqnames","strand", "tx_id")
   g1.df = g1.df[ , !(names(g1.df) %in% drops)]
   
@@ -105,6 +116,8 @@ SG2igraph <- function(geneID,  gene_sg, gene_graph) {
   
   g <- igraph::graph_from_data_frame(g1.df, directed=TRUE, vertices=nodes.df)
   igraph::vertex_attr(g)$position = node_coord[igraph::vertex_attr(g)$name, 'coord']
+
+  if (!is.na(chrom_from_sg)) g$chrom <- chrom_from_sg
 
   igraph::vertex_attr(g)$sg_id = igraph::vertex_attr(g)$name
   igraph::vertex_attr(g)$sg_id[1] <- 0
@@ -245,14 +258,20 @@ map_DEXSeq_from_gff <- function(g, gff) {
     gff_split <- strsplit(gff[x], "\t")[[1]]
     
     if (gff_split[3] == "aggregate_gene") {
-      # Extract chromosome, strand and gene info. Chromosome is recorded so the
-      # graph is self-sufficient for genomic coordinates: without it, anything
-      # emitting BED/SAF from the graph has to re-read the annotation just to
-      # learn which sequence the positions are on.
+      # Strand and gene come from here. Chromosome is normally already set by
+      # SG2igraph from seqnames; this only fills it in if that did not happen.
       chrom  <- gff_split[1]
       strand <- gff_split[7]
       gene <- gsub('"', '', gff_split[length(gff_split)])
-      g$chrom  <- chrom
+      ## SG2igraph already set chrom from seqnames, which is authoritative.
+      ## Disagreement means the GTF and the flattened GFF describe different
+      ## loci for this gene -- worth surfacing, not silently overwriting.
+      if (is.null(g$chrom) || is.na(g$chrom)) {
+        g$chrom <- chrom
+      } else if (!identical(as.character(g$chrom), chrom)) {
+        warning("chromosome mismatch for ", g$gene, ": graph has ", g$chrom,
+                ", gff says ", chrom, call. = FALSE)
+      }
       g$strand <- strand
       g$gene <- strsplit(gene, " ")[[1]][2]
     }
