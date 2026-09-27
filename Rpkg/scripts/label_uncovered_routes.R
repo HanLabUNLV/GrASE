@@ -37,7 +37,6 @@ cat(sprintf("substituted sides to relabel: %d  (%d genes)\n",
 sub$intron_uncovered <- NA_integer_
 sub$n_routes <- NA_integer_
 sub$n_junctions_cut <- NA_integer_
-sub$n_junctions_union <- NA_integer_
 
 ge_cache <- new.env(parent = emptyenv())
 get_ge <- function(gene) {
@@ -62,30 +61,26 @@ for (i in seq_len(nrow(sub))) {
   bv <- bv[!is.na(bv)]
   t1 <- trimws(unlist(strsplit(sub$transcripts1[i], ",")))
   t2 <- trimws(unlist(strsplit(sub$transcripts2[i], ",")))
-  base <- list(ge, t1, t2, "chr1", bv,
-               route_node_pairs(p1), route_node_pairs(p2))
-  k <- tryCatch(do.call(label_bipartition_introns,
-        c(base, list(routes1 = route_node_pairs_by_route(p1),
-                     routes2 = route_node_pairs_by_route(p2), rule = "cut"))),
+  k <- tryCatch(label_bipartition_introns(
+          ge, t1, t2, "chr1", bv,
+          route_node_pairs(p1), route_node_pairs(p2),
+          routes1 = route_node_pairs_by_route(p1),
+          routes2 = route_node_pairs_by_route(p2)),
         error = function(e) NULL)
-  u <- tryCatch(do.call(label_bipartition_introns, c(base, list(rule = "union"))),
-        error = function(e) NULL)
-  if (is.null(k) || is.null(u)) next
+  if (is.null(k)) next
   side <- if (grepl("^diff1", sub$comparison[i])) 1L else 2L
   kk <- if (side == 1L) k$distinct1 else k$distinct2
-  uu <- if (side == 1L) u$distinct1 else u$distinct2
   cu <- if (side == 1L) k$uncovered1 else k$uncovered2
   rr <- length(route_node_pairs_by_route(if (side == 1L) p1 else p2))
   sub$intron_uncovered[i]   <- cu
   sub$n_routes[i]           <- rr
   sub$n_junctions_cut[i]    <- if (is.na(kk)) 0L else length(strsplit(kk, ",")[[1]])
-  sub$n_junctions_union[i]  <- if (is.na(uu)) 0L else length(strsplit(uu, ",")[[1]])
   n_ok <- n_ok + 1L
   if (n_ok %% 500L == 0L) cat("  ", n_ok, "relabelled\n")
 }
 
 keep <- c("gene", "event", "comparison", "intron_uncovered", "n_routes",
-          "n_junctions_cut", "n_junctions_union")
+          "n_junctions_cut")
 write.table(sub[, keep], out_path, sep = "\t", quote = FALSE, row.names = FALSE)
 
 ok <- !is.na(sub$intron_uncovered)
@@ -95,7 +90,7 @@ if (any(ok)) {
               sum(sub$intron_uncovered[ok] == 0), 100 * mean(sub$intron_uncovered[ok] == 0)))
   cat(sprintf("uncovered  > 0      : %d (%.1f%%)  -> drop\n",
               sum(sub$intron_uncovered[ok] > 0), 100 * mean(sub$intron_uncovered[ok] > 0)))
-  cat(sprintf("junctions summed    : union median %.0f -> cut median %.0f\n",
-              median(sub$n_junctions_union[ok]), median(sub$n_junctions_cut[ok])))
+  cat(sprintf("junction groups per side: median %.0f\n",
+              median(sub$n_junctions_cut[ok])))
 }
 cat("wrote", out_path, "\n")

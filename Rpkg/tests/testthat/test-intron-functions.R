@@ -1,11 +1,11 @@
 ## Tests for junction (intron) distinct-set construction.
 ##
 ## The central property: a side's junction count must be MOLECULE
-## PROPORTIONAL, i.e. every route through the bubble contributes exactly one
-## junction to the side's distinct set. The historical "union" rule summed over
-## all distinct introns and violated this whenever a route crossed more than
-## one of them -- 83.8% of junction-substituted TSS/TTS sides in the DICE
-## activation panel. The "cut" rule takes the first distinct intron per route.
+## PROPORTIONAL. Distinct introns are grouped BY ROUTE and sum_sj_counts
+## averages within a group, so each route contributes one molecule-equivalent
+## however many distinct introns lie along it. Summing them all instead (the
+## removed "union" form) multiply-counted molecules on 83.8% of
+## junction-substituted TSS/TTS sides in the DICE activation panel.
 
 ## A minimal gene graph stub in the shape precompute_gene_graph() returns.
 ## Bubble: source 1 -> sink 5.
@@ -43,75 +43,6 @@ test_that("route_node_pairs_by_route drops R and L terminals but keeps order", {
   expect_equal(unname(r[[1]][1, ]), c(7L, 8L))
 })
 
-test_that("union rule sums every distinct intron on the side", {
-  ge <- make_ge()
-  res <- label_bipartition_introns(
-    ge, tx1_set = "t1", tx2_set = "t2", chr = "chr1",
-    bubble_verts = 1:5,
-    pairs1 = route_node_pairs(route1), pairs2 = route_node_pairs(route2),
-    rule = "union")
-  ## side 1's single route crosses introns 1->2, 2->3, 3->4: all three summed
-  expect_equal(length(strsplit(res$distinct1, ",")[[1]]), 3)
-})
-
-test_that("cut rule gives one junction per route, not one per intron", {
-  ge <- make_ge()
-  res <- label_bipartition_introns(
-    ge, tx1_set = "t1", tx2_set = "t2", chr = "chr1",
-    bubble_verts = 1:5,
-    pairs1 = route_node_pairs(route1), pairs2 = route_node_pairs(route2),
-    routes1 = route_node_pairs_by_route(route1),
-    routes2 = route_node_pairs_by_route(route2),
-    rule = "cut")
-  ## one route on side 1 -> exactly one junction, regardless of how many
-  ## distinct introns lie along it
-  expect_equal(length(strsplit(res$distinct1, ",")[[1]]), 1)
-})
-
-test_that("cut rule takes the FIRST distinct intron along the route", {
-  ge <- make_ge()
-  res <- label_bipartition_introns(
-    ge, tx1_set = "t1", tx2_set = "t2", chr = "chr1",
-    bubble_verts = 1:5,
-    pairs1 = route_node_pairs(route1), pairs2 = route_node_pairs(route2),
-    routes1 = route_node_pairs_by_route(route1),
-    routes2 = route_node_pairs_by_route(route2),
-    rule = "cut")
-  ## edge 1->2 is from_pos 100, to_pos 150
-  expect_equal(res$distinct1, "chr1:100:150")
-})
-
-test_that("cut rule yields one junction per route when a side has two routes", {
-  ge <- make_ge()
-  ## side 1 now has two routes, each crossing at least one distinct intron
-  two <- "1-2-3-4-5, 1-2-3"
-  res <- label_bipartition_introns(
-    ge, tx1_set = "t1", tx2_set = "t2", chr = "chr1",
-    bubble_verts = 1:5,
-    pairs1 = route_node_pairs(two), pairs2 = route_node_pairs(route2),
-    routes1 = route_node_pairs_by_route(two),
-    routes2 = route_node_pairs_by_route(route2),
-    rule = "cut")
-  ## both routes start 1->2, so the cut is the single shared first junction
-  expect_equal(length(strsplit(res$distinct1, ",")[[1]]), 1)
-})
-
-test_that("cut rule never returns more junctions than the union rule", {
-  ge <- make_ge()
-  args <- list(ge = ge, tx1_set = "t1", tx2_set = "t2", chr = "chr1",
-               bubble_verts = 1:5,
-               pairs1 = route_node_pairs(route1),
-               pairs2 = route_node_pairs(route2))
-  u <- do.call(label_bipartition_introns, c(args, list(rule = "union")))
-  k <- do.call(label_bipartition_introns,
-               c(args, list(routes1 = route_node_pairs_by_route(route1),
-                            routes2 = route_node_pairs_by_route(route2),
-                            rule = "cut")))
-  nu <- length(strsplit(u$distinct1, ",")[[1]])
-  nk <- length(strsplit(k$distinct1, ",")[[1]])
-  expect_lte(nk, nu)
-})
-
 test_that("uncovered counts routes with no distinct intron", {
   ge <- make_ge()
   ## a side whose only route is 4-5, which is not an intron edge at all
@@ -120,23 +51,23 @@ test_that("uncovered counts routes with no distinct intron", {
     bubble_verts = 1:5,
     pairs1 = route_node_pairs("4-5"), pairs2 = route_node_pairs(route2),
     routes1 = route_node_pairs_by_route("4-5"),
-    routes2 = route_node_pairs_by_route(route2),
-    rule = "cut")
+    routes2 = route_node_pairs_by_route(route2))
   expect_equal(res$uncovered1, 1L)
 })
 
-test_that("shared introns are unaffected by the rule", {
+test_that("shared introns are those on BOTH sides' routes", {
   ge <- make_ge()
-  args <- list(ge = ge, tx1_set = "t1", tx2_set = "t2", chr = "chr1",
-               bubble_verts = 1:5,
-               pairs1 = route_node_pairs(route1),
-               pairs2 = route_node_pairs(route1))
-  u <- do.call(label_bipartition_introns, c(args, list(rule = "union")))
-  k <- do.call(label_bipartition_introns,
-               c(args, list(routes1 = route_node_pairs_by_route(route1),
-                            routes2 = route_node_pairs_by_route(route1),
-                            rule = "cut")))
-  expect_equal(u$shared, k$shared)
+  ## give both sides the same route: every intron on it is shared, and no
+  ## intron is distinct to either side
+  res <- label_bipartition_introns(
+    ge, "t1", "t2", "chr1", 1:5,
+    route_node_pairs(route1), route_node_pairs(route1),
+    routes1 = route_node_pairs_by_route(route1),
+    routes2 = route_node_pairs_by_route(route1))
+  expect_false(is.na(res$shared))
+  expect_equal(length(strsplit(res$shared, ",")[[1]]), 3)
+  expect_true(is.na(res$distinct1))
+  expect_true(is.na(res$distinct2))
 })
 
 test_that("no intronic edges yields an all-NA result", {
@@ -149,45 +80,28 @@ test_that("no intronic edges yields an all-NA result", {
   expect_true(is.na(res$distinct2))
 })
 
-## --- the MEAN rule -----------------------------------------------------------
-## The cut uses ONE junction per route and discards the rest, so it is unbiased
-## but high-variance. The mean keeps every distinct junction on a route, grouped,
-## and sum_sj_counts averages within the group: same expectation, ~1/k variance.
+## --- route grouping and averaging --------------------------------------------
 
-test_that("mean rule groups a route's junctions with a pipe", {
+test_that("a route's junctions are grouped with a pipe", {
   ge <- make_ge()
   res <- label_bipartition_introns(
     ge, "t1", "t2", "chr1", 1:5,
     route_node_pairs(route1), route_node_pairs(route2),
     routes1 = route_node_pairs_by_route(route1),
-    routes2 = route_node_pairs_by_route(route2),
-    rule = "mean")
+    routes2 = route_node_pairs_by_route(route2))
   ## side 1's single route crosses three distinct introns -> one group of three
   expect_true(grepl("|", res$distinct1, fixed = TRUE))
   expect_length(strsplit(res$distinct1, ",")[[1]], 1)
   expect_length(strsplit(res$distinct1, "|", fixed = TRUE)[[1]], 3)
 })
 
-test_that("cut keeps one junction where mean keeps all of them", {
-  ge <- make_ge()
-  args <- list(ge, "t1", "t2", "chr1", 1:5,
-               route_node_pairs(route1), route_node_pairs(route2),
-               routes1 = route_node_pairs_by_route(route1),
-               routes2 = route_node_pairs_by_route(route2))
-  k <- do.call(label_bipartition_introns, c(args, list(rule = "cut")))
-  m <- do.call(label_bipartition_introns, c(args, list(rule = "mean")))
-  expect_false(grepl("|", k$distinct1, fixed = TRUE))
-  expect_true(grepl("|", m$distinct1, fixed = TRUE))
-})
-
-test_that("mean rule still counts uncovered routes", {
+test_that("uncovered routes are still counted", {
   ge <- make_ge()
   res <- label_bipartition_introns(
     ge, "t1", "t2", "chr1", 1:5,
     route_node_pairs("4-5"), route_node_pairs(route2),
     routes1 = route_node_pairs_by_route("4-5"),
-    routes2 = route_node_pairs_by_route(route2),
-    rule = "mean")
+    routes2 = route_node_pairs_by_route(route2))
   expect_equal(res$uncovered1, 1L)
 })
 
@@ -217,4 +131,19 @@ test_that("mean is bounded by the min and max of the route's junctions", {
               dimnames = list(c("chr1:1:2", "chr1:3:4", "chr1:5:6"), "s1"))
   v <- unname(sum_sj_counts("chr1:1:2|chr1:3:4|chr1:5:6", m)[1])
   expect_gte(v, 10); expect_lte(v, 30)
+})
+
+test_that("distinct sets are NA without routes, never an ungrouped sum", {
+  ## Without route grouping there is no way to know how many of a side's
+  ## distinct introns one molecule crosses. Summing them all is the bug this
+  ## function exists to avoid, so the result must be NA and warn.
+  ge <- make_ge()
+  expect_warning(
+    res <- label_bipartition_introns(ge, "t1", "t2", "chr1", 1:5,
+                                     route_node_pairs(route1),
+                                     route_node_pairs(route2)),
+    "required to group introns by route")
+  expect_true(is.na(res$distinct1))
+  expect_true(is.na(res$distinct2))
+  ## (shared is NA here only because this fixture has no intron on both sides)
 })

@@ -13,8 +13,7 @@ label_bipartition_introns(
   pairs1 = NULL,
   pairs2 = NULL,
   routes1 = NULL,
-  routes2 = NULL,
-  rule = c("mean", "cut", "union")
+  routes2 = NULL
 )
 }
 \arguments{
@@ -59,29 +58,21 @@ rule: measured over 2,272 sides, the two agree on 95.8\% overall and on
 distinct set). Every disagreement is a transcript in \code{transcripts1}
 whose route through the bubble is not among the listed \code{path1} routes.
 
-AGGREGATION. The historical rule (\code{rule="union"}) summed over ALL of a
-side's distinct introns, on the assumption that the routes partition
-themselves among those introns so each contributes once. That assumption is
-false in practice: measured over the 3,442 junction-substituted significant
-TSS/TTS sides in the DICE activation panel, 83.8\% have at least one
-transcript crossing two or more of the summed introns, so those molecules
-are counted two or more times and D is inflated. Because the inflation
-factor is the composition-weighted mean junctions-per-molecule, it shifts
-with isoform composition and does NOT cancel in the between-condition
-contrast.
+AGGREGATION. A side's distinct introns are grouped BY ROUTE and each route
+contributes one molecule-equivalent: sum_sj_counts() averages within a group
+before summing across groups. Junction ids are emitted route-grouped, "|"
+within a route and "," between routes. A group of one averages to itself, so
+ungrouped input behaves as a plain sum.
 
-\code{rule="cut"} takes the FIRST distinct intron along each route, so every
-route contributes exactly one junction and the sum is molecule-proportional,
-matching the exonic intersection semantics. It is unbiased but discards the
-route's other k-1 junctions, so it is needlessly high-variance.
+This replaced two earlier forms, both removed. Summing every distinct intron
+on the side multiply-counted molecules: 83.8\% of junction-substituted TSS/TTS
+sides in the DICE activation panel have a transcript crossing two or more of
+the summed introns, and the inflation is composition-weighted so it does not
+cancel in the between-condition contrast. Taking one intron per route fixed
+that but discarded the route's other k-1 measurements and always picked the
+most 5' junction, which carries lower coverage under 3' bias. The per-route
+mean has that expectation with roughly 1/k the variance and no position bias.
 
-\code{rule="mean"} (THE DEFAULT) keeps every distinct intron on a route,
-grouped, and \code{sum_sj_counts} averages within the group before summing
-across routes. Same expectation as the cut with roughly 1/k the variance,
-because it uses all k measurements of that route's abundance. Junction ids
-are emitted route-grouped: "|" within a route, "," between routes. A group of
-one averages to itself, so ungrouped input behaves exactly as before.
-Routes with no distinct intron are counted in \code{uncovered1} /
-\code{uncovered2}; a side with uncovered > 0 is only partly represented by
-its junction measure.
+Routes with no distinct intron at all are counted in uncovered1 / uncovered2;
+a side with uncovered > 0 is only partly represented by its junction measure.
 }

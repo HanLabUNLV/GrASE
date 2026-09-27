@@ -4,12 +4,7 @@
 \alias{label_all_bipartition_introns}
 \title{Label intronic edges for all rows of a bipartition splits data frame}
 \usage{
-label_all_bipartition_introns(
-  splits_df,
-  graphml_dir,
-  chr_map,
-  rule = c("mean", "cut", "union")
-)
+label_all_bipartition_introns(splits_df, graphml_dir, chr_map)
 }
 \arguments{
 \item{splits_df}{Data frame with bipartition splits (must have columns:

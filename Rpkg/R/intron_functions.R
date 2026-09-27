@@ -90,31 +90,23 @@ route_node_pairs <- function(field) {
 #' distinct set). Every disagreement is a transcript in \code{transcripts1}
 #' whose route through the bubble is not among the listed \code{path1} routes.
 #'
-#' AGGREGATION. The historical rule (\code{rule="union"}) summed over ALL of a
-#' side's distinct introns, on the assumption that the routes partition
-#' themselves among those introns so each contributes once. That assumption is
-#' false in practice: measured over the 3,442 junction-substituted significant
-#' TSS/TTS sides in the DICE activation panel, 83.8% have at least one
-#' transcript crossing two or more of the summed introns, so those molecules
-#' are counted two or more times and D is inflated. Because the inflation
-#' factor is the composition-weighted mean junctions-per-molecule, it shifts
-#' with isoform composition and does NOT cancel in the between-condition
-#' contrast.
+#' AGGREGATION. A side's distinct introns are grouped BY ROUTE and each route
+#' contributes one molecule-equivalent: sum_sj_counts() averages within a group
+#' before summing across groups. Junction ids are emitted route-grouped, "|"
+#' within a route and "," between routes. A group of one averages to itself, so
+#' ungrouped input behaves as a plain sum.
 #'
-#' \code{rule="cut"} takes the FIRST distinct intron along each route, so every
-#' route contributes exactly one junction and the sum is molecule-proportional,
-#' matching the exonic intersection semantics. It is unbiased but discards the
-#' route's other k-1 junctions, so it is needlessly high-variance.
+#' This replaced two earlier forms, both removed. Summing every distinct intron
+#' on the side multiply-counted molecules: 83.8% of junction-substituted TSS/TTS
+#' sides in the DICE activation panel have a transcript crossing two or more of
+#' the summed introns, and the inflation is composition-weighted so it does not
+#' cancel in the between-condition contrast. Taking one intron per route fixed
+#' that but discarded the route's other k-1 measurements and always picked the
+#' most 5' junction, which carries lower coverage under 3' bias. The per-route
+#' mean has that expectation with roughly 1/k the variance and no position bias.
 #'
-#' \code{rule="mean"} (THE DEFAULT) keeps every distinct intron on a route,
-#' grouped, and \code{sum_sj_counts} averages within the group before summing
-#' across routes. Same expectation as the cut with roughly 1/k the variance,
-#' because it uses all k measurements of that route's abundance. Junction ids
-#' are emitted route-grouped: "|" within a route, "," between routes. A group of
-#' one averages to itself, so ungrouped input behaves exactly as before.
-#' Routes with no distinct intron are counted in \code{uncovered1} /
-#' \code{uncovered2}; a side with uncovered > 0 is only partly represented by
-#' its junction measure.
+#' Routes with no distinct intron at all are counted in uncovered1 / uncovered2;
+#' a side with uncovered > 0 is only partly represented by its junction measure.
 #'
 #' @param ge  Precomputed gene graph list from \code{precompute_gene_graph}.
 #' @param tx1_set Character vector of transcript IDs in path1.
@@ -131,9 +123,7 @@ route_node_pairs <- function(field) {
 #' @export
 label_bipartition_introns <- function(ge, tx1_set, tx2_set, chr, bubble_verts = NULL,
                                       pairs1 = NULL, pairs2 = NULL,
-                                      routes1 = NULL, routes2 = NULL,
-                                      rule = c("mean", "cut", "union")) {
-  rule <- match.arg(rule)
+                                      routes1 = NULL, routes2 = NULL) {
   na_result <- list(distinct1=NA_character_, distinct2=NA_character_,
                     shared=NA_character_, uncovered1=NA_integer_,
                     uncovered2=NA_integer_)
@@ -187,12 +177,12 @@ label_bipartition_introns <- function(ge, tx1_set, tx2_set, chr, bubble_verts = 
   ## `uncovered` counts routes with no distinct intron at all -- those
   ## molecules are invisible to the junction measure and the side should not be
   ## substituted on its strength.
-  ## `all_per_route = FALSE` gives the CUT (first distinct intron per route).
-  ## TRUE gives every distinct intron per route, kept grouped, for the MEAN
-  ## rule: averaging within a route has the same expectation as taking one of
-  ## its junctions but roughly 1/k the variance, because it uses all k
-  ## measurements of the same route abundance instead of discarding k-1.
-  cut_for_side <- function(routes, keep, all_per_route = FALSE) {
+  ## Every distinct intron on a route, kept grouped. sum_sj_counts() averages
+  ## within the group and sums across groups, so each route contributes one
+  ## molecule-equivalent. Using all k of a route's junctions rather than one
+  ## gives roughly 1/k the variance and avoids the 5' position bias that taking
+  ## only the first would introduce.
+  routes_distinct_introns <- function(routes, keep) {
     if (is.null(routes) || !length(routes))
       return(list(sel = integer(0), groups = list(), unc = NA_integer_))
     ok <- ekey[keep]
@@ -204,10 +194,7 @@ label_bipartition_introns <- function(ge, tx1_set, tx2_set, chr, bubble_verts = 
       for (k in seq_len(nrow(P))) {
         key <- paste(P[k, 1L], P[k, 2L])
         j <- which(ok == key)
-        if (length(j)) {
-          hits <- c(hits, idx_keep[j[1L]])
-          if (!all_per_route) break
-        }
+        if (length(j)) hits <- c(hits, idx_keep[j[1L]])
       }
       if (!length(hits)) { unc <- unc + 1L; next }
       sel <- c(sel, hits)
@@ -235,28 +222,27 @@ label_bipartition_introns <- function(ge, tx1_set, tx2_set, chr, bubble_verts = 
 
   d1 <- in_tx1 & !in_tx2
   d2 <- !in_tx1 & in_tx2
-  if (rule %in% c("cut", "mean") && use_paths &&
-      !is.null(routes1) && !is.null(routes2)) {
-    per_route <- rule == "mean"
-    c1 <- cut_for_side(routes1, d1, per_route)
-    c2 <- cut_for_side(routes2, d2, per_route)
-    emit <- if (per_route) function(x) make_junction_groups(x$groups)
-            else           function(x) make_junctions(x$sel)
-    return(list(
-      distinct1  = emit(c1),
-      distinct2  = emit(c2),
-      shared     = make_junctions(in_idx[in_tx1 & in_tx2]),
-      uncovered1 = c1$unc,
-      uncovered2 = c2$unc
-    ))
+  ## Route grouping is REQUIRED. Without routes there is no way to know how many
+  ## of a side's distinct introns one molecule crosses, and the only ungrouped
+  ## option is to sum them all -- which multiply-counts molecules and is the bug
+  ## this function exists to avoid. Return NA rather than fall back to it.
+  if (!use_paths || is.null(routes1) || is.null(routes2)) {
+    warning("routes1/routes2 are required to group introns by route; ",
+            "returning NA distinct sets. Supply them from ",
+            "route_node_pairs_by_route().", call. = FALSE)
+    return(list(distinct1 = NA_character_, distinct2 = NA_character_,
+                shared = make_junctions(in_idx[in_tx1 & in_tx2]),
+                uncovered1 = NA_integer_, uncovered2 = NA_integer_))
   }
 
+  c1 <- routes_distinct_introns(routes1, d1)
+  c2 <- routes_distinct_introns(routes2, d2)
   list(
-    distinct1  = make_junctions(in_idx[d1]),
-    distinct2  = make_junctions(in_idx[d2]),
+    distinct1  = make_junction_groups(c1$groups),
+    distinct2  = make_junction_groups(c2$groups),
     shared     = make_junctions(in_idx[in_tx1 & in_tx2]),
-    uncovered1 = NA_integer_,
-    uncovered2 = NA_integer_
+    uncovered1 = c1$unc,
+    uncovered2 = c2$unc
   )
 }
 
@@ -276,9 +262,7 @@ label_bipartition_introns <- function(ge, tx1_set, tx2_set, chr, bubble_verts = 
 #' @return \code{splits_df} extended with intron_distinct1, intron_distinct2,
 #'   intron_shared columns.
 #' @export
-label_all_bipartition_introns <- function(splits_df, graphml_dir, chr_map,
-                                          rule = c("mean", "cut", "union")) {
-  rule <- match.arg(rule)
+label_all_bipartition_introns <- function(splits_df, graphml_dir, chr_map) {
   splits_df$intron_distinct1 <- NA_character_
   splits_df$intron_distinct2 <- NA_character_
   splits_df$intron_shared    <- NA_character_
@@ -328,7 +312,7 @@ label_all_bipartition_introns <- function(splits_df, graphml_dir, chr_map,
         }
       }
       lbl <- label_bipartition_introns(ge, tx1_set, tx2_set, chr, bubble_verts,
-                                       pairs1, pairs2, routes1, routes2, rule)
+                                       pairs1, pairs2, routes1, routes2)
       splits_df$intron_distinct1[i]  <- lbl$distinct1
       splits_df$intron_distinct2[i]  <- lbl$distinct2
       splits_df$intron_shared[i]     <- lbl$shared
