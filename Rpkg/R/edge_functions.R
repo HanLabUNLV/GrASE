@@ -16,46 +16,6 @@
 ## called, only how a call should be read.
 
 
-#' Outer edge of the contiguous run carrying a side's distinct set
-#'
-#' The distinct set under-represents an alternative terminal exon: it is an
-#' intersection across the side's transcripts, so it commonly stops short of
-#' the exon's free end. Walking outward through parts that are contiguous with
-#' it and share a transcript with it recovers the true edge.
-#'
-#' This matters a great deal in practice. Measured on the DICE activation
-#' panel, taking the distinct set's own edge leaves a median flank of 1 bp and
-#' only 9,972 of 20,887 sides testable; extending the run gives a median flank
-#' of 903 bp and 18,412 testable.
-#'
-#' @param parts Named list or data frame of exonic parts: integer part number
-#'   to c(start, end), 1-based inclusive.
-#' @param tx Named list mapping part number to a character vector of
-#'   transcript IDs.
-#' @param distinct_parts Integer vector of part numbers in the distinct set.
-#' @param direction -1 to walk toward lower coordinates, +1 toward higher.
-#' @return Single integer, the outer coordinate of the run.
-#' @export
-extend_contiguous_run <- function(parts, tx, distinct_parts, direction) {
-  stopifnot(direction %in% c(-1L, 1L, -1, 1))
-  if (!length(distinct_parts)) return(NA_integer_)
-  sdtx <- unique(unlist(tx[as.character(distinct_parts)]))
-  cur <- if (direction < 0)
-    min(vapply(parts[as.character(distinct_parts)], `[`, numeric(1), 1)) else
-    max(vapply(parts[as.character(distinct_parts)], `[`, numeric(1), 2))
-  seen <- character(0)
-  repeat {
-    nxt <- names(parts)[vapply(parts, function(p)
-      if (direction < 0) p[2] == cur - 1 else p[1] == cur + 1, logical(1))]
-    nxt <- setdiff(nxt, seen)
-    nxt <- nxt[vapply(nxt, function(n) any(tx[[n]] %in% sdtx), logical(1))]
-    if (!length(nxt)) return(as.integer(cur))
-    seen <- c(seen, nxt[1])
-    cur <- if (direction < 0) parts[[nxt[1]]][1] else parts[[nxt[1]]][2]
-  }
-}
-
-
 #' Which end of a bipartition side is free
 #'
 #' A TSS bubble is anchored at the graph source ("R"), a TTS bubble at the sink
@@ -74,7 +34,9 @@ free_end_direction <- function(kind, strand) {
 
 #' Distance from a boundary to the nearest exonic part
 #'
-#' @param parts As for \code{extend_contiguous_run}.
+#' @param parts Named list of exonic parts, part number to c(start, end),
+#'   1-based inclusive -- as returned by \code{graph_exonic_parts} reshaped by
+#'   part, or read from the flattened GFF.
 #' @param boundary Integer coordinate.
 #' @param direction -1 or +1.
 #' @return Number of bases available before the next part, or a large value if
@@ -376,8 +338,7 @@ graph_terminal_positions <- function(g, kind = c("TSS", "TTS"), strand) {
 #' For each of the side's routes, take the terminal node and look up its R (or
 #' L) edge boundary; the side's free end is the outermost of those. This is the
 #' graph stating the answer directly, rather than
-#' \code{extend_contiguous_run()} reconstructing it from part contiguity and a
-#' transcript-sharing heuristic.
+#' reconstructing it by walking exonic-part contiguity in coordinate space.
 #'
 #' @param g An igraph splice graph.
 #' @param path_field The side's \code{path1} / \code{path2} string, routes

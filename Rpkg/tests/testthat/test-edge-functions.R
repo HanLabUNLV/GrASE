@@ -22,32 +22,6 @@ test_that("free_end_direction rejects bad input", {
   expect_error(free_end_direction("TSS", "?"))
 })
 
-test_that("extend_contiguous_run walks through a contiguous same-transcript part", {
-  ## distinct set is E2; E3 is contiguous (300 == 299+1) and shares tB
-  expect_equal(extend_contiguous_run(mk_parts(), mk_tx(), 2L, 1L), 349L)
-})
-
-test_that("extend_contiguous_run stops at a gap", {
-  ## walking down from E2: E1 ends at 199, E2 starts at 200 -> contiguous,
-  ## and E1/E2 share tA, so it extends to 100
-  expect_equal(extend_contiguous_run(mk_parts(), mk_tx(), 2L, -1L), 100L)
-})
-
-test_that("extend_contiguous_run does not cross a real intron", {
-  ## E4 starts at 500; nothing is contiguous with it on either side
-  expect_equal(extend_contiguous_run(mk_parts(), mk_tx(), 4L, 1L), 599L)
-  expect_equal(extend_contiguous_run(mk_parts(), mk_tx(), 4L, -1L), 500L)
-})
-
-test_that("extend_contiguous_run will not walk into a part sharing no transcript", {
-  tx <- mk_tx(); tx[["3"]] <- "tZ"   # E3 no longer shares with E2
-  expect_equal(extend_contiguous_run(mk_parts(), tx, 2L, 1L), 299L)
-})
-
-test_that("extend_contiguous_run returns NA for an empty distinct set", {
-  expect_true(is.na(extend_contiguous_run(mk_parts(), mk_tx(), integer(0), 1L)))
-})
-
 test_that("flank_width measures to the next part, exclusive", {
   ## from 349 upward the next part starts at 500 -> 150 bases free
   expect_equal(flank_width(mk_parts(), 349L, 1L), 150L)

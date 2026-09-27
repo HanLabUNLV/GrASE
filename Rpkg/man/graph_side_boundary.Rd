@@ -23,6 +23,5 @@ Single boundary coordinate, or NA if no route terminus resolves.
 For each of the side's routes, take the terminal node and look up its R (or
 L) edge boundary; the side's free end is the outermost of those. This is the
 graph stating the answer directly, rather than
-\code{extend_contiguous_run()} reconstructing it from part contiguity and a
-transcript-sharing heuristic.
+reconstructing it by walking exonic-part contiguity in coordinate space.
 }

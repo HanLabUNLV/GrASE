@@ -7,7 +7,9 @@
 flank_width(parts, boundary, direction)
 }
 \arguments{
-\item{parts}{As for \code{extend_contiguous_run}.}
+\item{parts}{Named list of exonic parts, part number to c(start, end),
+1-based inclusive -- as returned by \code{graph_exonic_parts} reshaped by
+part, or read from the flattened GFF.}
 
 \item{boundary}{Integer coordinate.}
 
