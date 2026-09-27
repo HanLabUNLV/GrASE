@@ -11,7 +11,8 @@ add_significant(
   min_dpi = 0.1,
   min_dpi_sj = 0.05,
   min_reads = 10,
-  omnibus_pairs = NULL
+  omnibus_pairs = NULL,
+  use_perbase = FALSE
 )
 }
 \arguments{
@@ -48,6 +49,13 @@ positives than an either-group bar, for one extra false positive.
 Applied to every side, not only split-read-sourced ones: restricting it to
 junction sides saved only 16 true positives out of 692 at identical
 precision, which does not justify a source-dependent rule.}
+
+\item{use_perbase}{Gate on \code{delta_pi_perbase} wherever it is defined,
+falling back to the raw \code{delta_pi} elsewhere. pi is a raw count
+ratio, so one absolute threshold is not scale-fair across sides whose
+distinct set and reference differ in length. The fallback is required, not
+optional: a junction-substituted side has a point feature as its distinct
+set, so it has no length and no per-base pi.}
 }
 \value{
 \code{res} with a logical \code{significant} column.

@@ -1036,6 +1036,12 @@ posthoc_lfc_summary <- function(results, lfc_summary) {
 #'   deliberate: \code{lfc_diff_net = abs(lfc_diff) - abs(lfc_ref)}, so the
 #'   magnitudes are already inside the quantity and it is positive when the
 #'   distinct set moved more than the shared reference. Do not wrap in abs().
+#' @param use_perbase Gate on \code{delta_pi_perbase} wherever it is defined,
+#'   falling back to the raw \code{delta_pi} elsewhere. pi is a raw count
+#'   ratio, so one absolute threshold is not scale-fair across sides whose
+#'   distinct set and reference differ in length. The fallback is required, not
+#'   optional: a junction-substituted side has a point feature as its distinct
+#'   set, so it has no length and no per-base pi.
 #' @param min_dpi minimum \code{abs(delta_pi)} for exon-sourced sides.
 #' @param min_dpi_sj minimum \code{abs(delta_pi)} for sides whose distinct set
 #'   came from split reads. DEFAULTS TO \code{min_dpi} (a uniform gate). Set it
@@ -1067,7 +1073,9 @@ posthoc_lfc_summary <- function(results, lfc_summary) {
 #' @export
 is_significant <- function(res, padj_thr, delta = 0, min_dpi = 0.1,
                            min_dpi_sj = min_dpi, min_reads = 0, padj = NULL,
-                           omnibus_pairs = NULL) {
+                           omnibus_pairs = NULL, use_perbase = FALSE) {
+  ## use_perbase is last in the signature on purpose: existing positional calls
+  ## must keep working.
   pv <- if (is.null(padj)) res$padj else padj
   n  <- nrow(res)
 
@@ -1083,7 +1091,23 @@ is_significant <- function(res, padj_thr, delta = 0, min_dpi = 0.1,
       # nzchar(NA) is TRUE, so test is.na() explicitly rather than relying on it
       thr[is.na(sd) | sd %in% c("NA", "")] <- min_dpi_sj
     }
-    (abs(res$delta_pi) >= thr) | is.na(res$delta_pi)
+    ## With use_perbase, gate on the LENGTH-NORMALIZED delta_pi wherever it is
+    ## defined and fall back to the raw one elsewhere. pi is a raw count ratio,
+    ## so one absolute threshold is not scale-fair across sides whose distinct
+    ## set and reference differ in length; per-base makes the threshold mean the
+    ## same thing everywhere it can be computed.
+    ##
+    ## The fallback is not optional: a junction-substituted side has a point
+    ## feature as its distinct set, so it has no length and no per-base pi
+    ## (30.7% of rows on the DICE activation arm). Requiring per-base
+    ## everywhere would fail those sides on NA rather than on effect size.
+    ## Note min_dpi_sj already carries a partial scale correction for them.
+    dpi <- abs(res$delta_pi)
+    if (use_perbase && "delta_pi_perbase" %in% names(res)) {
+      pb <- abs(res$delta_pi_perbase)
+      dpi <- ifelse(is.na(pb), dpi, pb)
+    }
+    (dpi >= thr) | is.na(res$delta_pi)
   } else TRUE
 
   ## read support for the tested distinct set, in EITHER contrasted group.
@@ -1143,9 +1167,11 @@ is_significant <- function(res, padj_thr, delta = 0, min_dpi = 0.1,
 #' @return \code{res} with a logical \code{significant} column.
 #' @export
 add_significant <- function(res, padj_thr, delta, min_dpi = 0.1, min_dpi_sj = 0.05,
-                            min_reads = 10, omnibus_pairs = NULL) {
+                            min_reads = 10, omnibus_pairs = NULL,
+                            use_perbase = FALSE) {
   res$significant <- is_significant(res, padj_thr, delta, min_dpi, min_dpi_sj,
-                                    min_reads, omnibus_pairs = omnibus_pairs)
+                                    min_reads, omnibus_pairs = omnibus_pairs,
+                                    use_perbase = use_perbase)
   res
 }
 

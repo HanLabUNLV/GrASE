@@ -256,3 +256,54 @@ test_that("test_model_wilcoxon gene and event fields match input", {
     expect_equal(result$gene,  "GENE1")
     expect_equal(result$event, "e1")
 })
+
+## --- per-base effect-size gating -------------------------------------------
+## pi is a raw count ratio, so one absolute |delta_pi| threshold is not
+## scale-fair across sides whose distinct set and reference differ in length.
+## use_perbase gates on the normalized value where it exists, raw elsewhere.
+
+mk_res <- function(dpi, pb, sd = "E001") {
+  data.frame(padj = 1e-6, delta_pi = dpi, delta_pi_perbase = pb,
+             lfc_diff_net = 5, comparison = "diff1_vs_ref",
+             setdiff1 = sd, setdiff2 = NA_character_,
+             d_support = 1e4, stringsAsFactors = FALSE)
+}
+
+test_that("use_perbase=FALSE keeps gating on the raw delta_pi", {
+  r <- mk_res(dpi = 0.12, pb = 0.03)
+  expect_true(is_significant(r, 0.01, 0, min_dpi = 0.1))
+})
+
+test_that("use_perbase=TRUE gates on the normalized value instead", {
+  ## raw clears 0.1 but per-base does not -> now fails
+  r <- mk_res(dpi = 0.12, pb = 0.03)
+  expect_false(is_significant(r, 0.01, 0, min_dpi = 0.1, use_perbase = TRUE))
+})
+
+test_that("use_perbase can also promote a side the raw value failed", {
+  ## normalization makes effect sizes larger on average
+  r <- mk_res(dpi = 0.08, pb = 0.15)
+  expect_false(is_significant(r, 0.01, 0, min_dpi = 0.1))
+  expect_true(is_significant(r, 0.01, 0, min_dpi = 0.1, use_perbase = TRUE))
+})
+
+test_that("a junction side with no per-base value falls back to raw, not NA", {
+  ## setdiff empty -> junction-substituted -> no length -> per-base is NA.
+  ## It must be gated on raw against min_dpi_sj, never failed on NA.
+  r <- mk_res(dpi = 0.07, pb = NA_real_, sd = NA_character_)
+  expect_true(is_significant(r, 0.01, 0, min_dpi = 0.1, min_dpi_sj = 0.05,
+                             use_perbase = TRUE))
+})
+
+test_that("use_perbase is inert when the column is absent", {
+  r <- mk_res(dpi = 0.12, pb = 0.03)
+  r$delta_pi_perbase <- NULL
+  expect_true(is_significant(r, 0.01, 0, min_dpi = 0.1, use_perbase = TRUE))
+})
+
+test_that("add_significant threads use_perbase through", {
+  r <- mk_res(dpi = 0.12, pb = 0.03)
+  expect_true(add_significant(r, 0.01, 0)$significant)
+  expect_false(add_significant(r, 0.01, 0, min_dpi = 0.1,
+                               use_perbase = TRUE)$significant)
+})

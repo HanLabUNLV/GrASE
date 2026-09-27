@@ -11,7 +11,10 @@ label_bipartition_introns(
   chr,
   bubble_verts = NULL,
   pairs1 = NULL,
-  pairs2 = NULL
+  pairs2 = NULL,
+  routes1 = NULL,
+  routes2 = NULL,
+  rule = c("cut", "union")
 )
 }
 \arguments{
@@ -56,9 +59,21 @@ rule: measured over 2,272 sides, the two agree on 95.8\% overall and on
 distinct set). Every disagreement is a transcript in \code{transcripts1}
 whose route through the bubble is not among the listed \code{path1} routes.
 
-Either way the junction identity is the same: "chr:start:end" from the edge
-from_pos/to_pos, and a side's count sums over ALL its distinct introns, which
-is what makes the intron D set an equivalent measure to the exonic one -- the
-routes partition themselves among those introns, so every transcript of the
-partition contributes.
+AGGREGATION. The historical rule (\code{rule="union"}) summed over ALL of a
+side's distinct introns, on the assumption that the routes partition
+themselves among those introns so each contributes once. That assumption is
+false in practice: measured over the 3,442 junction-substituted significant
+TSS/TTS sides in the DICE activation panel, 83.8\% have at least one
+transcript crossing two or more of the summed introns, so those molecules
+are counted two or more times and D is inflated. Because the inflation
+factor is the composition-weighted mean junctions-per-molecule, it shifts
+with isoform composition and does NOT cancel in the between-condition
+contrast.
+
+\code{rule="cut"} (the default) instead takes the FIRST distinct intron
+along each route, so every route contributes exactly one junction and the
+sum is molecule-proportional, matching the exonic intersection semantics.
+Routes with no distinct intron are counted in \code{uncovered1} /
+\code{uncovered2}; a side with uncovered > 0 is only partly represented by
+its junction measure.
 }

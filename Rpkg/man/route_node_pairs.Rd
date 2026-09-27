@@ -17,5 +17,6 @@ A path field holds one or more routes separated by commas, each a "-"
 separated node sequence ("R-1-5-6, R-3-5-6"). Splitting on "-" alone would
 manufacture a pair spanning the comma boundary, so routes are split first.
 Non-numeric nodes (the virtual "R"/"L" terminals) are dropped: they carry no
-intron.
+intron. Route identity is NOT preserved -- use
+\code{route_node_pairs_by_route} when it matters.
 }

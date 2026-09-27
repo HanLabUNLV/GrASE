@@ -114,4 +114,42 @@ Rscript scripts/compare_rmats_grase.R \
 # map rMATS to DEXSeq
 Rscript scripts/integrate.R
 
+# ---------------------------------------------------------------------------
+# OPTIONAL: TSS/TTS edge-coverage diagnostic
+#
+# Annotates alternative TSS/TTS calls with whether coverage actually stops at
+# the annotated terminal boundary. Changes no call -- it changes how a call
+# should be read. A bipartition is defined from annotation, so a side can be
+# called on signal that continues in from outside (e.g. a retained intron)
+# rather than on a real transcription boundary.
+#
+#   step = adj_n / (adj_n + d_n)     0 = coverage stops dead at the boundary
+#                                    0.5 = continuation
+#
+# Runs after filterTSSTTS.R (bins are per side) and needs ONE extra count pass.
+# Use the same counter semantics and strandedness as the DEXSeq counting that
+# produced the exonic part counts -- read counts, -s 2 for a reverse-stranded
+# library. Do NOT fold these bins into the DEXSeq flattening: adding features
+# changes read assignment for existing exonic parts and every current count
+# would shift.
 
+# 1. emit flanking bins + calibration bins
+Rscript scripts/flankbins.R --split_dir=~/GrASE_simulation/bipartition.filtered \
+  --gff_dir=~/GrASE_simulation/dexseq.gff --gencode=~/ref/gencode.annotation.gff3 \
+  --outdir=~/GrASE_simulation/flankbins
+
+# 2. count them (one pass; bins are small and non-overlapping)
+featureCounts -F SAF -a ~/GrASE_simulation/flankbins/flankbins.saf -s 2 \
+  -o ~/GrASE_simulation/flankbins/flankcounts.txt ~/GrASE_simulation/bam/*.bam
+
+# 3. annotate the results
+Rscript scripts/edgetest.R --results=~/GrASE_simulation/bipartition.test/test_bipartition.TSSTTS_betabinom_EBmap.annotated.txt \
+  --manifest=~/GrASE_simulation/flankbins/flankbins_manifest.tsv \
+  --flankcounts=~/GrASE_simulation/flankbins/flankcounts.txt \
+  --outfile=~/GrASE_simulation/bipartition.test/test_bipartition.TSSTTS.edge.txt
+
+# Read the flag ASYMMETRICALLY. Thresholds are fitted per dataset from the
+# calibration bins and edgetest.R reports both misread rates. On the DICE
+# activation panel negatives were misread 4.1% but positives 38.9%, because
+# many genuinely single-promoter genes carry real upstream transcription.
+# "boundary" is specific and trustworthy; "continuation" is evidence, not proof.

@@ -20,13 +20,38 @@ parse_gff_chr_map <- function(gff_path) {
 }
 
 
+#' Consecutive node pairs, kept separate PER ROUTE
+#'
+#' Like \code{route_node_pairs} but preserves route identity, which the cut
+#' rule in \code{label_bipartition_introns} needs: it takes the first distinct
+#' intron along each route, so the routes cannot be flattened together.
+#'
+#' @param field Character scalar, the path1 or path2 value.
+#' @return List of two-column integer matrices, one per route.
+#' @export
+route_node_pairs_by_route <- function(field) {
+  routes <- list()
+  for (rt in strsplit(as.character(field), ",")[[1]]) {
+    n <- suppressWarnings(as.integer(trimws(strsplit(trimws(rt), "-")[[1]])))
+    if (length(n) < 2L) next
+    out <- list()
+    for (k in seq_len(length(n) - 1L))
+      if (!is.na(n[k]) && !is.na(n[k + 1L])) out[[length(out) + 1L]] <- c(n[k], n[k + 1L])
+    routes[[length(routes) + 1L]] <- if (length(out)) do.call(rbind, out)
+                                     else matrix(integer(0), ncol = 2L)
+  }
+  routes
+}
+
+
 #' Consecutive node pairs over every route of a path field
 #'
 #' A path field holds one or more routes separated by commas, each a "-"
 #' separated node sequence ("R-1-5-6, R-3-5-6"). Splitting on "-" alone would
 #' manufacture a pair spanning the comma boundary, so routes are split first.
 #' Non-numeric nodes (the virtual "R"/"L" terminals) are dropped: they carry no
-#' intron.
+#' intron. Route identity is NOT preserved -- use
+#' \code{route_node_pairs_by_route} when it matters.
 #'
 #' @param field Character scalar, the path1 or path2 value.
 #' @return Two-column integer matrix of (from, to) sg_id pairs; zero rows if none.
@@ -65,11 +90,23 @@ route_node_pairs <- function(field) {
 #' distinct set). Every disagreement is a transcript in \code{transcripts1}
 #' whose route through the bubble is not among the listed \code{path1} routes.
 #'
-#' Either way the junction identity is the same: "chr:start:end" from the edge
-#' from_pos/to_pos, and a side's count sums over ALL its distinct introns, which
-#' is what makes the intron D set an equivalent measure to the exonic one -- the
-#' routes partition themselves among those introns, so every transcript of the
-#' partition contributes.
+#' AGGREGATION. The historical rule (\code{rule="union"}) summed over ALL of a
+#' side's distinct introns, on the assumption that the routes partition
+#' themselves among those introns so each contributes once. That assumption is
+#' false in practice: measured over the 3,442 junction-substituted significant
+#' TSS/TTS sides in the DICE activation panel, 83.8% have at least one
+#' transcript crossing two or more of the summed introns, so those molecules
+#' are counted two or more times and D is inflated. Because the inflation
+#' factor is the composition-weighted mean junctions-per-molecule, it shifts
+#' with isoform composition and does NOT cancel in the between-condition
+#' contrast.
+#'
+#' \code{rule="cut"} (the default) instead takes the FIRST distinct intron
+#' along each route, so every route contributes exactly one junction and the
+#' sum is molecule-proportional, matching the exonic intersection semantics.
+#' Routes with no distinct intron are counted in \code{uncovered1} /
+#' \code{uncovered2}; a side with uncovered > 0 is only partly represented by
+#' its junction measure.
 #'
 #' @param ge  Precomputed gene graph list from \code{precompute_gene_graph}.
 #' @param tx1_set Character vector of transcript IDs in path1.
@@ -85,8 +122,13 @@ route_node_pairs <- function(field) {
 #'   comma-separated string of "chr:start:end" junction identifiers, or NA.
 #' @export
 label_bipartition_introns <- function(ge, tx1_set, tx2_set, chr, bubble_verts = NULL,
-                                      pairs1 = NULL, pairs2 = NULL) {
-  na_result <- list(distinct1=NA_character_, distinct2=NA_character_, shared=NA_character_)
+                                      pairs1 = NULL, pairs2 = NULL,
+                                      routes1 = NULL, routes2 = NULL,
+                                      rule = c("cut", "union")) {
+  rule <- match.arg(rule)
+  na_result <- list(distinct1=NA_character_, distinct2=NA_character_,
+                    shared=NA_character_, uncovered1=NA_integer_,
+                    uncovered2=NA_integer_)
 
   in_idx <- which(ge$ex_or_in == "in")
   if (length(in_idx) == 0L) return(na_result)
@@ -98,10 +140,11 @@ label_bipartition_introns <- function(ge, tx1_set, tx2_set, chr, bubble_verts = 
   if (length(in_idx) == 0L) return(na_result)
 
   use_paths <- !is.null(pairs1) && !is.null(pairs2) && !is.null(ge$vx_sg_from)
+  ekey <- if (!is.null(ge$vx_sg_from))
+            paste(ge$vx_sg_from[in_idx], ge$vx_sg_to[in_idx]) else character(0)
   if (use_paths) {
     ## an intron is "on" a side iff its endpoint pair is a consecutive pair on
     ## one of that side's routes
-    ekey <- paste(ge$vx_sg_from[in_idx], ge$vx_sg_to[in_idx])
     pkey <- function(P) if (is.null(P) || !nrow(P)) character(0) else
                         unique(paste(P[, 1L], P[, 2L]))
     in_tx1 <- ekey %in% pkey(pairs1)
@@ -127,10 +170,52 @@ label_bipartition_introns <- function(ge, tx1_set, tx2_set, chr, bubble_verts = 
     paste(sort(unique(jids)), collapse=",")
   }
 
+  ## CUT RULE -- one intron per route.
+  ## A side's molecules all enter at the bubble source and leave at the sink,
+  ## so summing over every distinct intron counts a molecule once per intron it
+  ## crosses. Taking the FIRST distinct intron along each route instead gives a
+  ## cut: every route contributes exactly one junction, so the sum is
+  ## molecule-proportional and comparable to the exonic (intersection) set.
+  ## `uncovered` counts routes with no distinct intron at all -- those
+  ## molecules are invisible to the junction measure and the side should not be
+  ## substituted on its strength.
+  cut_for_side <- function(routes, keep) {
+    if (is.null(routes) || !length(routes)) return(list(sel=integer(0), unc=NA_integer_))
+    ok <- ekey[keep]
+    sel <- integer(0); unc <- 0L
+    for (P in routes) {
+      if (!nrow(P)) { unc <- unc + 1L; next }
+      hit <- NA_integer_
+      for (k in seq_len(nrow(P))) {
+        key <- paste(P[k, 1L], P[k, 2L])
+        j <- which(ok == key)
+        if (length(j)) { hit <- in_idx[keep][j[1L]]; break }
+      }
+      if (is.na(hit)) unc <- unc + 1L else sel <- c(sel, hit)
+    }
+    list(sel = unique(sel), unc = unc)
+  }
+
+  d1 <- in_tx1 & !in_tx2
+  d2 <- !in_tx1 & in_tx2
+  if (rule == "cut" && use_paths && !is.null(routes1) && !is.null(routes2)) {
+    c1 <- cut_for_side(routes1, d1)
+    c2 <- cut_for_side(routes2, d2)
+    return(list(
+      distinct1  = make_junctions(c1$sel),
+      distinct2  = make_junctions(c2$sel),
+      shared     = make_junctions(in_idx[in_tx1 & in_tx2]),
+      uncovered1 = c1$unc,
+      uncovered2 = c2$unc
+    ))
+  }
+
   list(
-    distinct1 = make_junctions(in_idx[in_tx1 & !in_tx2]),
-    distinct2 = make_junctions(in_idx[!in_tx1 & in_tx2]),
-    shared    = make_junctions(in_idx[in_tx1 & in_tx2])
+    distinct1  = make_junctions(in_idx[d1]),
+    distinct2  = make_junctions(in_idx[d2]),
+    shared     = make_junctions(in_idx[in_tx1 & in_tx2]),
+    uncovered1 = NA_integer_,
+    uncovered2 = NA_integer_
   )
 }
 
@@ -150,10 +235,14 @@ label_bipartition_introns <- function(ge, tx1_set, tx2_set, chr, bubble_verts = 
 #' @return \code{splits_df} extended with intron_distinct1, intron_distinct2,
 #'   intron_shared columns.
 #' @export
-label_all_bipartition_introns <- function(splits_df, graphml_dir, chr_map) {
+label_all_bipartition_introns <- function(splits_df, graphml_dir, chr_map,
+                                          rule = c("cut", "union")) {
+  rule <- match.arg(rule)
   splits_df$intron_distinct1 <- NA_character_
   splits_df$intron_distinct2 <- NA_character_
   splits_df$intron_shared    <- NA_character_
+  splits_df$intron_uncovered1 <- NA_integer_
+  splits_df$intron_uncovered2 <- NA_integer_
 
   for (gid in unique(splits_df$gene)) {
     graphml_path <- file.path(graphml_dir, paste0(gid, ".graphml"))
@@ -180,6 +269,7 @@ label_all_bipartition_introns <- function(splits_df, graphml_dir, chr_map) {
       tx1_set <- tx1_set[nchar(tx1_set) > 0L]
       tx2_set <- tx2_set[nchar(tx2_set) > 0L]
       bubble_verts <- NULL; pairs1 <- NULL; pairs2 <- NULL
+      routes1 <- NULL; routes2 <- NULL
       if (has_paths) {
         p1_raw <- splits_df$path1[i]
         p2_raw <- splits_df$path2[i]
@@ -192,13 +282,17 @@ label_all_bipartition_introns <- function(splits_df, graphml_dir, chr_map) {
           ## never formed across two routes ("...-6, R-3-..." must not yield 6->R)
           pairs1 <- route_node_pairs(p1_raw)
           pairs2 <- route_node_pairs(p2_raw)
+          routes1 <- route_node_pairs_by_route(p1_raw)
+          routes2 <- route_node_pairs_by_route(p2_raw)
         }
       }
       lbl <- label_bipartition_introns(ge, tx1_set, tx2_set, chr, bubble_verts,
-                                       pairs1, pairs2)
-      splits_df$intron_distinct1[i] <- lbl$distinct1
-      splits_df$intron_distinct2[i] <- lbl$distinct2
-      splits_df$intron_shared[i]    <- lbl$shared
+                                       pairs1, pairs2, routes1, routes2, rule)
+      splits_df$intron_distinct1[i]  <- lbl$distinct1
+      splits_df$intron_distinct2[i]  <- lbl$distinct2
+      splits_df$intron_shared[i]     <- lbl$shared
+      splits_df$intron_uncovered1[i] <- lbl$uncovered1
+      splits_df$intron_uncovered2[i] <- lbl$uncovered2
     }
   }
   splits_df
