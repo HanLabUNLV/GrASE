@@ -101,9 +101,17 @@ route_node_pairs <- function(field) {
 #' with isoform composition and does NOT cancel in the between-condition
 #' contrast.
 #'
-#' \code{rule="cut"} (the default) instead takes the FIRST distinct intron
-#' along each route, so every route contributes exactly one junction and the
-#' sum is molecule-proportional, matching the exonic intersection semantics.
+#' \code{rule="cut"} takes the FIRST distinct intron along each route, so every
+#' route contributes exactly one junction and the sum is molecule-proportional,
+#' matching the exonic intersection semantics. It is unbiased but discards the
+#' route's other k-1 junctions, so it is needlessly high-variance.
+#'
+#' \code{rule="mean"} (THE DEFAULT) keeps every distinct intron on a route,
+#' grouped, and \code{sum_sj_counts} averages within the group before summing
+#' across routes. Same expectation as the cut with roughly 1/k the variance,
+#' because it uses all k measurements of that route's abundance. Junction ids
+#' are emitted route-grouped: "|" within a route, "," between routes. A group of
+#' one averages to itself, so ungrouped input behaves exactly as before.
 #' Routes with no distinct intron are counted in \code{uncovered1} /
 #' \code{uncovered2}; a side with uncovered > 0 is only partly represented by
 #' its junction measure.
@@ -124,7 +132,7 @@ route_node_pairs <- function(field) {
 label_bipartition_introns <- function(ge, tx1_set, tx2_set, chr, bubble_verts = NULL,
                                       pairs1 = NULL, pairs2 = NULL,
                                       routes1 = NULL, routes2 = NULL,
-                                      rule = c("cut", "union")) {
+                                      rule = c("mean", "cut", "union")) {
   rule <- match.arg(rule)
   na_result <- list(distinct1=NA_character_, distinct2=NA_character_,
                     shared=NA_character_, uncovered1=NA_integer_,
@@ -179,31 +187,64 @@ label_bipartition_introns <- function(ge, tx1_set, tx2_set, chr, bubble_verts = 
   ## `uncovered` counts routes with no distinct intron at all -- those
   ## molecules are invisible to the junction measure and the side should not be
   ## substituted on its strength.
-  cut_for_side <- function(routes, keep) {
-    if (is.null(routes) || !length(routes)) return(list(sel=integer(0), unc=NA_integer_))
+  ## `all_per_route = FALSE` gives the CUT (first distinct intron per route).
+  ## TRUE gives every distinct intron per route, kept grouped, for the MEAN
+  ## rule: averaging within a route has the same expectation as taking one of
+  ## its junctions but roughly 1/k the variance, because it uses all k
+  ## measurements of the same route abundance instead of discarding k-1.
+  cut_for_side <- function(routes, keep, all_per_route = FALSE) {
+    if (is.null(routes) || !length(routes))
+      return(list(sel = integer(0), groups = list(), unc = NA_integer_))
     ok <- ekey[keep]
-    sel <- integer(0); unc <- 0L
+    idx_keep <- in_idx[keep]
+    sel <- integer(0); groups <- list(); unc <- 0L
     for (P in routes) {
       if (!nrow(P)) { unc <- unc + 1L; next }
-      hit <- NA_integer_
+      hits <- integer(0)
       for (k in seq_len(nrow(P))) {
         key <- paste(P[k, 1L], P[k, 2L])
         j <- which(ok == key)
-        if (length(j)) { hit <- in_idx[keep][j[1L]]; break }
+        if (length(j)) {
+          hits <- c(hits, idx_keep[j[1L]])
+          if (!all_per_route) break
+        }
       }
-      if (is.na(hit)) unc <- unc + 1L else sel <- c(sel, hit)
+      if (!length(hits)) { unc <- unc + 1L; next }
+      sel <- c(sel, hits)
+      groups[[length(groups) + 1L]] <- unique(hits)
     }
-    list(sel = unique(sel), unc = unc)
+    list(sel = unique(sel), groups = groups, unc = unc)
+  }
+
+  ## Route-grouped junction ids: "|" separates junctions WITHIN a route, ","
+  ## separates routes. sum_sj_counts() averages within a group and sums across
+  ## groups, so a group of one reduces exactly to the old behaviour.
+  make_junction_groups <- function(groups) {
+    if (!length(groups)) return(NA_character_)
+    out <- character(0)
+    for (g in groups) {
+      fp <- ge$from_pos[g]; tp <- ge$to_pos[g]
+      ok2 <- !is.na(fp) & !is.na(tp)
+      if (!any(ok2)) next
+      jids <- paste0(chr, ":", pmin(fp[ok2], tp[ok2]), ":", pmax(fp[ok2], tp[ok2]))
+      out <- c(out, paste(sort(unique(jids)), collapse = "|"))
+    }
+    if (!length(out)) return(NA_character_)
+    paste(out, collapse = ",")
   }
 
   d1 <- in_tx1 & !in_tx2
   d2 <- !in_tx1 & in_tx2
-  if (rule == "cut" && use_paths && !is.null(routes1) && !is.null(routes2)) {
-    c1 <- cut_for_side(routes1, d1)
-    c2 <- cut_for_side(routes2, d2)
+  if (rule %in% c("cut", "mean") && use_paths &&
+      !is.null(routes1) && !is.null(routes2)) {
+    per_route <- rule == "mean"
+    c1 <- cut_for_side(routes1, d1, per_route)
+    c2 <- cut_for_side(routes2, d2, per_route)
+    emit <- if (per_route) function(x) make_junction_groups(x$groups)
+            else           function(x) make_junctions(x$sel)
     return(list(
-      distinct1  = make_junctions(c1$sel),
-      distinct2  = make_junctions(c2$sel),
+      distinct1  = emit(c1),
+      distinct2  = emit(c2),
       shared     = make_junctions(in_idx[in_tx1 & in_tx2]),
       uncovered1 = c1$unc,
       uncovered2 = c2$unc
@@ -236,7 +277,7 @@ label_bipartition_introns <- function(ge, tx1_set, tx2_set, chr, bubble_verts = 
 #'   intron_shared columns.
 #' @export
 label_all_bipartition_introns <- function(splits_df, graphml_dir, chr_map,
-                                          rule = c("cut", "union")) {
+                                          rule = c("mean", "cut", "union")) {
   rule <- match.arg(rule)
   splits_df$intron_distinct1 <- NA_character_
   splits_df$intron_distinct2 <- NA_character_

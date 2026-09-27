@@ -8,7 +8,7 @@ label_all_bipartition_introns(
   splits_df,
   graphml_dir,
   chr_map,
-  rule = c("cut", "union")
+  rule = c("mean", "cut", "union")
 )
 }
 \arguments{

@@ -14,7 +14,7 @@ label_bipartition_introns(
   pairs2 = NULL,
   routes1 = NULL,
   routes2 = NULL,
-  rule = c("cut", "union")
+  rule = c("mean", "cut", "union")
 )
 }
 \arguments{
@@ -70,9 +70,17 @@ factor is the composition-weighted mean junctions-per-molecule, it shifts
 with isoform composition and does NOT cancel in the between-condition
 contrast.
 
-\code{rule="cut"} (the default) instead takes the FIRST distinct intron
-along each route, so every route contributes exactly one junction and the
-sum is molecule-proportional, matching the exonic intersection semantics.
+\code{rule="cut"} takes the FIRST distinct intron along each route, so every
+route contributes exactly one junction and the sum is molecule-proportional,
+matching the exonic intersection semantics. It is unbiased but discards the
+route's other k-1 junctions, so it is needlessly high-variance.
+
+\code{rule="mean"} (THE DEFAULT) keeps every distinct intron on a route,
+grouped, and \code{sum_sj_counts} averages within the group before summing
+across routes. Same expectation as the cut with roughly 1/k the variance,
+because it uses all k measurements of that route's abundance. Junction ids
+are emitted route-grouped: "|" within a route, "," between routes. A group of
+one averages to itself, so ungrouped input behaves exactly as before.
 Routes with no distinct intron are counted in \code{uncovered1} /
 \code{uncovered2}; a side with uncovered > 0 is only partly represented by
 its junction measure.

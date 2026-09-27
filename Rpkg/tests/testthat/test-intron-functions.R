@@ -148,3 +148,73 @@ test_that("no intronic edges yields an all-NA result", {
   expect_true(is.na(res$distinct1))
   expect_true(is.na(res$distinct2))
 })
+
+## --- the MEAN rule -----------------------------------------------------------
+## The cut uses ONE junction per route and discards the rest, so it is unbiased
+## but high-variance. The mean keeps every distinct junction on a route, grouped,
+## and sum_sj_counts averages within the group: same expectation, ~1/k variance.
+
+test_that("mean rule groups a route's junctions with a pipe", {
+  ge <- make_ge()
+  res <- label_bipartition_introns(
+    ge, "t1", "t2", "chr1", 1:5,
+    route_node_pairs(route1), route_node_pairs(route2),
+    routes1 = route_node_pairs_by_route(route1),
+    routes2 = route_node_pairs_by_route(route2),
+    rule = "mean")
+  ## side 1's single route crosses three distinct introns -> one group of three
+  expect_true(grepl("|", res$distinct1, fixed = TRUE))
+  expect_length(strsplit(res$distinct1, ",")[[1]], 1)
+  expect_length(strsplit(res$distinct1, "|", fixed = TRUE)[[1]], 3)
+})
+
+test_that("cut keeps one junction where mean keeps all of them", {
+  ge <- make_ge()
+  args <- list(ge, "t1", "t2", "chr1", 1:5,
+               route_node_pairs(route1), route_node_pairs(route2),
+               routes1 = route_node_pairs_by_route(route1),
+               routes2 = route_node_pairs_by_route(route2))
+  k <- do.call(label_bipartition_introns, c(args, list(rule = "cut")))
+  m <- do.call(label_bipartition_introns, c(args, list(rule = "mean")))
+  expect_false(grepl("|", k$distinct1, fixed = TRUE))
+  expect_true(grepl("|", m$distinct1, fixed = TRUE))
+})
+
+test_that("mean rule still counts uncovered routes", {
+  ge <- make_ge()
+  res <- label_bipartition_introns(
+    ge, "t1", "t2", "chr1", 1:5,
+    route_node_pairs("4-5"), route_node_pairs(route2),
+    routes1 = route_node_pairs_by_route("4-5"),
+    routes2 = route_node_pairs_by_route(route2),
+    rule = "mean")
+  expect_equal(res$uncovered1, 1L)
+})
+
+test_that("sum_sj_counts averages within a route group", {
+  m <- matrix(c(10, 20, 30, 100), nrow = 4, ncol = 1,
+              dimnames = list(c("chr1:1:2", "chr1:3:4", "chr1:5:6", "chr1:7:8"), "s1"))
+  ## one route of three junctions: mean(10,20,30) = 20
+  expect_equal(unname(sum_sj_counts("chr1:1:2|chr1:3:4|chr1:5:6", m)[1]), 20)
+  ## two routes: mean(10,20,30) + 100 = 120
+  expect_equal(unname(sum_sj_counts("chr1:1:2|chr1:3:4|chr1:5:6,chr1:7:8", m)[1]), 120)
+})
+
+test_that("sum_sj_counts is unchanged when there are no groups", {
+  m <- matrix(c(10, 20), nrow = 2, ncol = 1,
+              dimnames = list(c("chr1:1:2", "chr1:3:4"), "s1"))
+  ## no pipe -> old behaviour, a plain sum
+  expect_equal(unname(sum_sj_counts("chr1:1:2,chr1:3:4", m)[1]), 30)
+})
+
+test_that("a single-junction group equals the ungrouped value", {
+  m <- matrix(c(42), nrow = 1, ncol = 1, dimnames = list("chr1:1:2", "s1"))
+  expect_equal(unname(sum_sj_counts("chr1:1:2", m)[1]), 42)
+})
+
+test_that("mean is bounded by the min and max of the route's junctions", {
+  m <- matrix(c(10, 20, 30), nrow = 3, ncol = 1,
+              dimnames = list(c("chr1:1:2", "chr1:3:4", "chr1:5:6"), "s1"))
+  v <- unname(sum_sj_counts("chr1:1:2|chr1:3:4|chr1:5:6", m)[1])
+  expect_gte(v, 10); expect_lte(v, 30)
+})
