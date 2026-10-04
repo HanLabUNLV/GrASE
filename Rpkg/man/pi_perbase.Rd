@@ -7,7 +7,7 @@
 pi_perbase(pi, len_d, len_s)
 }
 \arguments{
-\item{pi}{Raw-count pi, in \link{0, 1}.}
+\item{pi}{Raw-count pi, in \verb{[0, 1]}.}
 
 \item{len_d, len_s}{Lengths in bases of the distinct set and the reference.}
 }

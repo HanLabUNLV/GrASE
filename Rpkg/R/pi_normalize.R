@@ -23,7 +23,7 @@
 #' Derivation: pi_perbase = (D/len_d) / (D/len_d + S/len_s); multiply through by
 #' len_d*len_s and divide by (D+S).
 #'
-#' @param pi Raw-count pi, in [0, 1].
+#' @param pi Raw-count pi, in `[0, 1]`.
 #' @param len_d,len_s Lengths in bases of the distinct set and the reference.
 #' @return Per-base pi, or NA where a length is missing or non-positive.
 #' @export

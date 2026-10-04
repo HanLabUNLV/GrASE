@@ -1,33 +1,55 @@
 #!/usr/bin/env Rscript
-## Emit flanking bins for the TSS/TTS edge-coverage diagnostic.
+## Emit flanking bins for the TSS/TTS localization test.
 ##
-## Runs AFTER filterTSSTTS.R (bins are defined per bipartition side) and
-## BEFORE counting. Emits a SAF for featureCounts plus a manifest tying each
-## bin back to its side.
+## One bin per bipartition SIDE: a fixed-width window immediately beyond that
+## side's free end. The bin is then counted like any other feature and tested
+## against the same reference as the side's distinct set, under the same call
+## condition. A real boundary means the condition effect stops at the edge --
+## the distinct set is called and the flank is not.
 ##
-## Also emits CALIBRATION bins, without which the step statistic has no scale:
-##   positive  the shared TSS of a single-promoter gene -- a real boundary
-##   negative  the midpoint of a long exonic part -- pure continuation
-## Thresholds are fitted per dataset from these, never hardcoded.
+## The window is taken REGARDLESS of what lies beyond the boundary -- intron,
+## another isoform's exon, or intergenic space. It is not clipped at the next
+## exonic part and there is no minimum-width gate. That is deliberate: the test
+## is a between-condition contrast against a shared reference, so anything in
+## the flank that is not changing contributes equally to both conditions and
+## cancels. Restricting to "empty" flanks is what the superseded step statistic
+## did, and it is why that statistic was confounded -- see below.
 ##
-## Count the SAF with the SAME semantics as the DEXSeq counting that produced
-## the exonic part counts -- read counts, matching strandedness:
+## SUPERSEDES the absolute-step reading. `step = adj/(adj + D)` asked whether
+## coverage falls to ZERO beyond the boundary, which is only the right question
+## when nothing else is transcribed through the flank. With other isoforms
+## expressed a genuine boundary gives a step CHANGE, not a drop to zero, so that
+## statistic lost power in proportion to how little of the local coverage the
+## terminating isoform contributed: on the DICE activation panel its call rate
+## rose monotonically with pi (20% at pi<0.2 to 40% at pi>0.8) and its confirmed
+## set was 7.4x enriched for each gene's OUTERMOST boundary. The calibration
+## bins this script used to emit existed only to fit a threshold for that
+## statistic, and are gone with it.
 ##
-##   featureCounts -F SAF -a flankbins.saf -s 2 -o flankcounts.txt <bams>
+## Count the GFF with the SAME settings that produced the exonic part counts --
+## for DICE that is DICE/scripts/dexseq_count_dice.sh, which records and verifies
+## them. Do NOT fold these bins into the DEXSeq flattening: adding features
+## changes read assignment for existing exonic parts, so every current count
+## shifts. A separate annotation counted separately cannot disturb them.
 ##
-## Do NOT fold these bins into the DEXSeq flattening: adding features changes
-## read assignment for existing exonic parts, so every current count shifts.
+## Geometry comes from the SPLICE GRAPH, not the flattened GFF. R/L edges are
+## the distinct TSS/TTS positions and ex_part edges are the exonic parts
+## (coordinates from their endpoint vertices). Transcript membership is not
+## needed -- an R edge points at its route's first node, so anything 5' of it is
+## by definition off that path.
 ##
-## Geometry comes from the SPLICE GRAPH, not the flattened GFF. The graph states
-## it directly: R/L edges are the distinct TSS/TTS positions, ex_part edges are
-## the exonic parts (coordinates from their endpoint vertices). Transcript
-## membership is not needed -- an R edge points at its route's first node, so
-## anything 5' of it is by definition off that path.
+## EVENT IDS. `event` is the ROW INDEX of the per-gene split file, which is what
+## exoncnt assigns (`bipartitions$event = rownames(bipartitions)`,
+## R/exoncnt_functions.R:141). It is not a column in the split tables --
+## filterTSSTTS.R does not write one -- and an earlier version of this script
+## required it to be, which meant the guard failed on every file and the script
+## silently emitted nothing. Rows are numbered before any filtering so the ids
+## line up with the exonic arm.
 ##
 ## Usage:
-##   Rscript scripts/flankbins.R --split_dir=<filtered splits> \
-##     --graphml_dir=<per-gene graphml> --gencode=<annotation.gff3> \
-##     --outdir=<dir> [--width=100] [--min_width=50] [--n_calib=1500]
+##   Rscript scripts/flankbins.R --split_dir=<filtered TSS/TTS splits> \
+##     --graphml_dir=<per-gene graphml> --outdir=<dir> [--width=150] \
+##     [--chr_gff=<aggregate dexseq gff>]
 
 suppressMessages({library(optparse)})
 
@@ -36,18 +58,19 @@ option_list <- list(
               help = "directory of filtered bipartition split tables"),
   make_option(c("-g", "--graphml_dir"), type = "character", default = NULL,
               help = "directory of per-gene <gene>.graphml files"),
-  make_option(c("-a", "--gencode"), type = "character", default = NULL,
-              help = "gencode annotation gff3, for single-promoter controls"),
   make_option(c("-c", "--chr_gff"), type = "character", default = NULL,
               help = "aggregate dexseq gff; needed ONLY for graphs built before chrom was stored on the graph"),
   make_option(c("-o", "--outdir"), type = "character", default = NULL,
               help = "output directory"),
-  make_option(c("-w", "--width"), type = "integer", default = 100L,
-              help = "nominal flank bin width [default %default]"),
-  make_option(c("-m", "--min_width"), type = "integer", default = 50L,
-              help = "below this a side is unscorable [default %default]"),
-  make_option(c("-n", "--n_calib"), type = "integer", default = 1500L,
-              help = "calibration bins per class [default %default]")
+  make_option(c("-w", "--width"), type = "integer", default = 150L,
+              help = "flank bin width [default %default]"),
+  ## Restricting to ONE arm is not cosmetic: `event` is the row index WITHIN a
+  ## per-gene split file, so bins must be numbered off the same file the exonic
+  ## arm was counted from. exoncnt.R maps -a TSS to alt "TSSTTS"
+  ## (scripts/exoncnt.R:62-63) and globs "bipartition.<alt>.txt$".
+  make_option(c("-p", "--pattern"), type = "character",
+              default = "\\.bipartition\\.TSSTTS\\.txt$",
+              help = "split-file pattern [default %default]")
 )
 opt <- parse_args(OptionParser(option_list = option_list))
 for (r in c("split_dir", "graphml_dir", "outdir"))
@@ -60,176 +83,115 @@ for (f in list.files(rdir, pattern = "\\.R$", full.names = TRUE))
   try(source(f), silent = TRUE)
 suppressMessages(library(igraph))
 stopifnot(exists("graph_exonic_parts"), exists("graph_side_boundary"),
-          exists("flank_bin"))
+          exists("flank_bin"), exists("free_end_direction"))
 
 dir.create(opt$outdir, showWarnings = FALSE, recursive = TRUE)
 
 ## Newer graphs carry chrom, strand and gene as graph attributes, so nothing is
 ## read from the annotation at all. --chr_gff is a fallback for graphs built
-## before chrom was recorded.
+## before chrom was recorded (the DICE v34 graphs are such a set).
 chr_map <- if (!is.null(opt$chr_gff) && file.exists(opt$chr_gff)) {
   m <- parse_gff_chr_map(opt$chr_gff)
   message("chromosome fallback map: ", length(m), " genes")
   m
 } else list()
 
+gcache <- new.env(parent = emptyenv())
 read_gene <- function(gene) {
+  if (!is.null(gcache[[gene]])) return(gcache[[gene]])
   fn <- file.path(opt$graphml_dir, paste0(gene, ".graphml"))
-  if (!file.exists(fn)) return(NULL)
-  g <- tryCatch(igraph::read_graph(fn, format = "graphml"), error = function(e) NULL)
-  if (is.null(g)) return(NULL)
-  p <- graph_exonic_parts(g)
-  if (!nrow(p)) return(NULL)
-  list(g = g, strand = graph_strand(g), chrom = graph_chrom(g),
-       parts = stats::setNames(Map(c, p$start, p$end), as.character(p$part)))
+  v <- NULL
+  if (file.exists(fn)) {
+    g <- tryCatch(igraph::read_graph(fn, format = "graphml"), error = function(e) NULL)
+    if (!is.null(g)) {
+      ch <- graph_chrom(g)
+      if (is.na(ch)) ch <- chr_map[[gene]]
+      v <- list(g = g, strand = graph_strand(g),
+                chrom = if (is.null(ch)) NA_character_ else ch)
+    }
+  }
+  gcache[[gene]] <- if (is.null(v)) NA else v
+  gcache[[gene]]
 }
 
-split_files <- list.files(opt$split_dir, pattern = "\\.txt$", full.names = TRUE)
+split_files <- list.files(opt$split_dir, pattern = opt$pattern, full.names = TRUE)
 message("split tables: ", length(split_files))
 
-rows <- list(); saf <- list(); k <- 0L
-n_uns <- 0L
+rows <- list(); k <- 0L
+n_nograph <- 0L; n_noboundary <- 0L; n_notRL <- 0L; n_empty <- 0L
 for (sf in split_files) {
   d <- try(utils::read.delim(sf, stringsAsFactors = FALSE), silent = TRUE)
   if (inherits(d, "try-error") || !nrow(d)) next
-  if (!all(c("gene", "event", "source", "sink") %in% names(d))) next
+  if (!all(c("gene", "source", "sink") %in% names(d))) next
   for (i in seq_len(nrow(d))) {
+    ## event == row index of THIS file, matching exoncnt's numbering
+    event <- i
     kind <- if (identical(as.character(d$source[i]), "R")) "TSS" else
             if (identical(as.character(d$sink[i]), "L"))   "TTS" else NA
-    if (is.na(kind)) next
-    gg <- read_gene(d$gene[i]); if (is.null(gg)) next
-    strand <- gg$strand
-    chrom  <- if (!is.na(gg$chrom)) gg$chrom else chr_map[[d$gene[i]]]
-    if (is.na(strand) || !strand %in% c("+", "-") || is.null(chrom)) next
+    if (is.na(kind)) { n_notRL <- n_notRL + 1L; next }
+    gg <- read_gene(d$gene[i])
+    if (length(gg) == 1L && is.na(gg)) { n_nograph <- n_nograph + 1L; next }
+    strand <- gg$strand; chrom <- gg$chrom
+    if (is.na(strand) || !strand %in% c("+", "-") || is.na(chrom)) {
+      n_nograph <- n_nograph + 1L; next
+    }
     dir <- free_end_direction(kind, strand)
     for (side in c(1L, 2L)) {
       sd <- if (side == 1L) d$setdiff1[i] else d$setdiff2[i]
-      if (is.na(sd) || sd %in% c("", "NA")) next
-      pn <- suppressWarnings(as.integer(sub("^E", "",
-              trimws(strsplit(sd, ",")[[1]]))))
-      pn <- pn[!is.na(pn) & as.character(pn) %in% names(gg$parts)]
-      if (!length(pn)) next
-      ## the graph states the route's terminus outright -- no walk, no
-      ## transcript-sharing heuristic, and it is the transcript's real start
-      ## rather than the distinct set's edge
+      ## a side with no exonic distinct set has no D to compare the flank
+      ## against, so it is out of scope for this test
+      if (is.na(sd) || sd %in% c("", "NA")) { n_empty <- n_empty + 1L; next }
       pf <- if (side == 1L) d$path1[i] else d$path2[i]
       b <- graph_side_boundary(gg$g, pf, kind, strand)
-      if (is.na(b)) next
-      fw <- flank_width(gg$parts, b, dir)
-      fb <- flank_bin(b, dir, opt$width, fw, opt$min_width)
-      if (fb$tier == "unscorable") { n_uns <- n_uns + 1L; next }
+      if (is.na(b)) { n_noboundary <- n_noboundary + 1L; next }
+      ## avail = width and min_width = 1: never clipped, never unscorable
+      fb <- flank_bin(b, dir, opt$width, opt$width, 1L)
       k <- k + 1L
-      id <- sprintf("F%07d", k)
-      len_d <- sum(vapply(gg$parts[as.character(pn)],
-                          function(p) p[2] - p[1] + 1, numeric(1)))
-      rows[[k]] <- data.frame(bin_id = id, row_type = "side", role = "ADJ",
-        pair_id = id, gene = d$gene[i],
-        event = d$event[i], side = side, kind = kind, chrom = chrom,
-        strand = strand, boundary = b, flank_width = fw,
-        len_ADJ = fb$width, len_D = len_d,
-        distinct_parts = sd, tier = fb$tier, stringsAsFactors = FALSE)
-      saf[[k]] <- data.frame(GeneID = id, Chr = chrom, Start = fb$start,
-        End = fb$end, Strand = strand, stringsAsFactors = FALSE)
+      rows[[k]] <- data.frame(
+        bin_id = sprintf("F%d_%d", event, side),
+        gene = d$gene[i], event = event, side = side, kind = kind,
+        chrom = chrom, strand = strand, boundary = b,
+        start = fb$start, end = fb$end, width = fb$width,
+        distinct_parts = sd, stringsAsFactors = FALSE)
     }
   }
 }
-message("side bins: ", k, "   unscorable (flank < ", opt$min_width, "): ", n_uns)
-
-## ---- calibration bins -------------------------------------------------
-## A control needs BOTH windows: the one outside the boundary and the matched
-## interior one it is compared against. Without the paired interior window the
-## control step has no valid denominator and the fitted threshold is wrong,
-## which would mis-set the classification for every real side.
-add_control <- function(rt, gene, chrom, strand, adj_s, adj_e, d_s, d_e) {
-  pid <- sprintf("P%07d", k + 1L)
-  for (role in c("ADJ", "D")) {
-    k <<- k + 1L
-    id <- sprintf("F%07d", k)
-    ss <- if (role == "ADJ") adj_s else d_s
-    ee <- if (role == "ADJ") adj_e else d_e
-    rows[[k]] <<- data.frame(bin_id = id, row_type = rt, role = role,
-      pair_id = pid, gene = gene,
-      event = NA_character_, side = NA_integer_, kind = rt, chrom = chrom,
-      strand = strand, boundary = NA_integer_, flank_width = opt$width,
-      len_ADJ = adj_e - adj_s + 1L, len_D = d_e - d_s + 1L,
-      distinct_parts = NA_character_, tier = "full", stringsAsFactors = FALSE)
-    saf[[k]] <<- data.frame(GeneID = id, Chr = chrom, Start = ss, End = ee,
-      Strand = strand, stringsAsFactors = FALSE)
-  }
-  pid
-}
-
-if (!is.null(opt$gencode) && file.exists(opt$gencode)) {
-  message("reading gencode for single-promoter controls ...")
-  con <- file(opt$gencode, "r"); tss <- new.env(parent = emptyenv())
-  repeat {
-    ln <- readLines(con, n = 50000L); if (!length(ln)) break
-    ln <- ln[substr(ln, 1, 1) != "#"]
-    f <- strsplit(ln, "\t", fixed = TRUE)
-    for (x in f) {
-      if (length(x) < 9 || x[3] != "transcript") next
-      gid <- sub('.*gene_id=([^;]+).*', "\\1", x[9])
-      p <- as.integer(if (x[7] == "-") x[5] else x[4])
-      tss[[gid]] <- c(tss[[gid]], p)
-    }
-  }
-  close(con)
-  sp <- Filter(function(v) (max(v) - min(v)) <= 50L, as.list(tss))
-  message("single-promoter genes: ", length(sp))
-  npos <- 0L
-  for (gene in names(sp)) {
-    if (npos >= opt$n_calib) break
-    gg <- read_gene(gene); if (is.null(gg)) next
-    if (length(gg$parts) < 4L) next
-    outer <- sp[[gene]][1]
-    strand <- gg$strand
-    if (is.na(strand) || !strand %in% c("+", "-")) next
-    dir <- if (strand == "+") -1L else 1L
-    fb <- flank_bin(outer, dir, opt$width, opt$width, opt$min_width)
-    if (fb$tier == "unscorable") next
-    ## D is the matched window INSIDE the terminal exon
-    if (dir < 0) { ds <- outer; de <- outer + opt$width - 1L }
-    else         { ds <- outer - opt$width + 1L; de <- outer }
-    pos_chrom <- if (!is.na(gg$chrom)) gg$chrom else chr_map[[gene]]
-    if (is.null(pos_chrom) || is.na(pos_chrom)) next
-    add_control("calib_pos", gene, pos_chrom, strand, fb$start, fb$end, ds, de)
-    npos <- npos + 1L
-  }
-  message("calibration positive bins: ", npos)
-}
-
-nneg <- 0L
-for (sf in split_files) {
-  if (nneg >= opt$n_calib) break
-  d <- try(utils::read.delim(sf, stringsAsFactors = FALSE), silent = TRUE)
-  if (inherits(d, "try-error") || !nrow(d)) next
-  for (gene in unique(d$gene)) {
-    if (nneg >= opt$n_calib) break
-    neg_chrom <- if (!is.na(gg$chrom)) gg$chrom else chr_map[[gene]]
-    if (is.null(neg_chrom) || is.na(neg_chrom)) next
-    gg <- read_gene(gene); if (is.null(gg)) next
-    neg_strand <- gg$strand
-    if (is.na(neg_strand) || !neg_strand %in% c("+", "-")) next
-    lens <- vapply(gg$parts, function(p) p[2] - p[1] + 1, numeric(1))
-    big <- names(lens)[lens >= 2 * opt$width + 20]
-    if (!length(big)) next
-    p <- gg$parts[[big[ceiling(length(big) / 2)]]]
-    mid <- floor((p[1] + p[2]) / 2)
-    ## both windows lie inside one continuous exon, so this is pure
-    ## continuation and the step must come out near 0.5
-    add_control("calib_neg", gene, neg_chrom, neg_strand,
-                mid - opt$width + 1L, mid, mid + 1L, mid + opt$width)
-    nneg <- nneg + 1L
-  }
-}
-message("calibration negative bins: ", nneg)
-
+if (!k) stop("no flank bins emitted -- check --split_dir and --graphml_dir", call. = FALSE)
 man <- do.call(rbind, rows)
-sf_ <- do.call(rbind, saf)
-utils::write.table(man, file.path(opt$outdir, "flankbins_manifest.tsv"),
-                   sep = "\t", quote = FALSE, row.names = FALSE)
-utils::write.table(sf_, file.path(opt$outdir, "flankbins.saf"),
-                   sep = "\t", quote = FALSE, row.names = FALSE)
-message("wrote ", nrow(man), " bins to ", opt$outdir)
-message("next: featureCounts -F SAF -a ", file.path(opt$outdir, "flankbins.saf"),
-        " -s 2 -o flankcounts.txt <bams>")
+message("flank bins: ", nrow(man), "  over ", length(unique(man$gene)), " genes")
+message("  skipped: ", n_notRL, " not R/L anchored, ", n_nograph, " no graph/strand/chrom, ",
+        n_empty, " empty distinct set, ", n_noboundary, " no route terminus")
+
+## ---- DEXSeq-format GFF ------------------------------------------------------
+## Only `exonic_part` lines are read by dexseq_count.py, which names each
+## feature gene_id + ":" + exonic_part_number (dexseq_count.py:96-97) by plain
+## string concatenation -- no numeric assumption. So the part number carries the
+## event and side directly: the count rowname `<gene>:F<event>_<side>` maps back
+## to the bipartition path with no lookup table. `aggregate_gene` lines are
+## ignored by the counter but written for format completeness.
+##
+## Bins are grouped under their SOURCE GENE so that two overlapping bins of one
+## gene are two features of the same gene rather than an `_ambiguous` read.
+ord <- order(man$chrom, man$start, man$end)
+mo <- man[ord, , drop = FALSE]
+src <- "flankbins.R"
+gff <- character(0)
+for (g in unique(mo$gene)) {
+  s <- mo[mo$gene == g, , drop = FALSE]
+  gff <- c(gff, paste(s$chrom[1], src, "aggregate_gene", min(s$start), max(s$end),
+                      ".", s$strand[1], ".",
+                      sprintf('gene_id "%s"', g), sep = "\t"))
+  gff <- c(gff, paste(s$chrom, src, "exonic_part", s$start, s$end, ".", s$strand, ".",
+                      sprintf('gene_id "%s"; transcripts "NA"; exonic_part_number "%s"',
+                              g, s$bin_id), sep = "\t"))
+}
+gff_path <- file.path(opt$outdir, "flankbins.dexseq.gff")
+writeLines(gff, gff_path)
+
+man_path <- file.path(opt$outdir, "flankbins_manifest.tsv")
+utils::write.table(man, man_path, sep = "\t", quote = FALSE, row.names = FALSE)
+
+message("wrote ", gff_path)
+message("wrote ", man_path)
+message("next: count it with the SAME settings as the exonic parts, e.g.")
+message("  bash DICE/scripts/dexseq_count_dice.sh ", gff_path, " <bam_list> <outdir>")
