@@ -66,6 +66,35 @@ def parts(cell):
     if cell in ("", "NA", "NaN", None): return []
     return [x.strip() for x in cell.split(",") if x.strip() and x.strip() != "NA"]
 
+def set_length(cell, coords):
+    """Summed length in bases of a comma-separated exonic part set.
+
+    None when the set is empty (a junction-substituted side is a point feature
+    with no length) or when no part resolves against the GFF.
+    """
+    ls = [coords[p][1] - coords[p][0] + 1 for p in parts(cell) if p in coords]
+    return sum(ls) if ls else None
+
+
+def pi_perbase(pi, len_d, len_s):
+    """Raw-count pi -> per-base pi.
+
+    pi as tested is a COUNT ratio y_D / (y_D + y_S), which the beta-binomial
+    likelihood requires but which is not a molecular proportion when D and S
+    differ in length: a longer set collects proportionally more reads at equal
+    molar concentration. Dividing each count by its feature length first gives
+
+        (D/len_d) / (D/len_d + S/len_s)
+
+    which reduces to the closed form below, so no recounting is needed. Under
+    uniform coverage this reads as the fraction of MOLECULES following the
+    distinct path, and is therefore comparable across partitions and genes.
+    Same form as grase::pi_perbase().
+    """
+    den = pi * len_s + (1.0 - pi) * len_d
+    return (pi * len_s / den) if den > 0 else None
+
+
 def resolve_gene(gene, gffdir):
     hits = sorted(glob.glob(os.path.join(gffdir, f"{gene}*.dexseq.gff")))
     if not hits:
@@ -170,7 +199,16 @@ def main():
     ap.add_argument("--comparison", default=None,
                     help="diff1_vs_ref | diff2_vs_ref; default = most significant")
     ap.add_argument("--gffdir", default="~/DICE/dexseq.gff")
+    ap.add_argument("--raw", action="store_true",
+                    help="plot the raw count ratio y_D/(y_D+y_S) instead of the "
+                         "length-normalized per-base proportion (the default). "
+                         "Raw is what the test is fitted on; per-base is what is "
+                         "comparable across partitions and genes.")
     ap.add_argument("--bipdir", default="~/DICE/bipartition.filtered")
+    ap.add_argument("--feature_contrast", default=None,
+                    help="contrast to quote in the panel-D caption, e.g. "
+                         "MONO.CLASSIC_vs_CD8. Default: the CALLED contrast "
+                         "with the largest |delta_pi|.")
     ap.add_argument("--mark_parts", default="",
                     help="annotate named exonic parts in panel A with a bracket and "
                          "label, e.g. 'E019:A,E020:A,E021:B,E022:B,E024:C' to mark the "
@@ -323,12 +361,34 @@ def main():
         best[c] = pa
     missing = [c for c in conds if c not in pi]
     if missing: sys.exit(f"no pi for conditions: {missing}")
+
+    # Length-normalize unless --raw. The tested quantity is the count ratio, but
+    # D and S routinely differ in length, which inflates it by the length ratio
+    # and makes it incomparable between partitions. Per-base is the default so
+    # the axis agrees with what the text of a case study quotes.
+    perbase = not a.raw
+    len_D = set_length(tested_D, coords)
+    len_S = set_length(S, coords)
+    if perbase and (len_D is None or len_S is None):
+        # a junction-substituted side has no length, so per-base is undefined
+        why = "distinct set is a junction (no length)" if len_D is None \
+              else "reference set did not resolve against the GFF"
+        print(f"  per-base pi undefined: {why}; plotting the raw ratio")
+        perbase = False
+    if perbase:
+        conv = {c: pi_perbase(v, len_D, len_S) for c, v in pi.items()}
+        if any(v is None for v in conv.values()):
+            print("  per-base pi undefined for some conditions; plotting raw")
+        else:
+            pi = conv
+            print(f"  per-base pi: len_D {len_D} bp, len_S {len_S} bp")
     # the full call rule, matching panel B's stars and add_significant(): padj
     # AND lfc_diff_net > 0 AND |delta_pi| >= dpi. Counting padj alone overstated
     # support (XBP1 event 5: 7 of 10 by padj, 4 under the rule).
-    nsig = sum(1 for r in rows
-               if r["contrast"] in best and r["comparison"] == comp
-               and is_sig(r))
+    sig_contrasts = [r["contrast"] for r in rows
+                     if r["contrast"] in best and r["comparison"] == comp
+                     and is_sig(r)]
+    nsig = len(sig_contrasts)
 
     bips = read_bipartitions(bipdir, gv, [k.strip() for k in a.stack_kinds.split(",")])
     stack = []
@@ -517,7 +577,9 @@ def main():
                         fontsize=9)
     axC.set_ylim(min(vals) - max(span, .05) * .30, max(vals) + max(span, .05) * .30)
     # wrap long y-labels so they are not clipped at the figure edge
-    yl = a.ylab or f"path proportion $\\pi$\nof distinct {which_D}"
+    yl = a.ylab or ((f"per-base path proportion $\\pi$\nof distinct {which_D}")
+                    if perbase else
+                    (f"path proportion $\\pi$ (raw)\nof distinct {which_D}"))
     if len(yl) > 26 and "\n" not in yl:
         w = yl.split(" "); half = len(yl) // 2; cur = 0; out = []
         for t in w:
@@ -532,9 +594,37 @@ def main():
     axD.text(0, .95, sym + (f"\n({a.note})" if a.note else ""), fontsize=9.5, va="top")
     desc = a.desc or f"distinct {which_D} {tested_D}\nagainst shared S {S}"
     axD.text(0, .64, desc, fontsize=8.5, va="top")
-    lo_c, hi_c = conds[0], conds[-1]
-    axD.text(0, .34, f"$\\pi$ {pi[lo_c]:.3f} ({lo_c}) $\\rightarrow$ {pi[hi_c]:.3f} ({hi_c})\n"
-                     f"significant (exontest.R call) in {nsig} of {len(best)} contrasts",
+    # Report pi for a CALLED contrast and name it. Previously this printed the
+    # first and last entries of --conditions, which is an arbitrary pair: for
+    # XBP1 it showed B -> MONO.CLASSIC while the only call was NK vs B, so the
+    # figure quoted numbers from a comparison that was not significant.
+    if sig_contrasts:
+        # Quote the called contrast with the LARGEST |delta_pi|, not the first
+        # in file order, which is arbitrary. --feature_contrast overrides.
+        if a.feature_contrast and a.feature_contrast in sig_contrasts:
+            shown = a.feature_contrast
+        else:
+            if a.feature_contrast:
+                sys.stderr.write(
+                    f"note: --feature_contrast {a.feature_contrast} is not among the "
+                    f"called contrasts {sig_contrasts}; using the largest effect\n")
+            dpi_of = {}
+            for r in rows:
+                if r["contrast"] in sig_contrasts and r["comparison"] == comp:
+                    try: dpi_of[r["contrast"]] = abs(float(r["delta_pi"]))
+                    except (ValueError, TypeError): pass
+            shown = max(sig_contrasts, key=lambda c: dpi_of.get(c, 0.0))
+        t_c, _, r_c = shown.partition("_vs_")
+        head = (f"$\\pi$ {pi[r_c]:.3f} ({r_c}) $\\rightarrow$ {pi[t_c]:.3f} ({t_c})"
+                f"   [{shown.replace('_vs_', ' vs ')}]")
+        if nsig > 1:
+            head += f"\nand {nsig - 1} other called contrast(s)"
+    else:
+        lo_c, hi_c = conds[0], conds[-1]
+        head = (f"$\\pi$ {pi[lo_c]:.3f} ({lo_c}) $\\rightarrow$ {pi[hi_c]:.3f} ({hi_c})"
+                f"   [no contrast called; range shown]")
+    axD.text(0, .34, head + f"\nsignificant (exontest.R call) in {nsig} of "
+                            f"{len(best)} contrasts",
              fontsize=8.5, va="top")
 
     # A side whose exonic distinct set is EMPTY contributes no exonic parts to
@@ -623,8 +713,10 @@ def main():
             start_edge, end_edge = (outer_hi, outer_lo) if strand == "-" else (outer_lo, outer_hi)
             if nodes[0] == "R":
                 r_x = node_x("R")
+                # finer dots: dot diameter scales with lw for ":" style, and
+                # an explicit dash pattern keeps them from merging at this width
                 axE.plot(sorted([r_x, start_edge]), [yy, yy], ":", color=CB[grp],
-                         lw=1.6, zorder=2)
+                         lw=0.9, dashes=(0.8, 1.6), dash_capstyle="round", zorder=2)
                 if r_x <= start_edge:
                     axE.annotate("R ->", (r_x, yy), xytext=(-3, 0), ha="right",
                                  va="center", textcoords="offset points",
@@ -637,7 +729,7 @@ def main():
             if end_label == "L":
                 l_x = node_x("L")
                 axE.plot(sorted([end_edge, l_x]), [yy, yy], ":", color=CB[grp],
-                         lw=1.6, zorder=2)
+                         lw=0.9, dashes=(0.8, 1.6), dash_capstyle="round", zorder=2)
                 if l_x >= end_edge:
                     axE.annotate("-> L", (l_x, yy), xytext=(3, 0), ha="left",
                                  va="center", textcoords="offset points",
@@ -646,11 +738,11 @@ def main():
                     axE.annotate("L <-", (l_x, yy), xytext=(-3, 0), ha="right",
                                  va="center", textcoords="offset points",
                                  fontsize=5.5, color="#555555")
-            else:
-                out = 1 if end_edge >= start_edge else -1
-                axE.annotate(end_label, (end_edge, yy), xytext=(5 * out, 0),
-                             textcoords="offset points", fontsize=5.5, va="center",
-                             ha="left" if out > 0 else "right")
+            # Interior node numbers (the bubble's sink when it is not L) are
+            # NOT labelled: they are internal graph bookkeeping, carry no
+            # meaning for a reader, and were the most distracting mark on the
+            # panel. Only R and L are annotated, since those say something --
+            # the route reaches the transcript start or end.
             axE.annotate(grp, (-.9, yy), ha="right", va="center",
                          fontsize=5.5, color=CB[grp], annotation_clip=False)
         axE.set_yticks([]); axE.set_xticks([])

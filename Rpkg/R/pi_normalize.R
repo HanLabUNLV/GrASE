@@ -73,6 +73,26 @@ feature_length <- function(part_str, lens) {
 }
 
 
+#' Locate a gene's DEXSeq GFF under either supported layout
+#'
+#' Two layouts are in use and both must work, because the same package annotates
+#' both projects:
+#'   flat    \code{<dir>/<gene>.dexseq.gff}            (GrASE_simulation/dexseq.gff)
+#'   nested  \code{<dir>/<gene>/<gene>.dexseq.gff}     (DICE grase_results/gene_files)
+#'
+#' @param gff_dir Directory holding per-gene GFFs in either layout.
+#' @param gene Gene id.
+#' @return Path to the GFF, or NA_character_ if neither layout resolves.
+#' @export
+gene_gff_path <- function(gff_dir, gene) {
+  flat <- file.path(gff_dir, paste0(gene, ".dexseq.gff"))
+  if (file.exists(flat)) return(flat)
+  nested <- file.path(gff_dir, gene, paste0(gene, ".dexseq.gff"))
+  if (file.exists(nested)) return(nested)
+  NA_character_
+}
+
+
 #' Annotate a results table with per-base pi
 #'
 #' Adds \code{len_D}, \code{len_S}, \code{pi_ref_perbase},
@@ -91,10 +111,16 @@ annotate_pi_perbase <- function(res, gff_dir) {
   res$len_D <- NA_real_
   res$len_S <- NA_real_
   cache <- new.env(parent = emptyenv())
+  ## A gene with no GFF yields the same NA as a junction side, and the two mean
+  ## different things -- one is undefined by nature, the other is missing input.
+  ## Track it so the gap is reported rather than absorbed into the NA count.
+  unresolved <- character(0)
   for (g in unique(res$gene)) {
     lens <- cache[[g]]
     if (is.null(lens)) {
-      lens <- part_lengths_from_gff(file.path(gff_dir, paste0(g, ".dexseq.gff")))
+      p <- gene_gff_path(gff_dir, g)
+      if (is.na(p)) unresolved <- c(unresolved, g)
+      lens <- if (is.na(p)) numeric(0) else part_lengths_from_gff(p)
       cache[[g]] <- lens
     }
     if (!length(lens)) next
@@ -103,6 +129,14 @@ annotate_pi_perbase <- function(res, gff_dir) {
     res$len_S[i] <- vapply(res$ref_ex_part[i], feature_length, numeric(1),
                            lens = lens)
   }
+  if (length(unresolved))
+    warning(sprintf(paste0("no DEXSeq GFF found for %d of %d genes under '%s' ",
+                           "(%d rows left NA for want of lengths, not because ",
+                           "the side is a junction); e.g. %s"),
+                    length(unresolved), length(unique(res$gene)), gff_dir,
+                    sum(res$gene %in% unresolved),
+                    paste(utils::head(unresolved, 3), collapse = ", ")),
+            call. = FALSE)
   res$pi_ref_perbase   <- pi_perbase(res$pi_ref, res$len_D, res$len_S)
   res$pi_trt_perbase   <- pi_perbase(res$pi_trt, res$len_D, res$len_S)
   res$delta_pi_perbase <- res$pi_trt_perbase - res$pi_ref_perbase

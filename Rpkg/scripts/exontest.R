@@ -24,6 +24,8 @@ option_list = list(
               help="output directory that contains the test results", metavar="character"),
   make_option(c("-c", "--countdir"), type="character", 
               help="count dir that contains the count and split files by gene", metavar="character"),
+  make_option(c("--gff_dir"), type="character", default=NULL,
+              help="dir of per-gene DEXSeq GFFs, flat <gene>.dexseq.gff or nested <gene>/<gene>.dexseq.gff. Supplying it adds length-normalized (per-base) pi to the annotated output", metavar="character"),
   make_option(c("-s", "--splittype"), type="character", 
               help="split type: bipartition or multinomial or n_choose_2", metavar="character"),
   make_option(c("-p", "--phi"), type="character",
@@ -178,13 +180,27 @@ if (file.exists(exoncnt_master)) {
   ## build d_support = max over the two groups of each contrast, which gates the
   ## significance call (see --min_reads). Computed here because splitcnts is
   ## dropped later, and kept small: one row per gene/event/side/group.
-  d_grp <- bind_rows(
-    splitcnts %>% group_by(gene, event, groups) %>%
-      summarise(m = mean(diff1, na.rm = TRUE), .groups = "drop") %>% mutate(side = "diff1"),
-    splitcnts %>% group_by(gene, event, groups) %>%
-      summarise(m = mean(diff2, na.rm = TRUE), .groups = "drop") %>% mutate(side = "diff2"))
-  d_grp$gene <- as.character(d_grp$gene); d_grp$event <- as.character(d_grp$event)
-  message(sprintf("Support table: %d (gene,event,side,group) means", nrow(d_grp)))
+  ## Only the bipartition / n_choose_2 count schema has diff1 and diff2. The
+  ## multinomial counts are long format (event, sample, count, type, exon_part,
+  ## gene, groups) with no distinct/reference split, so there is no "the tested
+  ## distinct count" to average and the read floor has no definition here.
+  ## Leave d_grp NULL: add_support() then returns res unchanged, d_support is
+  ## absent, and is_significant()'s sup_ok falls back to TRUE, i.e. the floor is
+  ## simply not applied. Without this guard the block aborted with
+  ## "object 'diff1' not found" before any test ran.
+  if (all(c("diff1", "diff2") %in% names(splitcnts))) {
+    d_grp <- bind_rows(
+      splitcnts %>% group_by(gene, event, groups) %>%
+        summarise(m = mean(diff1, na.rm = TRUE), .groups = "drop") %>% mutate(side = "diff1"),
+      splitcnts %>% group_by(gene, event, groups) %>%
+        summarise(m = mean(diff2, na.rm = TRUE), .groups = "drop") %>% mutate(side = "diff2"))
+    d_grp$gene <- as.character(d_grp$gene); d_grp$event <- as.character(d_grp$event)
+    message(sprintf("Support table: %d (gene,event,side,group) means", nrow(d_grp)))
+  } else {
+    d_grp <- NULL
+    message(sprintf("No diff1/diff2 columns (splittype=%s): --min_reads=%g NOT applied",
+                    split, min_reads))
+  }
 
   ## L: a NAMED LIST of contrast matrices, columns = "groups<level>".
   ## A pairwise contrast is one row (+1 trt, -1 ref) and reproduces the former
@@ -894,6 +910,26 @@ message(paste("Loaded split data for", length(unique(splits$gene)), "genes."))
 message("Merging data...")
 merged_data <- left_join(tests, splits, by = c("gene", "event"))
 message(paste("Merged dataset has", nrow(merged_data), "rows."))
+
+# Length-normalized pi. This belongs HERE, not in a post-hoc script: the merge
+# above is the first point where setdiff1/setdiff2/ref_ex_part exist, and those
+# are what the per-part lengths are summed over. Computing it anywhere later
+# means re-reading the table and re-resolving the same annotation.
+# Raw pi/delta_pi are untouched -- the beta-binomial likelihood is defined on
+# counts, so the raw ratio stays the tested quantity and no call moves.
+if (!is.null(opt$gff_dir)) {
+  message("Adding length-normalized pi from ", opt$gff_dir, " ...")
+  merged_data <- annotate_pi_perbase(merged_data, path.expand(opt$gff_dir))
+  ok <- !is.na(merged_data$delta_pi_perbase)
+  message(sprintf("  per-base pi resolved for %d of %d rows (%.1f%%)",
+                  sum(ok), nrow(merged_data), 100 * mean(ok)))
+  if (!any(ok))
+    warning("no row resolved a per-base pi -- check --gff_dir layout; ",
+            "expected <gene>.dexseq.gff or <gene>/<gene>.dexseq.gff")
+} else {
+  message("--gff_dir not given: annotated output will carry raw pi only ",
+          "(no pi_ref_perbase/delta_pi_perbase columns)")
+}
 
 # `significant` was set before the annotation merge, where setdiff1/setdiff2 did
 # not exist yet, so every row got the exonic min_dpi. Now that the merge has
