@@ -20,7 +20,7 @@ GrASE (**Gr**aph of **A**lternative **S**plice Junctions and **E**xonic Parts) i
 
 **Filtering by event class.** Bubbles touching the leftmost graph node (L representing the Transcription Start Site) and the rightmost graph node (R representing the Transcription Termination Site) are classified as alternative TSS/TTS events; all others are internal alternative splicing events. Both categories are tested independently.
 
-**Statistical models.** Differential exon usage is tested with a beta-binomial model (via glmmTMB or VGAM), with overdispersion (phi) regularised with Empirical Bayes shrinkage. A non-parametric Wilcoxon fallback is also available.
+**Statistical models.** For bipartition and n_choose_2 splits, differential exon usage is tested with a beta-binomial model (via glmmTMB), with overdispersion (phi) regularised by Empirical Bayes shrinkage. Multinomial splits use a Dirichlet-multinomial model with EB-moderated precision. A non-parametric Wilcoxon fallback is also available.
 
 **Workflow.** The five-stage pipeline goes from raw per-gene splicing graphs (GraphML) → bubble enumeration → event-type filtering → DEXSeq count aggregation → statistical testing. It ingests DEXSeq per-sample read counts directly and can compare its results to rMATS or DEXSeq output.
 
@@ -36,6 +36,9 @@ R packages:
 * GenomicFeatures (1.52.0)
 * AnnotationDbi (1.62.2)
 * DEXSeq (1.46.0)
+* glmmTMB
+* optparse
+* tidyverse
 
 Python packages:
 * python3 (3.11.5)
@@ -50,7 +53,7 @@ Other packages:
 
 ## Quick Start
 
-The full workflow is documented in the package vignette (`vignette("grase-workflow", package = "grase")`). This section gives a concise end-to-end example using the recommended bipartition split and `glmmTMB_fixedEB` model.
+The full workflow is documented in the package vignette (`vignette("grase-workflow", package = "grase")`). This section gives a concise end-to-end example using the recommended bipartition split and `betabinom_EBapprox` model.
 
 ### Stage 0 — Prepare input files
 
@@ -73,6 +76,7 @@ ls ${WD}/gtf | sed 's/\.gtf$//' | \
         ${WD}/gtf/{}.gtf ${WD}/dexseq.gff/{}.dexseq.gff"
 
 # Build igraph splicing graphs from GTF + DEXSeq GFF
+# (reads the gene IDs to process from ${WD}/ref/genelist, one per line)
 Rscript scripts/generate_graphs.R --indir ${WD}
 ```
 
@@ -80,6 +84,7 @@ Expected input layout:
 
 ```
 ~/GrASE_simulation/
+├── ref/genelist  gene IDs to build graphs for (one per line)
 ├── gtf/          ENSG*.gtf          (one per gene)
 ├── dexseq.gff/   ENSG*.dexseq.gff
 ├── graphml/      ENSG*.graphml      (produced by generate_graphs.R)
@@ -120,32 +125,50 @@ Rscript scripts/exoncnt.R \
     -o ${WD}/bipartition.internal.counts
 ```
 
-### Stage 4 — Test for differential exon usage
+This also writes the combined master file `bipartition.internal.exoncnt.combined.txt` into the output directory, which Stage 4 reads. For TSS/TTS events use `-a TSS` (output `bipartition.TSSTTS.exoncnt.combined.txt`). For more than two groups, pass `--conditions=A,B,C` instead of `--cond1/--cond2`.
+
+### Stage 4 - Test for differential exon usage
 
 ```bash
 Rscript scripts/exontest.R \
     --file=bipartition.internal.exoncnt.combined.txt \
     --outdir=${WD}/bipartition.test \
     --countdir=${WD}/bipartition.internal.counts/ \
+    --gff_dir=${WD}/dexseq.gff \
     --splittype=bipartition \
-    --phi=phi.glmmtmb.internal.txt \
-    --model=glmmTMB_fixedEB \
+    --phi=phi.internal.txt \
+    --model=betabinom_EBapprox \
+    --use_phi_loess \
     --cond1=group1 --cond2=group2
 ```
 
-Available models: `glmmTMB_fixedEB` (recommended), `glmmTMB_prior`, `VGAM_MLE_EB_init`, `wilcoxon`.
+`--phi` names a file inside `--outdir`. If it does not exist, phi is estimated and written there; if it does, it is reused, so use a fresh name (or outdir) whenever the counts change. `--gff_dir` is optional and adds length-normalized (per-base) pi columns to the annotated output.
+
+Available models:
+
+| Model | Split types | Dispersion input |
+|---|---|---|
+| `betabinom_EBapprox` (recommended) | bipartition, n_choose_2 | `--phi` |
+| `betabinom_EBmap` | bipartition, n_choose_2 | `--phi` |
+| `betabinom_MLE` | bipartition, n_choose_2 | none (no shrinkage) |
+| `wilcoxon` | bipartition, n_choose_2 | none |
+| `dirmult_EBplugin` | multinomial | `--prec` |
+
+Commonly used options (defaults in brackets): `--padj_threshold` [0.01], `--min_dpi` [0.1], `--min_reads` [10], `--padj_method` [nested_BH], `--mc_cores` [32], `--contrasts=B:A,C:A` for several pairwise contrasts (or `A+B+C` for an omnibus test, betabinom models only). Independent filtering is on by default; `--no_independent_filtering` turns it off. Run `Rscript scripts/exontest.R --help` for the full list.
 
 ### Reading results
 
 ```r
 results <- read.table(
-    "~/GrASE_simulation/bipartition.test/test_bipartition.internal_glmmTMB_MAP_prior.mincomb.annotated.txt",
+    "~/GrASE_simulation/bipartition.test/test_bipartition.internal_betabinom_EBapprox.mincomb.annotated.txt",
     header = TRUE, sep = "\t"
 )
-sig <- results[!is.na(results$padj) & results$padj < 0.05, ]
-head(sig[, c("gene", "event", "p.value", "padj", "setdiff", "ref")])
+sig <- results[results$significant %in% TRUE, ]
+head(sig[, c("gene", "event", "source", "sink", "p.value", "padj", "delta_pi", "setdiff1", "setdiff2")])
 ```
 
-Key output columns: `gene`, `event` (bubble identifier as `{gene}_{source}_{sink}`), `p.value`, `padj` (BH-adjusted), `setdiff` (exonic parts distinguishing the two paths), `ref` (shared reference parts).
+Output files are named `test_{prefix}_{model}.txt`, with `.annotated.txt`, `.mincomb.annotated.txt` (one row per event, min-p across sides) and `.fisher_combined.annotated.txt` variants; `{prefix}` is the first two dot-fields of `--file` (e.g. `bipartition.internal`).
+
+Key output columns: `gene`, `event` (bubble number within the gene), `source`/`sink` (bubble boundary nodes), `contrast`, `p.value`, `padj`, `delta_pi` (change in path proportion), `significant` (padj below `--padj_threshold`, `|delta_pi|` at least `--min_dpi`, and at least `--min_reads` reads in one group), `setdiff1`/`setdiff2` (exonic parts distinguishing each path), `ref_ex_part` (shared reference parts).
 
 See the vignette for the full option reference, all three split types, TSS/TTS events, and comparison with rMATS/Saturn.
