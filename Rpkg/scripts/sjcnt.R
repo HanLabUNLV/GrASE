@@ -29,11 +29,21 @@ option_list <- list(
               default="bipartition",
               help="partition type: bipartition | n_choose_2 | multinomial [default: bipartition]"),
   make_option(c("--multi"),         action="store_true", default=FALSE,
-              help="add n_multi to n_uniq counts (default: n_uniq only)")
+              help="add n_multi to n_uniq counts (default: n_uniq only)"),
+  make_option(c("--mc_cores"), type="integer", default=NULL,
+              help="parallel workers [default: mc.cores option, else min(detectCores(), 8)]",
+              metavar="integer")
 )
 
 opt_parser <- OptionParser(option_list=option_list)
 opt        <- parse_args(opt_parser)
+
+## Cores: explicit --mc_cores, else the mc.cores option, else a portable cap.
+## Never detectCores() unbounded -- this box reports 188 and a laptop reports 4,
+## and the previous hard-coded value was wrong for both.
+mc_cores <- if (!is.null(opt$mc_cores)) as.integer(opt$mc_cores) else
+  as.integer(getOption("mc.cores", max(1L, min(parallel::detectCores(), 8L))))
+message("Using ", mc_cores, " cores.")
 print(opt)
 
 if (!is.null(opt$splits))  splits_file   <- path.expand(opt$splits)
@@ -94,7 +104,7 @@ res <- mclapply(names(splits_list), function(gid) {
     cat(msg, file="sjcnt.errors.log", append=TRUE)
     NULL
   })
-}, mc.cores=32)
+}, mc.cores=mc_cores)
 
 
 # concatenate per-gene output files

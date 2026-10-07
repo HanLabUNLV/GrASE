@@ -7,11 +7,21 @@ library(optparse)
 # Parse command line arguments
 option_list <- list(
   make_option(c("-i", "--indir"), type="character", default=NULL,
-              help="Input directory path", metavar="character")
+              help="Input directory path", metavar="character"),
+  make_option(c("--mc_cores"), type="integer", default=NULL,
+              help="parallel workers [default: mc.cores option, else min(detectCores(), 8)]",
+              metavar="integer")
 )
 
 opt_parser <- OptionParser(option_list=option_list)
 opt <- parse_args(opt_parser)
+
+## Cores: explicit --mc_cores, else the mc.cores option, else a portable cap.
+## Never detectCores() unbounded -- this box reports 188, a laptop reports 4,
+## and the old hard-coded value was wrong for both.
+mc_cores <- if (!is.null(opt$mc_cores)) as.integer(opt$mc_cores) else
+  as.integer(getOption("mc.cores", max(1L, min(parallel::detectCores(), 8L))))
+message("Using ", mc_cores, " cores.")
 
 if (is.null(opt$indir)) {
   print_help(opt_parser)
@@ -26,7 +36,6 @@ if (!dir.exists(graphdir)) {
 genes <- read.table(paste0(indir,"/ref/genelist"), header=FALSE)
 print(head(genes))
 
-num_cores <- 20
 
 process_gene <- function(gene) {
   tryCatch({
@@ -63,4 +72,4 @@ process_gene <- function(gene) {
   })
 }
 
-results <- mclapply(genes$V1, process_gene, mc.cores = num_cores)
+results <- mclapply(genes$V1, process_gene, mc.cores = mc_cores)

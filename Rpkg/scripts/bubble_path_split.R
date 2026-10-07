@@ -15,11 +15,21 @@ option_list <- list(
   make_option(c("-n", "--genename"), type="character", default=NULL,
               help="single gene name to process (optional)", metavar="character"),
   make_option(c("-c", "--collapse"), action="store_true", default=FALSE,
-              help="collapse bubbles after processing (default: FALSE)")
+              help="collapse bubbles after processing (default: FALSE)"),
+  make_option(c("--mc_cores"), type="integer", default=NULL,
+              help="parallel workers [default: mc.cores option, else min(detectCores(), 8)]",
+              metavar="integer")
 )
 opt = ''
 opt_parser <- OptionParser(option_list=option_list)
 opt <- parse_args(opt_parser)
+
+## Cores: explicit --mc_cores, else the mc.cores option, else a portable cap.
+## Never detectCores() unbounded -- this box reports 188 and a laptop reports 4,
+## and the previous hard-coded value was wrong for both.
+mc_cores <- if (!is.null(opt$mc_cores)) as.integer(opt$mc_cores) else
+  as.integer(getOption("mc.cores", max(1L, min(parallel::detectCores(), 8L))))
+message("Using ", mc_cores, " cores.")
 
 if (is.null(opt$graphdir)) {
   print_help(opt_parser)
@@ -58,7 +68,6 @@ if (!is.null(opt$genename)) {
   message(paste("Processing", length(gene_names), "genes from directory"))
 }
 
-num_cores <- 20
 
 split_bipartition <- function(gene) {
   tryCatch({
@@ -206,25 +215,25 @@ if ( split == 'bipartition') {
   if (length(gene_names) == 1) {
     results <- split_bipartition(gene_names)
   } else {
-    results <- mclapply(gene_names, split_bipartition, mc.cores = num_cores)
+    results <- mclapply(gene_names, split_bipartition, mc.cores = mc_cores)
   }
 } else if (split == 'multinomial') {
   if (length(gene_names) == 1) {
     results <- split_multinomial(gene_names)
   } else {
-    results <- mclapply(gene_names, split_multinomial, mc.cores = num_cores)
+    results <- mclapply(gene_names, split_multinomial, mc.cores = mc_cores)
   }
 } else if (split == 'n_choose_2') {
   if (length(gene_names) == 1) {
     results <- split_n_choose_2(gene_names)
   } else {
-    results <- mclapply(gene_names, split_n_choose_2, mc.cores = num_cores)
+    results <- mclapply(gene_names, split_n_choose_2, mc.cores = mc_cores)
   }
 } else if (split == 'bubble') {
   if (length(gene_names) == 1) {
     results <- print_bubbles(gene_names)
   } else {
-    results <- mclapply(gene_names, print_bubbles, mc.cores = num_cores)
+    results <- mclapply(gene_names, print_bubbles, mc.cores = mc_cores)
   }
 } else {
   stop("Split method (--split) must be specified among 'bipartition', 'multinomial' or 'n_choose_2'.", call.=FALSE)

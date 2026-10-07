@@ -68,7 +68,7 @@ make_option(c("--use_prec_loess"), action="store_true", default=FALSE,
                          "[default: 0.05]"), metavar="double"),
   make_option(c("--min_dpi"), type="double", default=0.1,
               help="minimum |delta_pi| (path proportion effect size) for the significant column; events with |delta_pi| < min_dpi are not significant [default: 0.1]", metavar="double"),
-  make_option(c("--mc_cores"), type="integer", default=32L,
+  make_option(c("--mc_cores"), type="integer", default=NULL,
               help="number of parallel worker processes for mclapply [default: %default]", metavar="integer")
 );
  
@@ -150,7 +150,9 @@ if (any(vapply(contrasts, function(ct) identical(ct$type, "omnibus"), logical(1)
 phi_trend        <- isTRUE(opt$use_phi_loess)
 indep_filter     <- isTRUE(opt$independent_filtering)
 pseudocount      <- as.integer(opt$pseudocount)
-mc_cores         <- as.integer(opt$mc_cores)
+mc_cores         <- if (!is.null(opt$mc_cores)) as.integer(opt$mc_cores) else
+  as.integer(getOption("mc.cores", max(1L, min(parallel::detectCores(), 8L))))
+## Was hard-coded 32. Portable default now; pass --mc_cores on a big machine.
 prec_trend       <- isTRUE(opt$use_prec_loess)
 padj_thr         <- as.double(opt$padj_threshold)
 delta            <- as.double(opt$delta)

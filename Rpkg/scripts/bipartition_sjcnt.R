@@ -28,7 +28,7 @@ option_list <- list(
   make_option(c("-t", "--type"),      type="character", metavar="character",
               default="internal",
               help="bipartition type suffix to match: internal | TSSTTS [default: internal]"),
-  make_option(c("-c", "--cores"),     type="integer",   default=32L,
+  make_option(c("-c", "--cores"),     type="integer",   default=NULL,
               metavar="integer",
               help="number of parallel cores [default: 32]"),
   make_option(c("--multi"),           action="store_true", default=FALSE,
@@ -36,8 +36,9 @@ option_list <- list(
   make_option(c("--combine"),         action="store_true", default=FALSE,
               help=paste("also write bipartition.sjcnt.combined.txt.",
                          "OFF by default: merge_exon_sj_counts.R reads the",
-                         "PER-GENE files, and only the abandoned exontest.sj.R",
-                         "path ever consumed the combined one. On DICE it was",
+                         "PER-GENE files, and only the abandoned SJ-only test",
+                         "ever consumed the combined one (deleted 2026-10-07).",
+                         "On DICE it was",
                          "74.6 GB of output that nothing downstream read"))
 )
 
@@ -63,6 +64,9 @@ all_conditions <- all_conditions[nzchar(all_conditions)]
 output_dir  <- path.expand(opt$output)
 bp_type     <- opt$type
 n_cores     <- opt$cores
+if (is.null(n_cores)) n_cores <- as.integer(getOption("mc.cores",
+  max(1L, min(parallel::detectCores(), 8L))))   ## portable default; 188 cores here, 4 on a laptop
+
 use_multi   <- isTRUE(opt$multi)
 
 if (!dir.exists(output_dir)) dir.create(output_dir, recursive=TRUE)
