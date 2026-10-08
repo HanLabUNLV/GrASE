@@ -51,6 +51,20 @@ Python packages:
 Other packages:
 * STAR   (optional - 2.7.10b)
 
+## Installation
+
+```bash
+git clone https://github.com/HanLabUNLV/GrASE.git
+cd GrASE
+R CMD INSTALL Rpkg
+```
+
+Install the R and Python dependencies listed above first.
+
+The pipeline scripts are run from the clone (`Rpkg/scripts/`); the installed
+package provides the library that those scripts load, plus the bundled DEXSeq
+helpers. The commands below assume you are in `Rpkg/`.
+
 ## Quick Start
 
 The full workflow is documented in the package vignette (`vignette("grase-workflow", package = "grase")`). This section gives a concise end-to-end example using the recommended bipartition split and `betabinom_EBapprox` model.
@@ -110,6 +124,7 @@ Split the genome GTF by gene, build per-gene DEXSeq GFF files, and generate igra
 
 ```bash
 WD=~/GrASE_simulation
+mkdir -p ${WD}/{ref,gtf,dexseq.gff,graphml}
 
 # Split full GTF into per-gene files
 awk -v outdir="${WD}/gtf" '{
@@ -119,28 +134,39 @@ awk -v outdir="${WD}/gtf" '{
     }
 }' ${WD}/ref/gencode.annotation.gtf
 
+# Gene list: one Ensembl ID per line, read by generate_graphs.R
+ls ${WD}/gtf | sed 's/\.gtf$//' > ${WD}/ref/genelist
+
 # Both DEXSeq helper scripts ship with grase; resolve them once.
 DEXSEQ_PREP=$(Rscript -e 'cat(system.file("python","dexseq_prepare_annotation.py",package="grase"))')
 DEXSEQ_COUNT=$(Rscript -e 'cat(system.file("python","dexseq_count.py",package="grase"))')
 
 # Build per-gene DEXSeq GFF files
-ls ${WD}/gtf | sed 's/\.gtf$//' | \
-    parallel -j 8 "python $DEXSEQ_PREP \
+cat ${WD}/ref/genelist | \
+    parallel -j 8 -I {} "python $DEXSEQ_PREP \
         ${WD}/gtf/{}.gtf ${WD}/dexseq.gff/{}.dexseq.gff"
+
+# Concatenate them into the single GFF the counter reads. Build it this way,
+# NOT by running dexseq_prepare_annotation.py on the whole genome GTF: a
+# genome-wide run merges overlapping genes into ENSG1+ENSG2 groups and
+# renumbers their parts, so the counts would no longer join to the graphs.
+cat ${WD}/dexseq.gff/*.dexseq.gff > ${WD}/ref/gencode.dexseq.bygene.gff
 
 # Count reads on exonic parts, one file per sample, grouped by condition.
 # Flags are protocol-specific and fail silently if wrong: --paired no for
 # single-end, --stranded reverse for dUTP (TruSeq Stranded). See the vignette.
-for bam in ${WD}/bam/group1/*.bam; do
-    s=$(basename "${bam%.bam}")
-    python $DEXSEQ_COUNT --format bam --order pos \
-        --paired yes --stranded reverse -a 10 \
-        ${WD}/ref/gencode.dexseq.bygene.gff "$bam" \
-        ${WD}/DEXSeq/count_files/group1/${s}_counts.txt
+for cond in group1 group2; do
+    mkdir -p ${WD}/DEXSeq/count_files/${cond}
+    for bam in ${WD}/bam/${cond}/*.bam; do
+        s=$(basename "${bam%.bam}")
+        python $DEXSEQ_COUNT --format bam --order pos \
+            --paired yes --stranded reverse -a 10 \
+            ${WD}/ref/gencode.dexseq.bygene.gff "$bam" \
+            ${WD}/DEXSeq/count_files/${cond}/${s}_counts.txt
+    done
 done
 
 # Build igraph splicing graphs from GTF + DEXSeq GFF
-# (reads the gene IDs to process from ${WD}/ref/genelist, one per line)
 Rscript scripts/generate_graphs.R --indir ${WD}
 ```
 
@@ -191,6 +217,34 @@ Rscript scripts/exoncnt.R \
 
 This also writes the combined master file `bipartition.internal.exoncnt.combined.txt` into the output directory, which Stage 4 reads. For TSS/TTS events use `-a TSS` (output `bipartition.TSSTTS.exoncnt.combined.txt`). For more than two groups, pass `--conditions=A,B,C` instead of `--cond1/--cond2`.
 
+### Stage 3b. Substitute junction counts where a distinct set is empty (optional)
+
+Some bipartitions have no exonic part exclusive to one side, so that side cannot
+be tested on exonic coverage. For those sides only, the distinct set becomes the
+intron edges exclusive to that side, counted from STAR split reads; the shared
+reference is never changed. In the published run this applied to 28.5% of tests.
+
+```bash
+Rscript scripts/bipartition_sjcnt.R \
+    --inputdir   ${WD}/bipartition.filtered \
+    --graphmldir ${WD}/graphml \
+    --gff        ${WD}/ref/gencode.dexseq.bygene.gff \
+    --sjdir      ${WD}/STAR \
+    --cond1 group1 --cond2 group2 \
+    --output     ${WD}/sjcnt \
+    --type       internal
+
+Rscript scripts/merge_exon_sj_counts.R \
+    --exon_counts ${WD}/bipartition.internal.counts \
+    --sj_counts   ${WD}/sjcnt \
+    --output      ${WD}/bipartition.merged.counts
+```
+
+`--sjdir` holds STAR `SJ.out.tab` files. Run the counting once per event type;
+`--type internal` and `--type TSSTTS` write per-gene files with the same name, so
+they need separate `--output` directories. If you use this, point Stage 4 at the
+merged directory instead of the exonic one.
+
 ### Stage 4. Test for differential exon usage
 
 ```bash
@@ -218,13 +272,13 @@ Available models:
 | `wilcoxon` | bipartition, n_choose_2 | none |
 | `dirmult_EBplugin` | multinomial | `--prec` |
 
-Commonly used options (defaults in brackets): `--padj_threshold` [0.01], `--min_dpi` [0.1], `--min_reads` [10], `--padj_method` [nested_BH], `--mc_cores` [32], `--contrasts=B:A,C:A` for several pairwise contrasts (or `A+B+C` for an omnibus test, betabinom models only). Independent filtering is on by default; `--no_independent_filtering` turns it off. Run `Rscript scripts/exontest.R --help` for the full list.
+Commonly used options (defaults in brackets): `--padj_threshold` [0.01], `--min_dpi` [0.1], `--min_reads` [10], `--padj_method` [nested_BH], `--mc_cores` [min(detectCores(), 8)], `--contrasts=B:A,C:A` for several pairwise contrasts (or `A+B+C` for an omnibus test, betabinom models only). Independent filtering is on by default; `--no_independent_filtering` turns it off. Run `Rscript scripts/exontest.R --help` for the full list.
 
 ### Reading results
 
 ```r
 results <- read.table(
-    "~/GrASE_simulation/bipartition.test/test_bipartition.internal_betabinom_EBapprox.mincomb.annotated.txt",
+    "~/GrASE_simulation/bipartition.test/test_bipartition.internal_betabinom_EBapprox.annotated.txt",
     header = TRUE, sep = "\t"
 )
 sig <- results[results$significant %in% TRUE, ]

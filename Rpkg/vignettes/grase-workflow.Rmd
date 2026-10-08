@@ -56,10 +56,9 @@ BiocManager::install(c(
 install.packages(c("igraph", "glmmTMB", "VGAM", "gtools",
                    "dplyr", "stringr", "optparse", "parallel"))
 
-# Install grase itself
-# install.packages("grase")  # once on CRAN/Bioconductor
-# or from source:
-# devtools::install("path/to/GrASE/Rpkg")
+# Install grase itself, from a clone of the repository:
+#   git clone https://github.com/HanLabUNLV/GrASE.git
+#   R CMD INSTALL GrASE/Rpkg
 ```
 
 ### External tools
@@ -125,7 +124,7 @@ Both need `HTSeq` importable by the interpreter that runs them.
 outdir=~/GrASE_simulation
 
 # Split a genome GTF into per-gene files
-mkdir -p ${outdir}/gtf
+mkdir -p ${outdir}/{ref,gtf,dexseq.gff,graphml}
 awk -v outdir="${outdir}/gtf" '{
     if (match($0, /gene_id "[^"]+"/)) {
         id = substr($0, RSTART+9, RLENGTH-10);
@@ -138,32 +137,42 @@ awk -v outdir="${outdir}/gtf" '{
 ls ${outdir}/gtf | sed 's/\.gtf$//' > ${outdir}/ref/genelist
 
 # Generate DEXSeq GFF files (one per gene, run in parallel)
-mkdir -p ${outdir}/dexseq.gff
 cat ${outdir}/ref/genelist | \
     parallel -j 30 -I {} \
     "python dexseq_prepare_annotation.py \
         ${outdir}/gtf/{}.gtf \
         ${outdir}/dexseq.gff/{}.dexseq.gff"
+
+# Concatenate them into the single GFF the counter reads in Step 0b.
+cat ${outdir}/dexseq.gff/*.dexseq.gff > ${outdir}/ref/gencode.dexseq.bygene.gff
 ```
+
+Build the aggregate by concatenation, not by running
+`dexseq_prepare_annotation.py` on the whole genome GTF. A genome-wide run merges
+overlapping genes into `ENSG1+ENSG2` groups and renumbers their exonic parts, so
+the counts would no longer join to the per-gene graphs. Concatenating per-gene
+output keeps one `aggregate_gene` record per gene and the numbering intact.
 
 **Step 0b. Count reads on exonic parts**
 
 GrASE does not count reads itself. It consumes DEXSeq exonic-part counts, one
 file per sample, laid out under `DEXSeq/count_files/<condition>/`. Use the same
-bundled `dexseq_count.py`, against the per-gene GFFs from Step 0a or the
-aggregated GFF.
+bundled `dexseq_count.py`, against the aggregated GFF from Step 0a.
 
 ```bash
 outdir=~/GrASE_simulation
 
-for bam in ${outdir}/bam/group1/*.bam; do
-    s=$(basename "${bam%.bam}")
-    python dexseq_count.py \
-        --format bam --order pos \
-        --paired yes --stranded reverse -a 10 \
-        ${outdir}/ref/gencode.dexseq.bygene.gff \
-        "$bam" \
-        ${outdir}/DEXSeq/count_files/group1/${s}_counts.txt
+for cond in group1 group2; do
+    mkdir -p ${outdir}/DEXSeq/count_files/${cond}
+    for bam in ${outdir}/bam/${cond}/*.bam; do
+        s=$(basename "${bam%.bam}")
+        python $DEXSEQ_COUNT \
+            --format bam --order pos \
+            --paired yes --stranded reverse -a 10 \
+            ${outdir}/ref/gencode.dexseq.bygene.gff \
+            "$bam" \
+            ${outdir}/DEXSeq/count_files/${cond}/${s}_counts.txt
+    done
 done
 ```
 
