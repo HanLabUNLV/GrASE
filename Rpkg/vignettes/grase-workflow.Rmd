@@ -96,6 +96,13 @@ or equivalent preprocessing steps):
             `-- sample4_counts.txt
 ```
 
+For human GENCODE v28 and v34, Steps 0a and 0c can be skipped entirely. The
+splicing graphs, bipartitions, per-gene GTFs and DEXSeq GFFs are deposited at
+[doi:10.5281/zenodo.23141907](https://doi.org/10.5281/zenodo.23141907). Download
+them, then start at Step 0b and count your BAMs against the `dexseq.gff`
+deposited alongside the graphs. Counting against a GFF you prepared yourself
+will not join: exonic part numbers are assigned per GFF.
+
 grase ships both DEXSeq helper scripts, so an installed package already has them:
 
 ```r

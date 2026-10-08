@@ -58,11 +58,23 @@ The full workflow is documented in the package vignette (`vignette("grase-workfl
 ### Already have graphs and splits?
 
 Stages 0 to 2 depend only on the annotation, not on your samples, so they are
-done once per annotation version. If you already have `graphml/` and the split
-files under `bipartition.filtered/`, the only thing still needed before testing
-is **exon quantification against the same DEXSeq GFF the graphs were built
-from**. Counts made against a different annotation will not join: the exonic
-part numbers (`E001`, `E002`, ...) are assigned by
+done once per annotation version. For human GENCODE v28 and v34 you do not need
+to run them at all: the splicing graphs, bipartitions, per-gene GTFs and DEXSeq
+GFFs are deposited at
+[doi:10.5281/zenodo.23141907](https://doi.org/10.5281/zenodo.23141907).
+
+| File | Contents |
+|------|----------|
+| `graphml.v28.tgz`, `graphml.v34.tgz` | per-gene splicing graphs |
+| `bipartitions_gencode_v{28,34}_{internal,TSSTTS}.tsv.gz` | the enumerated bipartitions |
+| `dexseq.gff` | flattened exonic-part annotation, per version |
+| `gtf` | per-gene GTFs, per version |
+
+If you already have `graphml/` and the split files under
+`bipartition.filtered/`, whether you built them or downloaded them, the only
+thing still needed before testing is **exon quantification against the same
+DEXSeq GFF the graphs were built from**. Counts made against a different
+annotation will not join: the exonic part numbers (`E001`, `E002`, ...) are assigned by
 `dexseq_prepare_annotation.py` and are meaningful only relative to that GFF.
 
 ```bash
