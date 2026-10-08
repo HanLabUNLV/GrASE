@@ -42,14 +42,14 @@ R packages:
 
 Python packages:
 * python3 (3.11.5)
-* rMATS   (4.1.1)
 * htseq   (0.13.5)
 * igraph  (0.10.6)
 * pycairo (1.23.0)
 * pandas  (2.1.4)
 
-Other packages:
-* STAR   (optional - 2.7.10b)
+Optional:
+* STAR  (2.7.10b)  alignment, and the `SJ.out.tab` files Stage 3b reads
+* rMATS (4.1.1)    only for the rMATS comparison scripts
 
 ## Installation
 
@@ -63,7 +63,7 @@ Install the R and Python dependencies listed above first.
 
 The pipeline scripts are run from the clone (`Rpkg/scripts/`); the installed
 package provides the library that those scripts load, plus the bundled DEXSeq
-helpers. The commands below assume you are in `Rpkg/`.
+helpers. The commands below are written to run from the clone root.
 
 ## Quick Start
 
@@ -120,7 +120,14 @@ Starting instead from BAMs and an annotation, begin at Stage 0.
 
 ### Stage 0. Prepare input files
 
-Split the genome GTF by gene, build per-gene DEXSeq GFF files, and generate igraph splicing graphs:
+GrASE starts from **coordinate-sorted BAM files**, one per sample, under
+`${WD}/bam/<condition>/`. Align however you prefer; the published results used
+two-pass STAR, and the alignment drivers are in the
+[GrASE_simulation](https://github.com/HanLabUNLV/GrASE_simulation) repository
+(`STAR/`). If you plan to run Stage 3b, keep STAR's `SJ.out.tab` files too.
+
+Split the genome GTF by gene, build per-gene DEXSeq GFF files, count reads, and
+generate the splicing graphs:
 
 ```bash
 WD=~/GrASE_simulation
@@ -167,7 +174,7 @@ for cond in group1 group2; do
 done
 
 # Build igraph splicing graphs from GTF + DEXSeq GFF
-Rscript scripts/generate_graphs.R --indir ${WD}
+Rscript Rpkg/scripts/generate_graphs.R --indir ${WD}
 ```
 
 Expected input layout:
@@ -186,7 +193,7 @@ Expected input layout:
 ### Stage 1. Enumerate alternative path splits
 
 ```bash
-Rscript scripts/bubble_path_split.R \
+Rscript Rpkg/scripts/bubble_path_split.R \
     --graphdir=${WD}/graphml \
     --outdir=${WD}/bipartition \
     --split=bipartition
@@ -197,7 +204,7 @@ Also available: `--split=multinomial` and `--split=n_choose_2`.
 ### Stage 2. Separate internal AS events from alternative TSS/TTS
 
 ```bash
-Rscript scripts/filterTSSTTS.R \
+Rscript Rpkg/scripts/filterTSSTTS.R \
     --split_dir=${WD}/bipartition \
     --outdir=${WD}/bipartition.filtered \
     --split_type=bipartition
@@ -206,7 +213,7 @@ Rscript scripts/filterTSSTTS.R \
 ### Stage 3. Aggregate DEXSeq read counts onto split exonic parts
 
 ```bash
-Rscript scripts/exoncnt.R \
+Rscript Rpkg/scripts/exoncnt.R \
     -c ${WD}/DEXSeq/count_files \
     -t bipartition \
     --cond1=group1 --cond2=group2 \
@@ -225,7 +232,7 @@ intron edges exclusive to that side, counted from STAR split reads; the shared
 reference is never changed. In the published run this applied to 28.5% of tests.
 
 ```bash
-Rscript scripts/bipartition_sjcnt.R \
+Rscript Rpkg/scripts/bipartition_sjcnt.R \
     --inputdir   ${WD}/bipartition.filtered \
     --graphmldir ${WD}/graphml \
     --gff        ${WD}/ref/gencode.dexseq.bygene.gff \
@@ -234,7 +241,7 @@ Rscript scripts/bipartition_sjcnt.R \
     --output     ${WD}/sjcnt \
     --type       internal
 
-Rscript scripts/merge_exon_sj_counts.R \
+Rscript Rpkg/scripts/merge_exon_sj_counts.R \
     --exon_counts ${WD}/bipartition.internal.counts \
     --sj_counts   ${WD}/sjcnt \
     --output      ${WD}/bipartition.merged.counts
@@ -248,7 +255,7 @@ merged directory instead of the exonic one.
 ### Stage 4. Test for differential exon usage
 
 ```bash
-Rscript scripts/exontest.R \
+Rscript Rpkg/scripts/exontest.R \
     --file=bipartition.internal.exoncnt.combined.txt \
     --outdir=${WD}/bipartition.test \
     --countdir=${WD}/bipartition.internal.counts/ \
@@ -272,7 +279,7 @@ Available models:
 | `wilcoxon` | bipartition, n_choose_2 | none |
 | `dirmult_EBplugin` | multinomial | `--prec` |
 
-Commonly used options (defaults in brackets): `--padj_threshold` [0.01], `--min_dpi` [0.1], `--min_reads` [10], `--padj_method` [nested_BH], `--mc_cores` [min(detectCores(), 8)], `--contrasts=B:A,C:A` for several pairwise contrasts (or `A+B+C` for an omnibus test, betabinom models only). Independent filtering is on by default; `--no_independent_filtering` turns it off. Run `Rscript scripts/exontest.R --help` for the full list.
+Commonly used options (defaults in brackets): `--padj_threshold` [0.01], `--min_dpi` [0.1], `--min_reads` [10], `--padj_method` [nested_BH], `--mc_cores` [min(detectCores(), 8)], `--contrasts=B:A,C:A` for several pairwise contrasts (or `A+B+C` for an omnibus test, betabinom models only). Independent filtering is on by default; `--no_independent_filtering` turns it off. Run `Rscript Rpkg/scripts/exontest.R --help` for the full list.
 
 ### Reading results
 

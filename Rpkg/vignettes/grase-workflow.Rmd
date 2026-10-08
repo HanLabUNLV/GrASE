@@ -65,8 +65,11 @@ install.packages(c("igraph", "glmmTMB", "VGAM", "gtools",
 
 - Python with `HTSeq`. Both DEXSeq helper scripts are bundled with grase
   (`inst/python/`), so there is nothing to fetch separately.
-- RNA-seq BAM files. The exonic-part counts GrASE reads are produced in Step 0b
-  below, one file per sample, organised by condition.
+- Coordinate-sorted RNA-seq BAM files, one per sample, under
+  `bam/<condition>/`. Align however you prefer; the published results used
+  two-pass STAR, whose drivers are in the GrASE_simulation repository. Keep
+  STAR's `SJ.out.tab` files if you plan to run Stage 3b. The exonic-part counts
+  GrASE reads are produced from the BAMs in Step 0b below.
 
 ---
 
