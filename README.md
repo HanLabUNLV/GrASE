@@ -40,12 +40,9 @@ R packages:
 * optparse
 * tidyverse
 
-Python packages:
+Python packages (only for the bundled DEXSeq helpers):
 * python3 (3.11.5)
 * htseq   (0.13.5)
-* igraph  (0.10.6)
-* pycairo (1.23.0)
-* pandas  (2.1.4)
 
 Optional:
 * STAR  (2.7.10b)  alignment, and the `SJ.out.tab` files Stage 3b reads

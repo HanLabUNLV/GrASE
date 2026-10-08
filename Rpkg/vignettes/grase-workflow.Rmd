@@ -551,13 +551,13 @@ command-line options.
 
 ### One bipartition in detail
 
-`scripts/plot_test_results.py` is the figure behind the case studies: the gene
+`scripts/plot_test_results.R` is the figure behind the case studies: the gene
 model with each exonic part coloured by its role, every bipartition tested at the
 locus ordered by span containment, the path groups, and the path proportion
 across conditions.
 
 ```bash
-python3 scripts/plot_test_results.py \
+Rscript scripts/plot_test_results.R \
     --gene ENSG00000204472 --event 11 --kind TSSTTS \
     --analysis ~/DICE/grase_lineage_merged \
     --sjcounts ~/DICE/counts_lineage/bipartition.merged.TSSTTS.counts \
