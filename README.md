@@ -10,17 +10,15 @@ GrASE (**Gr**aph of **A**lternative **S**plice Junctions and **E**xonic Parts) i
 
 **What it does that other tools do not.** Instead of classifying splicing into fixed event types (SE, A3SS, etc.), GrASE tests all bubbles it can enumerate in the annotation, examining substantially more events than prior tools while remaining tractable and interpretable. For each bubble it quantifies differential usage as the fraction of reads mapping to the exonic parts that *distinguish* the competing paths (the "distinct" parts) relative to distinct + shared parts.
 
-**Three comparison strategies** are available per bubble:
-
-| Strategy | Description |
-|---|---|
-| **bipartition** | Binary split of all transcripts into two meaningful groups (lower-set bipartition); analogous to PSI-based tests |
-| **multinomial** | Joint test across all distinct paths through a bubble simultaneously |
-| **n_choose_2** | All pairwise path contrasts; more sensitive for bubbles with many paths |
+**Comparison structure.** Each bubble is split by **lower-set bipartition**: the
+transcript paths are divided into two groups chosen so that each side has a
+well-defined distinct set of exonic parts, analogous to PSI-based tests but
+without a fixed event taxonomy. This is the recommended and supported scheme,
+and the one behind every reported result.
 
 **Filtering by event class.** Bubbles touching the leftmost graph node (L representing the Transcription Start Site) and the rightmost graph node (R representing the Transcription Termination Site) are classified as alternative TSS/TTS events; all others are internal alternative splicing events. Both categories are tested independently.
 
-**Statistical models.** For bipartition and n_choose_2 splits, differential exon usage is tested with a beta-binomial model (via glmmTMB), with overdispersion (phi) regularised by Empirical Bayes shrinkage. Multinomial splits use a Dirichlet-multinomial model with EB-moderated precision. A non-parametric Wilcoxon fallback is also available.
+**Statistical models.** Differential path usage is tested with a beta-binomial model (via glmmTMB), with the per-test overdispersion (phi) regularised by Empirical Bayes shrinkage. Two variants are recommended and differ only in how the moderated phi is obtained: `betabinom_EBapprox` (closed form) and `betabinom_EBmap` (MAP).
 
 **Workflow.** The pipeline goes from per-gene splicing graphs (GraphML) -> bubble enumeration -> event-type filtering -> DEXSeq count aggregation -> optional junction substitution where a distinct set is empty -> statistical testing. The DEXSeq helper scripts for preparing the annotation and counting reads are bundled, so the only external input is aligned BAM files. Results can be compared against rMATS or DEXSeq output.
 
@@ -196,7 +194,7 @@ Rscript Rpkg/scripts/bubble_path_split.R \
     --split=bipartition
 ```
 
-Also available: `--split=multinomial` and `--split=n_choose_2`.
+`--split` also accepts `multinomial` and `n_choose_2`. Those exist only to reproduce the benchmark that selected bipartition; they are not alternatives to choose between for an analysis.
 
 ### Stage 2. Separate internal AS events from alternative TSS/TTS
 
@@ -266,15 +264,17 @@ Rscript Rpkg/scripts/exontest.R \
 
 `--phi` names a file inside `--outdir`. If it does not exist, phi is estimated and written there; if it does, it is reused, so use a fresh name (or outdir) whenever the counts change. `--gff_dir` is optional and adds length-normalized (per-base) pi columns to the annotated output.
 
-Available models:
+Recommended models:
 
-| Model | Split types | Dispersion input |
+| Model | Description | Dispersion input |
 |---|---|---|
-| `betabinom_EBapprox` (recommended) | bipartition, n_choose_2 | `--phi` |
-| `betabinom_EBmap` | bipartition, n_choose_2 | `--phi` |
-| `betabinom_MLE` | bipartition, n_choose_2 | none (no shrinkage) |
-| `wilcoxon` | bipartition, n_choose_2 | none |
-| `dirmult_EBplugin` | multinomial | `--prec` |
+| `betabinom_EBapprox` | closed-form EB shrinkage of log(phi); behind the published results | `--phi` |
+| `betabinom_EBmap` | MAP estimate of phi under a normal prior; the package default | `--phi` |
+
+Benchmark-only, not recommended for an analysis: `betabinom_MLE` (no shrinkage,
+null false positives inflate several-fold), `wilcoxon` (most conservative on
+null genes, no effect-size estimate) and `dirmult_EBplugin` (for the
+benchmark-only multinomial split).
 
 Commonly used options (defaults in brackets): `--padj_threshold` [0.01], `--min_dpi` [0.1], `--min_reads` [10], `--padj_method` [nested_BH], `--mc_cores` [min(detectCores(), 8)], `--contrasts=B:A,C:A` for several pairwise contrasts (or `A+B+C` for an omnibus test, betabinom models only). Independent filtering is on by default; `--no_independent_filtering` turns it off. Run `Rscript Rpkg/scripts/exontest.R --help` for the full list.
 
@@ -293,4 +293,78 @@ Output files are named `test_{prefix}_{model}.txt`, with `.annotated.txt`, `.min
 
 Key output columns: `gene`, `event` (bubble number within the gene), `source`/`sink` (bubble boundary nodes), `contrast`, `p.value`, `padj`, `delta_pi` (change in path proportion), `significant` (padj below `--padj_threshold`, `|delta_pi|` at least `--min_dpi`, and at least `--min_reads` reads in one group), `setdiff1`/`setdiff2` (exonic parts distinguishing each path), `ref_ex_part` (shared reference parts).
 
-See the vignette for the full option reference, all three split types, TSS/TTS events, and comparison with rMATS/Saturn.
+### Visualising results
+
+Three entry points, all reading files GrASE already produced.
+
+**One bipartition in detail.** The four-panel case-study figure: the gene model
+with each exonic part coloured by its role, every bipartition tested at the
+locus ordered by span containment, the tested bipartition as graph routes, and
+the path proportion across conditions.
+
+```bash
+Rscript Rpkg/scripts/plot_test_results.R \
+    --gene ENSG00000204472 --event 11 --kind TSSTTS \
+    --analysis ${WD}/bipartition.test \
+    --gffdir ${WD}/dexseq.gff --bipdir ${WD}/bipartition.filtered \
+    --graphmldir ${WD}/graphml \
+    --conditions group1,group2 \
+    --symbol AIF1 --out figs/AIF1_ev11.pdf
+```
+
+It applies no thresholds of its own; it reads the `significant` column
+`exontest.R` wrote, so the figure and the tables cannot disagree. `--out` picks
+the format from the extension, so `.pdf`, `.png` and `.eps` all work. Add
+`--sjcounts` when a side is junction-sourced, so its junctions are drawn as
+arcs, and `--max_stack N` to cap a dense locus.
+
+![AIF1 bipartition 11](Rpkg/vignettes/figures/aif1_bipartition.png)
+
+**A** is the gene model, each exonic part coloured by its role in the tested
+bipartition: blue for the shared reference S, yellow and red for the two distinct
+sets. **B** is every bipartition tested at this locus, one row each, ordered by
+span containment so nesting reads as intervals inside intervals; the grey row is
+the one being shown and a star marks each bipartition called in at least one
+contrast, labelled by which distinct set drove it. **C** redraws the tested
+bipartition as routes through the graph, with R and L marking a route that reaches
+the transcript start or end. **D** plots the path proportion across conditions,
+length-normalized by default.
+
+**The splicing graph and the transcript structure**, via two exported functions:
+
+```r
+library(grase); library(igraph); library(SplicingGraphs)
+gene <- "ENSG00000204472.13"
+
+g <- igraph::read_graph(file.path("graphml", paste0(gene, ".graphml")), format = "graphml")
+style_and_plot(g, gene, "figs")                      # writes figs/<gene>.pdf
+
+gr   <- rtracklayer::import(file.path("gtf", paste0(gene, ".gtf")))
+gr   <- gr[!(rtracklayer::mcols(gr)$type %in% c("start_codon", "stop_codon"))]
+sg   <- SplicingGraphs::SplicingGraphs(txdbmaker::makeTxDbFromGRanges(gr), min.ntx = 1)
+plottx(gene, "figs", as.data.frame(SplicingGraphs::sgedges(sg[gene])),
+       SplicingGraphs::sgnodes(sg[gene]), g = g)     # writes figs/<gene>.tx.pdf
+```
+
+![AIF1 splicing graph](Rpkg/vignettes/figures/aif1_graph.png)
+
+![AIF1 transcript structure](Rpkg/vignettes/figures/aif1_tx.png)
+
+Both take `node_range = c(n_min, n_max)` to crop to a window of `sg_id` values,
+for showing one region of a large gene rather than the whole locus.
+
+**For publication**, keep PDF as the master and derive the rest. EPS has no
+transparency and R's `postscript()` device cannot produce alpha at all, so
+drawing EPS directly loses shading in dense scatter plots; converting from PDF
+flattens it instead.
+
+```bash
+pdftops    -eps fig.pdf fig.eps                  # journal
+pdftocairo -svg fig.pdf fig.svg                  # Word and PowerPoint, vector
+pdftocairo -png -r 600 -singlefile fig.pdf fig   # raster fallback
+```
+
+PowerPoint cannot import EPS, and Word on macOS rasterizes an inserted PDF. Use
+the SVG for both.
+
+See the vignette for the full option reference, TSS/TTS events, worked figure examples, and comparison with rMATS/Saturn.

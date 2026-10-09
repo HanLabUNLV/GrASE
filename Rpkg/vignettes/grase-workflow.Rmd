@@ -195,14 +195,6 @@ empirically if they were not recorded: re-count a few bins of one sample under
 each candidate and compare against the stored file. Only the correct setting
 reproduces it bin for bin.
 
-Two practical traps:
-
-- HTSeq may not be importable from the default `python3`. Pin an interpreter that
-  can `import HTSeq`.
-- Do not redirect the counter's stderr to `/dev/null`. A missing HTSeq is one
-  line on stderr plus an exit code; suppressed, it looks like a silent no-op and
-  you get empty counts.
-
 **Step 0c. Build splicing graphs**
 
 This step converts the per-gene GTF and DEXSeq GFF into igraph objects saved as GraphML
@@ -218,33 +210,24 @@ This creates `~/GrASE_simulation/graphml/{gene}.graphml` for every multi-transcr
 
 ## Stage 1. Enumerate alternative path splits
 
-Each bubble in the splicing graph separates transcript paths into groups. Stage 1 assigns
-every transcript path through every bubble to one of three grouping schemes:
-
-| Split type | Description |
-|------------|-------------|
-| `bipartition` | All transcripts are split into exactly two groups (binary partition). Each bubble yields one or more bipartitions. |
-| `multinomial` | All distinct paths through the bubble form separate groups (one group per unique path). |
-| `n_choose_2` | Every pairwise combination of paths is tested (n choose 2 pairs). |
-
-Run all three in parallel (each uses 20 cores internally):
+Each bubble in the splicing graph separates transcript paths into groups.
+**Use `bipartition`.** It is the recommended and supported scheme, and the one
+every reported result uses: each test is a binary split of the bubble's paths
+into two groups with a well-defined distinct set on each side.
 
 ```bash
 Rscript scripts/bubble_path_split.R \
     --graphdir=~/GrASE_simulation/graphml \
     --outdir=~/GrASE_simulation/bipartition \
-    --split=bipartition &> bipartition.log &
-
-Rscript scripts/bubble_path_split.R \
-    --graphdir=~/GrASE_simulation/graphml \
-    --outdir=~/GrASE_simulation/multinomial \
-    --split=multinomial &> multinomial.log &
-
-Rscript scripts/bubble_path_split.R \
-    --graphdir=~/GrASE_simulation/graphml \
-    --outdir=~/GrASE_simulation/n_choose_2 \
-    --split=n_choose_2 &> n_choose_2.log &
+    --split=bipartition &> bipartition.log
 ```
+
+`--split` also accepts `multinomial` and `n_choose_2`. These exist because the
+three schemes were benchmarked against each other, not as alternatives to pick
+between: bipartition had the fewest null-gene false positives, n_choose_2
+roughly tripled them, and multinomial more than quintupled them while covering
+the fewest bubbles, because it drops any bubble where even one path lacks a
+distinct exonic part. Use them only to reproduce that comparison.
 
 **Key options**
 
@@ -252,7 +235,7 @@ Rscript scripts/bubble_path_split.R \
 |--------|-------------|
 | `--graphdir` | Directory containing `{gene}.graphml` files |
 | `--outdir` | Directory where split result files are written |
-| `--split` | One of `bipartition`, `multinomial`, or `n_choose_2` |
+| `--split` | `bipartition` (recommended); `multinomial` and `n_choose_2` are benchmark-only |
 | `--genename` | Process a single gene (for debugging) |
 | `--collapse` | Collapse nested bubbles before splitting (default: FALSE) |
 
@@ -276,15 +259,6 @@ Rscript scripts/filterTSSTTS.R \
     --outdir="~/GrASE_simulation/bipartition.filtered" \
     --split_type='bipartition'
 
-Rscript scripts/filterTSSTTS.R \
-    --split_dir="~/GrASE_simulation/multinomial" \
-    --outdir="~/GrASE_simulation/multinomial.filtered" \
-    --split_type='multinomial'
-
-Rscript scripts/filterTSSTTS.R \
-    --split_dir="~/GrASE_simulation/n_choose_2" \
-    --outdir="~/GrASE_simulation/n_choose_2.filtered" \
-    --split_type='n_choose_2'
 ```
 
 **Output:** per-gene files with `.internal.txt` or `.TSSTTS.txt` suffixes in the filtered
@@ -319,7 +293,8 @@ Rscript scripts/exoncnt.R \
     -o ~/GrASE_simulation/bipartition.TSSTTS.counts
 ```
 
-Repeat the two commands above for `n_choose_2` and `multinomial` split types by
+Repeat the two commands above for another split type, if you are reproducing the
+benchmark, by
 substituting the appropriate `-t`, `-i`, and `-o` values.
 
 **Key options**
@@ -327,7 +302,7 @@ substituting the appropriate `-t`, `-i`, and `-o` values.
 | Option | Description |
 |--------|-------------|
 | `-c` / `--countdir` | Root directory of DEXSeq count files. Must contain `{cond1}/` and `{cond2}/` subdirectories each with `{sample}_counts.txt` files |
-| `-t` / `--type` | Split type: `bipartition`, `n_choose_2`, or `multinomial` |
+| `-t` / `--type` | Split type; use `bipartition` |
 | `--cond1`, `--cond2` | Condition labels matching the count subdirectory names |
 | `--conditions` | Comma-separated list of all conditions for a multi-group run, e.g. `CD4,CD8,NK,B`. Overrides `--cond1`/`--cond2`. |
 | `-a` / `--alt` | Event category: `internal` or `TSS` (alias for TSSTTS) |
@@ -410,13 +385,27 @@ parameter phi (if needed), then fits the chosen model per event.
 
 ### Statistical models
 
+**Use `betabinom_EBapprox` or `betabinom_EBmap`.** Both are beta-binomial models
+with empirical Bayes moderation of the per-test dispersion; they differ only in
+how the moderated value is obtained, and they agree closely.
+
 | Model | Description |
 |-------|-------------|
-| `betabinom_EBapprox` | Beta-binomial with closed-form empirical Bayes shrinkage of log(phi) toward a global or trend-based target (Smyth-style normal-normal moderation). Fast, and the model used for the published results. |
-| `betabinom_EBmap` | Beta-binomial with a MAP estimate of phi under a normal prior, optimised against the penalised likelihood. The package default. |
-| `betabinom_MLE` | Unmoderated maximum-likelihood dispersion. A baseline; it inflates null false positives because phi often collapses to the binomial limit. |
-| `wilcoxon` | Non-parametric rank-sum test on the per-sample path proportions. No phi required. |
-| `dirmult_EBplugin` | Dirichlet-multinomial with EB-moderated precision, for `--splittype=multinomial` only. |
+| `betabinom_EBapprox` | Closed-form shrinkage of log(phi) toward a global or trend-based target (normal-normal moderation). Recommended, and the model behind the published results. |
+| `betabinom_EBmap` | MAP estimate of phi under a normal prior, optimised against the penalised likelihood. The package default; recovers slightly more true positives at a few more null false positives. |
+
+The remaining models exist because the four were benchmarked against each other.
+They are not alternatives to choose between for an analysis.
+
+| Benchmark-only | Why it is not recommended |
+|----------------|---------------------------|
+| `betabinom_MLE` | No shrinkage, so the dispersion frequently collapses to the binomial limit and null false positives inflate several-fold. |
+| `wilcoxon` | Needs no distributional assumption, but is the most conservative on null genes and gives no direct measure of how the path proportion changed. |
+| `dirmult_EBplugin` | Dirichlet-multinomial for `--splittype=multinomial`, which is itself benchmark-only. |
+
+Add `--use_phi_loess` with either EB model when read depth varies widely across
+events, so the shrinkage target follows the mean-dispersion trend rather than a
+single global value.
 
 ### Running the tests
 
@@ -453,7 +442,7 @@ For more than two groups, replace `--cond1`/`--cond2` with `--contrasts` in
 | `--outdir` | | Directory for results and the cached phi file |
 | `--countdir` | | Per-gene count and split files |
 | `--gff_dir` | NULL | Per-gene DEXSeq GFFs, flat `<gene>.dexseq.gff` or nested `<gene>/<gene>.dexseq.gff`. Supplying it adds length-normalized (per-base) pi to the annotated output. |
-| `--splittype` | | `bipartition`, `n_choose_2` or `multinomial` |
+| `--splittype` | | `bipartition` (recommended); the other two are benchmark-only |
 | `--phi` | | Cached phi estimates; created on first run, reused thereafter |
 | `--model` | `betabinom_EBmap` | See the table above |
 | `--cond1`, `--cond2` | | Two-group contrast; the coefficient is cond1 - cond2 |
@@ -545,6 +534,14 @@ which is how you show one region of a large gene rather than the whole locus.
 `scripts/plot_aif1_fig1.R` is a worked example; `scripts/plot_subset_133706.R`
 shows the cropped form.
 
+Run on AIF1, `style_and_plot()` gives the splicing graph:
+
+![AIF1 splicing graph](figures/aif1_graph.png){width=100%}
+
+and `plottx()` the transcript structure above the same node coordinates:
+
+![AIF1 transcript structure](figures/aif1_tx.png){width=100%}
+
 `scripts/plotgraphml.R` and `scripts/splicegraph_tx_plot.R` do the same thing in
 batch over a vector of gene ids edited at the top of the file. They take no
 command-line options.
@@ -581,6 +578,20 @@ Rscript scripts/plot_test_results.R \
 
 It applies no thresholds of its own. It reads the `significant` column that
 `exontest.R` wrote, so the figure and the tables cannot disagree.
+
+The command above produces:
+
+![AIF1 bipartition 11](figures/aif1_bipartition.png){width=100%}
+
+Reading it: **A** is the gene model, each exonic part coloured by its role in the
+tested bipartition -- blue for the shared reference S, yellow and red for the two
+distinct sets. **B** is every bipartition tested at this locus, one row each,
+ordered by span containment so nesting reads as intervals inside intervals; the
+grey row is the one being shown and a star marks each bipartition called in at
+least one contrast, labelled by which distinct set drove it. **C** redraws the
+tested bipartition as routes through the graph, with R and L marking a route that
+reaches the transcript start or end. **D** plots the path proportion across
+conditions, length-normalized by default.
 
 ### Export for publication
 
@@ -631,38 +642,6 @@ Rscript scripts/compare_rmats_grase.R \
     --map_dir ~/GrASE_simulation/map_rmats/results.bipartition/ \
     --output ~/GrASE_simulation/bipartition.test/rmats_grase_glmmTMB_MAP_prior_comparison.txt
 ```
-
----
-
-## Choosing a split type and model
-
-**Which split type?**
-
-- **bipartition** is the most interpretable: each event is a binary comparison of two groups
-  of transcripts, analogous to PSI-based tools. It is the recommended starting point.
-- **n_choose_2** exhaustively tests all pairwise path comparisons within a bubble. It is
-  more sensitive for bubbles with more than two paths but produces more hypotheses.
-- **multinomial** tests the full path distribution jointly, similar to a Dirichlet-
-  multinomial test.
-
-**Which model?**
-
-- `betabinom_EBapprox` is the recommended choice and the one behind the published
-  results. Closed-form shrinkage of log(phi) toward a global or trend-based target,
-  which stabilises low-coverage events at the lowest computational cost.
-- `betabinom_EBmap` is the package default and usually agrees closely. It estimates
-  phi by MAP against the penalised likelihood, recovers slightly more true positives,
-  and costs a few more null false positives.
-- `betabinom_MLE` is a baseline, not a recommendation. Without shrinkage the
-  dispersion frequently collapses to the binomial limit and null false positives
-  inflate several-fold.
-- `wilcoxon` needs no distributional assumption and no phi file, so it is a useful
-  sanity check, but it is the most conservative on null genes and gives no direct
-  measure of how the path proportion changed.
-
-Add `--use_phi_loess` with either EB model when read depth varies widely across
-events, so the shrinkage target follows the mean-dispersion trend instead of a
-single global value.
 
 ---
 
