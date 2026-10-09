@@ -13,8 +13,7 @@ GrASE (**Gr**aph of **A**lternative **S**plice Junctions and **E**xonic Parts) i
 **Comparison structure.** Each bubble is split by **lower-set bipartition**: the
 transcript paths are divided into two groups chosen so that each side has a
 well-defined distinct set of exonic parts, analogous to PSI-based tests but
-without a fixed event taxonomy. This is the recommended and supported scheme,
-and the one behind every reported result.
+without a fixed event taxonomy. 
 
 **Filtering by event class.** Bubbles touching the leftmost graph node (L representing the Transcription Start Site) and the rightmost graph node (R representing the Transcription Termination Site) are classified as alternative TSS/TTS events; all others are internal alternative splicing events. Both categories are tested independently.
 
@@ -117,7 +116,7 @@ Starting instead from BAMs and an annotation, begin at Stage 0.
 
 GrASE starts from **coordinate-sorted BAM files**, one per sample, under
 `${WD}/bam/<condition>/`. Align however you prefer; the published results used
-two-pass STAR, and the alignment drivers are in the
+two-pass STAR, and the alignment scripts are in the
 [GrASE_simulation](https://github.com/HanLabUNLV/GrASE_simulation) repository
 (`STAR/`). If you plan to run Stage 3b, keep STAR's `SJ.out.tab` files too.
 
@@ -194,7 +193,7 @@ Rscript Rpkg/scripts/bubble_path_split.R \
     --split=bipartition
 ```
 
-`--split` also accepts `multinomial` and `n_choose_2`. Those exist only to reproduce the benchmark that selected bipartition; they are not alternatives to choose between for an analysis.
+`--split` also accepts `multinomial` and `n_choose_2`. Those exist only to reproduce the benchmark for the publication; they are not recommendeded for an analysis.
 
 ### Stage 2. Separate internal AS events from alternative TSS/TTS
 
@@ -224,7 +223,7 @@ This also writes the combined master file `bipartition.internal.exoncnt.combined
 Some bipartitions have no exonic part exclusive to one side, so that side cannot
 be tested on exonic coverage. For those sides only, the distinct set becomes the
 intron edges exclusive to that side, counted from STAR split reads; the shared
-reference is never changed. In the published run this applied to 28.5% of tests.
+reference is never changed. In our benchmark run for the publication, this applied to 28.5% of tests.
 
 ```bash
 Rscript Rpkg/scripts/bipartition_sjcnt.R \
@@ -252,7 +251,7 @@ merged directory instead of the exonic one.
 ```bash
 Rscript Rpkg/scripts/exontest.R \
     --file=bipartition.internal.exoncnt.combined.txt \
-    --outdir=${WD}/bipartition.test \
+    --outdir=${WD}/bipartition.internal.test \
     --countdir=${WD}/bipartition.internal.counts/ \
     --gff_dir=${WD}/dexseq.gff \
     --splittype=bipartition \
@@ -282,7 +281,7 @@ Commonly used options (defaults in brackets): `--padj_threshold` [0.01], `--min_
 
 ```r
 results <- read.table(
-    "~/GrASE_simulation/bipartition.test/test_bipartition.internal_betabinom_EBapprox.annotated.txt",
+    "~/GrASE_simulation/bipartition.internal.test/test_bipartition.internal_betabinom_EBapprox.annotated.txt",
     header = TRUE, sep = "\t"
 )
 sig <- results[results$significant %in% TRUE, ]
@@ -305,7 +304,7 @@ the path proportion across conditions.
 ```bash
 Rscript Rpkg/scripts/plot_test_results.R \
     --gene ENSG00000204472 --event 11 --kind TSSTTS \
-    --analysis ${WD}/bipartition.test \
+    --analysis ${WD}/bipartition.internal.test \
     --gffdir ${WD}/dexseq.gff --bipdir ${WD}/bipartition.filtered \
     --graphmldir ${WD}/graphml \
     --conditions group1,group2 \
@@ -350,21 +349,51 @@ plottx(gene, "figs", as.data.frame(SplicingGraphs::sgedges(sg[gene])),
 
 ![AIF1 transcript structure](Rpkg/vignettes/figures/aif1_tx.png)
 
-Both take `node_range = c(n_min, n_max)` to crop to a window of `sg_id` values,
-for showing one region of a large gene rather than the whole locus.
 
-**For publication**, keep PDF as the master and derive the rest. EPS has no
-transparency and R's `postscript()` device cannot produce alpha at all, so
-drawing EPS directly loses shading in dense scatter plots; converting from PDF
-flattens it instead.
+### Comparing with other tools
+
+Two kinds of comparison, both routed through the splicing graph.
+
+**GrASE against one other tool.** `compare_rmats_grase.R` and
+`compare_saturn_grase.R` report concordance and write a discrepancy list. They
+use no ground truth, so they run on any dataset.
+
+**rMATS against the exon-level tool.** `integrate.R` contrasts rMATS directly
+with DEXSeq or satuRn rather than each against GrASE. This is the capability
+introduced in the first GrASE paper ([Aquino et al. 2025](https://doi.org/10.1093/bib/bbaf204)),
+carried forward here: neither tool has a unit the other shares, so the graph
+supplies the correspondence by mapping each rMATS event onto the exonic parts it
+covers.
 
 ```bash
-pdftops    -eps fig.pdf fig.eps                  # journal
-pdftocairo -svg fig.pdf fig.svg                  # Word and PowerPoint, vector
-pdftocairo -png -r 600 -singlefile fig.pdf fig   # raster fallback
+# Step 1: map rMATS events onto exonic parts through the graph.
+# Also reads ${WD}/graphml/ and ${WD}/dexseq.gff/, which are not options.
+Rscript Rpkg/scripts/map_rmats_splits.R \
+    --indir ${WD} --type bipartition \
+    --splitdir ${WD}/bipartition.internal.counts \
+    --rmatsdir ${WD}/rMATS/rmats_post_group1_group2/ \
+    --outdir ${WD}/map_rmats/results.bipartition
+
+# Step 2a: GrASE against rMATS
+Rscript Rpkg/scripts/compare_rmats_grase.R \
+    --grase ${WD}/bipartition.internal.test/test_bipartition.internal_betabinom_EBapprox.annotated.txt \
+    --rmats_dir ${WD}/rMATS/rmats_post_group1_group2/ \
+    --map_dir ${WD}/map_rmats/results.bipartition/ \
+    --output ${WD}/bipartition.internal.test/rmats_grase_comparison.txt
+
+# Step 2b: rMATS against DEXSeq or satuRn
+Rscript Rpkg/scripts/integrate.R \
+    --map_dir ${WD}/map_rmats/results.bipartition \
+    --outdir ${WD}/rmats_vs_exon \
+    --rmats_dir ${WD}/rMATS/rmats_post_group1_group2/ \
+    --exon_results ${WD}/dexseq/dexseq_results.txt
 ```
 
-PowerPoint cannot import EPS, and Word on macOS rasterizes an inserted PDF. Use
-the SVG for both.
+Step 2b writes `ExonParts/` and `SplicingEvents/` cross-tabulations such as
+`DexSig__rMATS_TestedExons.txt`: parts one tool called, split by what the other
+did. *Tested* is the tool's universe, *detected* means the other tool's unit
+mapped onto it at all, and *significant* is a call, so a part that is
+DEXSeq-significant but rMATS-tested-and-not-called is a real disagreement,
+whereas one that is not rMATS-detected is simply outside its reach.
 
 See the vignette for the full option reference, TSS/TTS events, worked figure examples, and comparison with rMATS/Saturn.

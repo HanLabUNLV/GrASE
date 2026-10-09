@@ -18,7 +18,11 @@ option_list = list(
   make_option(c("-s", "--splitdir"), type="character", 
               help="split_dir", metavar="character"),
   make_option(c("-r", "--rmatsdir"), type="character", 
-              help="rmatsdir", metavar="character")
+              help="rmatsdir", metavar="character"),
+  make_option(c("-o", "--outdir"), type="character", default=NULL,
+              help=paste("directory for the mapping files. Default:",
+                         "<indir>/map_rmats/results.<type>, kept for",
+                         "backward compatibility."), metavar="character")
 ); 
  
 opt_parser = OptionParser(option_list=option_list);
@@ -33,6 +37,10 @@ if (!is.null(opt$type)) {
 if (!is.null(opt$splitdir)) {
   split_dir = opt$splitdir
 } 
+## Output location is explicit, like every other path. It used to be derived
+## from --indir, which made the mapper the only script that chose where to
+## write rather than being told.
+out_root = if (!is.null(opt$outdir)) opt$outdir else NULL
 if (!is.null(opt$rmatsdir)) {
   rmats_dir = opt$rmatsdir
 } 
@@ -51,7 +59,8 @@ fromGTF_RI <- read.table(file.path(rmats_dir, "fromGTF.RI.txt"), header=TRUE)
 if (analysis_type == 'all' || analysis_type == 'bipartition') {
 
   # input files
-  outdir = file.path(indir, "map_rmats", paste0("results.", analysis_type))
+  outdir = if (!is.null(out_root)) out_root else
+    file.path(indir, "map_rmats", paste0("results.", analysis_type))
   if (!dir.exists(outdir)) {
     dir.create(outdir, recursive = TRUE)
   }

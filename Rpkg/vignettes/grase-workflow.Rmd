@@ -593,39 +593,37 @@ tested bipartition as routes through the graph, with R and L marking a route tha
 reaches the transcript start or end. **D** plots the path proportion across
 conditions, length-normalized by default.
 
-### Export for publication
-
-Keep PDF as the master and derive the rest. EPS has no transparency and R's
-`postscript()` device cannot produce alpha at all, so drawing EPS directly loses
-shading in dense scatter plots; converting from PDF flattens it instead.
-
-```bash
-pdftops    -eps fig.pdf fig.eps                  # journal
-pdftocairo -svg fig.pdf fig.svg                  # Word and PowerPoint, vector
-pdftocairo -png -r 600 -singlefile fig.pdf fig   # raster fallback
-```
-
-PowerPoint cannot import EPS, and Word on macOS rasterizes an inserted PDF. Use
-the SVG for both.
 
 ---
 
 ## Comparing GrASE results with other tools
 
-GrASE provides scripts to map its results to rMATS events or Saturn results, enabling
-direct performance comparisons.
+GrASE provides scripts to map its results onto rMATS events or satuRn results, for
+direct comparison. Both read the annotated output of Stage 4, so run them after
+testing. The paths below assume `betabinom_EBapprox`; substitute the model name
+you ran.
 
-### Compare with Saturn
+### Compare with satuRn
 
 ```bash
 Rscript scripts/compare_saturn_grase.R \
-    --grase ~/GrASE_simulation/bipartition.test/test_bipartition.internal_glmmTMB_MAP_prior.annotated.txt \
-    --grase2 ~/GrASE_simulation/bipartition.test/test_bipartition.TSSTTS_glmmTMB_MAP_prior.annotated.txt \
+    --grase ~/GrASE_simulation/bipartition.internal.test/test_bipartition.internal_betabinom_EBapprox.annotated.txt \
+    --grase2 ~/GrASE_simulation/bipartition.TSSTTS.test/test_bipartition.TSSTTS_betabinom_EBapprox.annotated.txt \
     --saturn ~/GrASE_simulation/saturn/saturn_group1_group2/all.group1_group2.sumExp_filteredbyCountMultiExon.txt \
-    --output ~/GrASE_simulation/bipartition.test/saturn_grase_glmmTMB_MAP_prior_comparison.txt
+    --output ~/GrASE_simulation/bipartition.internal.test/saturn_grase_betabinom_EBapprox_comparison.txt
 ```
 
 ### Compare with rMATS
+
+`map_rmats_splits.R` reads more than its options suggest. Besides `--splitdir`
+and `--rmatsdir` it looks under `--indir` for **both** `graphml/<gene>.graphml`
+and `dexseq.gff/<gene>.dexseq.gff`, one per gene. Neither path is an option, and
+a missing GFF produces a "cannot open file" warning per gene rather than an
+error, so the run appears to finish while mapping nothing. If your graphs live
+in a directory named for the annotation version, point `--indir` at a directory
+that holds `graphml/` and `dexseq.gff/` under exactly those names. `--indir`
+supplies only those inputs; `--outdir` says where the mapping goes, and omitting
+it falls back to `<indir>/map_rmats/results.<type>`.
 
 ```bash
 # Step 1: map rMATS events to GrASE bipartitions
@@ -633,15 +631,54 @@ Rscript scripts/map_rmats_splits.R \
     --indir ~/GrASE_simulation/ \
     --type bipartition \
     --splitdir ~/GrASE_simulation/bipartition.internal.counts \
-    --rmatsdir ~/GrASE_simulation/rMATS/rmats_post_group1_group2/
+    --rmatsdir ~/GrASE_simulation/rMATS/rmats_post_group1_group2/ \
+    --outdir ~/GrASE_simulation/map_rmats/results.bipartition
 
 # Step 2: compare results
 Rscript scripts/compare_rmats_grase.R \
-    --grase ~/GrASE_simulation/bipartition.test/test_bipartition.internal_glmmTMB_MAP_prior.annotated.txt \
+    --grase ~/GrASE_simulation/bipartition.internal.test/test_bipartition.internal_betabinom_EBapprox.annotated.txt \
     --rmats_dir ~/GrASE_simulation/rMATS/rmats_post_group1_group2/ \
     --map_dir ~/GrASE_simulation/map_rmats/results.bipartition/ \
-    --output ~/GrASE_simulation/bipartition.test/rmats_grase_glmmTMB_MAP_prior_comparison.txt
+    --output ~/GrASE_simulation/bipartition.internal.test/rmats_grase_betabinom_EBapprox_comparison.txt
 ```
+
+### Compare rMATS against the exon-level tool, through the graph
+
+`integrate.R` contrasts rMATS directly with DEXSeq or satuRn, rather than each
+against GrASE. This is the capability introduced in the first GrASE paper
+(Aquino et al. 2025), carried forward here: neither tool has a unit the other
+shares, so the splicing graph supplies the correspondence, mapping each rMATS
+event onto the exonic parts it covers.
+
+It reads the same mapping `map_rmats_splits.R` produced for the comparison
+above, so run that first and point `--map_dir` at its output.
+
+```bash
+Rscript scripts/integrate.R \
+    --map_dir ~/GrASE_simulation/map_rmats/results.bipartition \
+    --outdir  ~/GrASE_simulation/rmats_vs_exon \
+    --rmats_dir ~/GrASE_simulation/rMATS/rmats_post_group1_group2/ \
+    --exon_results ~/GrASE_simulation/dexseq/dexseq_results.txt
+```
+
+`--exon_results` takes a DEXSeq results table, or a satuRn table, which is
+detected and converted automatically (its combined id is split into
+`groupID`/`featureID`, and `empirical_pval`/`empirical_FDR` become
+`pvalue`/`padj`).
+
+Output is a cross-tabulation at two levels, written under `--outdir`:
+
+| Directory | Contents |
+|-----------|----------|
+| `ExonParts/` | exon parts called by one tool, split by what the other did: `DexSig__rMATS_SigExons.txt`, `DexSig__rMATS_TestedExons.txt`, `DexTested__rMATS_DetectedExons.txt` and so on |
+| `SplicingEvents/` | the same from the rMATS side, e.g. `rMATS_Sig__DexSigEvents.txt` |
+| `Mapped.ExonsToEvents.txt`, `Mapped.EventsToExons.txt` | the joined tables both views are derived from |
+
+The three-way split matters when reading these: *tested* is the tool's universe,
+*detected* means the other tool's unit mapped onto it at all, and *significant*
+is a call. A part that is DEXSeq-significant but rMATS-tested-and-not-called is a
+genuine disagreement; one that is DEXSeq-significant and not rMATS-detected is
+outside rMATS's reach, which is a different statement.
 
 ---
 
@@ -695,6 +732,15 @@ sig <- results[results$significant %in% TRUE, ]
 head(sig[, c("gene", "event", "comparison", "contrast",
              "delta_pi", "padj", "setdiff1", "setdiff2", "ref_ex_part")])
 ```
+
+---
+
+## Reference
+
+Aquino,J., Witoslawski,D., Park,S., et al. (2025) A novel splicing graph allows a
+direct comparison between exon-based and splice junction-based approaches to
+alternative splicing detection. *Briefings in Bioinformatics*, 26, bbaf204.
+<https://doi.org/10.1093/bib/bbaf204>
 
 ---
 
