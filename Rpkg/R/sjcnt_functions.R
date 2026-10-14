@@ -56,7 +56,7 @@ sum_sj_counts <- function(junction_str, sj_mat) {
   }
   ## Junction ids may be ROUTE-GROUPED: "|" separates junctions within one
   ## route, "," separates routes (see make_junction_groups in
-  ## intron_functions.R). Average within a route, then sum across routes -- that
+  ## junction_functions.R). Average within a route, then sum across routes -- that
   ## is the MEAN rule, which has the same expectation as taking one junction per
   ## route but ~1/k the variance. A group of one averages to itself, so input
   ## with no "|" behaves exactly as it always did.
