@@ -934,7 +934,7 @@ test_model_multinomial_plugin_dm_EB <- function(dd) {
 }
 
 
-# --- Denominator-Effect Filter ---
+# --- Reference-Effect Filter ---
 
 #' Compute per-event log2 fold changes for diff and ref counts
 #'
@@ -963,7 +963,16 @@ compute_lfc_summary <- function(splitcnts, pseudocount = 1L,
                                 cond_ref = levels(splitcnts$groups)[1],
                                 cond_trt = levels(splitcnts$groups)[2]) {
 
-  splitcnts %>%
+  ## A ONE-SIDED ARM IS A LEGITIMATE INPUT. 
+  if (!nrow(splitcnts)) {
+    return(data.frame(gene = splitcnts$gene[0], event = splitcnts$event[0],
+                      lfc_diff = numeric(0), lfc_ref = numeric(0),
+                      lfc_diff_net = numeric(0), pi_trt = numeric(0),
+                      pi_ref = numeric(0), delta_pi = numeric(0),
+                      stringsAsFactors = FALSE))
+  }
+
+  w <- splitcnts %>%
     dplyr::group_by(gene, event, groups) %>%
     dplyr::summarise(
       mean_diff = mean(diff, na.rm = TRUE),
@@ -973,7 +982,15 @@ compute_lfc_summary <- function(splitcnts, pseudocount = 1L,
     tidyr::pivot_wider(
       names_from  = groups,
       values_from = c(mean_diff, mean_ref)
-    ) %>%
+    )
+
+  ## A condition can also be missing while other rows exist
+  for (nm in c(paste0("mean_diff_", c(cond_ref, cond_trt)),
+               paste0("mean_ref_",  c(cond_ref, cond_trt)))) {
+    if (!nm %in% names(w)) w[[nm]] <- NA_real_
+  }
+
+  w %>%
     dplyr::mutate(
       lfc_diff     = log2((.data[[paste0("mean_diff_", cond_trt)]] + pseudocount) /
                           (.data[[paste0("mean_diff_", cond_ref)]] + pseudocount)),
@@ -1251,6 +1268,9 @@ run_one_comparison <- function(sc, test_fn, err_log, ..., chunk_size = 10000L,
 #' @export
 run_map_for_comparison <- function(sc, comp_name, prior_fn, err_log,
                                    checkpoint_prefix = NULL, mc_cores = 1L) {
+  ## An empty arm returns NULL, matching run_one_comparison() and
+  ## estimate_phi_for_comparison(), which both guard this already.
+  if (nrow(sc) == 0) return(NULL)
   gd <- group_by_event(sc, 'diff', 'n')
   n_events     <- length(gd)
   chunk_size   <- 10000L
