@@ -40,6 +40,9 @@ option_list = list(
               help="condition 2 name (Reference Group)", metavar="character"),
   make_option(c("--contrasts"), type="character", default=NULL,
               help="comma-separated contrasts in trt:ref format, e.g. B:A,C:A (overrides --cond1/--cond2 for multi-group runs)", metavar="character"),
+  make_option("--combine_p", action="store_true", default=FALSE,
+              help=paste("ALSO write per-event combined-p variants:",
+                         ".mincomb.annotated.txt and .fisher_combined.annotated.txt. OFF by default. ")),
   make_option(c("--use_phi_loess"), action="store_true", default=FALSE,
               help="use loess phi trend (log(phi) ~ log(baseMean)) as EB shrinkage target instead of global median"),
   make_option(c("--no_independent_filtering"), action="store_false", default=TRUE,
@@ -946,8 +949,10 @@ write.table(merged_data, out_result_annotated, sep = "\t", quote = FALSE, row.na
 message(paste("Successfully wrote annotated tests to", out_result_annotated))
 
 
-# Each bipartition event was tested twice (_s1 and _s2 sides). 
-if (split == 'bipartition' || split == 'n_choose_2') {
+# Each bipartition event was tested twice (_s1 and _s2 sides).
+# Off unless --combine_p: see that option's help for why these are optimistic
+# and when they are meaningless.
+if (isTRUE(opt$combine_p) && (split == 'bipartition' || split == 'n_choose_2')) {
   if (nrow(merged_data) > 0 && 'setdiff1' %in% names(merged_data)) {
 
     # Min p-value combination for bipartition_both:
