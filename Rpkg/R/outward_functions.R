@@ -1,0 +1,278 @@
+## Outward units for the TSS/TTS boundary arm.
+##
+## THE QUESTION THESE SERVE. A GrASE TSS/TTS call says a bipartition side's
+## distinct set differs in usage between conditions. It does not say where
+## transcription begins or ends. To ask that, walk outward from the side's
+## annotated termini and test, with the same shared reference, whether signal
+## stops. These functions supply the geometry for that walk.
+##
+## WHY A TILING. Exonic parts of a gene are disjoint, so the gene span minus
+## its exonic parts gives intronic parts that complete a DISJOINT TILING: every
+## base of the gene belongs to exactly one unit. That is what makes "the unit
+## immediately outward of this part" well defined at every step, with no gaps
+## to fall through and no overlapping units to choose between.
+##
+## WHY PER ROUTE, NOT PER SIDE. A side has one terminus per ROUTE, not one per
+## side. Taking a single position per side -- as a previous implementation did
+## -- lands on the outermost terminus only about half the time, so the walk has
+## to begin from every terminus and rank them.
+##
+## Part ids are compared as zero-padded three-digit strings throughout, because
+## that is how DEXSeq writes `exonic_part_number` and how the intronic bin ids
+## built here embed them.
+
+
+## Zero-padded three-digit part id. Idempotent: "001" and 1L both give "001".
+.part_id <- function(x) {
+  x <- suppressWarnings(as.integer(x))
+  ifelse(is.na(x), NA_character_, sprintf("%03d", x))
+}
+
+
+#' Does walking outward mean decreasing coordinate?
+#'
+#' A TSS bubble is anchored at the graph root ("R"), a TTS bubble at the leaf
+#' ("L"). Combined with gene strand this fixes which direction leads away from
+#' the transcript body: outward is the direction of decreasing coordinate for a
+#' TSS on the plus strand and for a TTS on the minus strand.
+#'
+#' Trivial, but it is the predicate every other step depends on, and getting it
+#' backwards inverts every verdict silently rather than erroring.
+#'
+#' @param kind Character, "TSS" or "TTS". Vectorised.
+#' @param strand Character, "+" or "-". Vectorised, recycled against `kind`.
+#' @return Logical vector: `TRUE` where outward means decreasing coordinate.
+#' @examples
+#' outward_decreasing(c("TSS", "TSS", "TTS", "TTS"), c("+", "-", "+", "-"))
+#' @export
+outward_decreasing <- function(kind, strand) {
+  kind <- as.character(kind); strand <- as.character(strand)
+  n <- max(length(kind), length(strand))
+  if (!length(kind) || !length(strand)) return(logical(0))
+  kind <- rep_len(kind, n); strand <- rep_len(strand, n)
+  bad <- !kind %in% c("TSS", "TTS") | !strand %in% c("+", "-")
+  if (any(bad))
+    stop("kind must be TSS or TTS and strand + or -; bad entries at ",
+         paste(which(bad), collapse = ", "), call. = FALSE)
+  (kind == "TSS" & strand == "+") | (kind == "TTS" & strand == "-")
+}
+
+
+#' Terminus exonic parts of a bipartition side, one per route
+#'
+#' The terminus of a route is its first exonic part after the graph root (TSS)
+#' or its last before the leaf (TTS). A path field lists one route per
+#' comma-separated element, vertices within a route separated by "-", so the
+#' terminal vertex is the second from the start for a TSS and the second from
+#' the end for a TTS. That vertex is then resolved to an exonic part through
+#' the `ex_part` edge sourced (TSS) or sunk (TTS) there.
+#'
+#' Returns EVERY route's terminus, deduplicated, not a single position for the
+#' side. Which terminus carries the differential effect is the question the walk
+#' exists to answer, so it cannot be collapsed here.
+#'
+#' @param path_field Character scalar: the side's `path1` or `path2` value,
+#'   e.g. `"1-2-5-9,1-3-6-9"`. `NA` or `""` give an empty result.
+#' @param kind Character scalar, "TSS" or "TTS".
+#' @param from_part Named character vector mapping an `ex_part` edge's SOURCE
+#'   vertex to its part number. Used for a TSS.
+#' @param to_part Named character vector mapping an `ex_part` edge's SINK vertex
+#'   to its part number. Used for a TTS.
+#' @return Character vector of zero-padded part ids, possibly empty. Routes
+#'   whose terminal vertex carries no `ex_part` edge are dropped.
+#' @export
+side_termini <- function(path_field, kind, from_part, to_part) {
+  kind <- match.arg(as.character(kind), c("TSS", "TTS"))
+  if (length(path_field) != 1L)
+    stop("path_field must be a single value", call. = FALSE)
+  if (is.na(path_field) || !nzchar(trimws(path_field))) return(character(0))
+  routes <- trimws(unlist(strsplit(as.character(path_field), ",", fixed = TRUE)))
+  routes <- routes[nzchar(routes)]
+  if (!length(routes)) return(character(0))
+  verts <- vapply(strsplit(routes, "-", fixed = TRUE), function(v) {
+    ## a route needs at least a terminal node and the root or leaf beside it
+    if (length(v) < 2L) return(NA_character_)
+    if (kind == "TSS") v[2L] else v[length(v) - 1L]
+  }, character(1))
+  verts <- verts[!is.na(verts)]
+  if (!length(verts)) return(character(0))
+  map <- if (kind == "TSS") from_part else to_part
+  parts <- unname(map[verts])
+  parts <- parts[!is.na(parts) & nzchar(parts)]
+  unique(.part_id(parts))
+}
+
+
+#' The tiling unit immediately outward of an exonic part
+#'
+#' Given one gene's exonic parts and its intronic bins, return the unit that
+#' abuts `part` on its outward side. Three cases, in order:
+#'
+#' * the neighbouring exonic part, when the tiling is contiguous there (the
+#'   neighbour ends exactly one base before this part starts, or starts one
+#'   base after it ends);
+#' * otherwise the intronic bin lying between the two parts, taken from the end
+#'   that faces `part`, so a long intron split into two end bins contributes the
+#'   bin actually adjacent to the walk;
+#' * otherwise nothing -- `part` faces the gene edge, or the gap between it and
+#'   its neighbour produced no bin.
+#'
+#' The third case is not a failure and must not be read as one. A missing unit
+#' means the outward space was never measured, which is different from having
+#' measured it and found no signal.
+#'
+#' @param part Part ids to walk outward from. Vectorised.
+#' @param decreasing Logical: is outward the direction of decreasing
+#'   coordinate? See [outward_decreasing()]. Recycled against `part`.
+#' @param geom Data frame of ONE gene's exonic parts, with columns `part`,
+#'   `start`, `end`. Order does not matter; it is sorted here.
+#' @param intron_bins Data frame of ONE gene's intronic bins, with columns
+#'   `bin_id`, `abut_part_lo`, `abut_part_hi` and `touches` ("both", "lo" or
+#'   "hi"), as returned by [intronic_parts()]. May be `NULL` or empty.
+#' @return Data frame with one row per `part` and columns `unit_type`
+#'   ("exon", "intron" or `NA`) and `unit_id` (a part id, a bin id, or `NA`).
+#' @export
+outward_unit <- function(part, decreasing, geom, intron_bins = NULL) {
+  if (!all(c("part", "start", "end") %in% names(geom)))
+    stop("geom needs columns part, start, end", call. = FALSE)
+  n <- length(part)
+  out <- data.frame(unit_type = rep(NA_character_, n),
+                    unit_id   = rep(NA_character_, n),
+                    stringsAsFactors = FALSE)
+  if (!n) return(out)
+  decreasing <- rep_len(as.logical(decreasing), n)
+
+  g <- geom[order(as.numeric(geom$start), as.numeric(geom$end)), , drop = FALSE]
+  gp <- .part_id(g$part); gs <- as.numeric(g$start); ge <- as.numeric(g$end)
+  m <- length(gp)
+
+  has_bins <- !is.null(intron_bins) && nrow(intron_bins) > 0L
+  if (has_bins) {
+    if (!all(c("bin_id", "abut_part_lo", "abut_part_hi", "touches") %in% names(intron_bins)))
+      stop("intron_bins needs columns bin_id, abut_part_lo, abut_part_hi, touches",
+           call. = FALSE)
+    blo <- .part_id(intron_bins$abut_part_lo)
+    bhi <- .part_id(intron_bins$abut_part_hi)
+    btc <- as.character(intron_bins$touches)
+    bid <- as.character(intron_bins$bin_id)
+  }
+
+  ## the bin between parts lo and hi, taken from the end facing the walk:
+  ## walking down into the intron we arrive at its HIGH end, and vice versa.
+  pick_bin <- function(lo, hi, dec) {
+    if (!has_bins) return(NA_character_)
+    want <- if (dec) c("both", "hi") else c("both", "lo")
+    k <- which(blo == lo & bhi == hi & btc %in% want)
+    if (length(k)) bid[k[1L]] else NA_character_
+  }
+
+  want <- .part_id(part)
+  for (i in seq_len(n)) {
+    j <- match(want[i], gp)
+    if (is.na(j)) next
+    if (decreasing[i]) {
+      if (j == 1L) next                       # gene edge
+      if (ge[j - 1L] == gs[j] - 1L) {         # contiguous tiling
+        out$unit_type[i] <- "exon"; out$unit_id[i] <- gp[j - 1L]; next
+      }
+      b <- pick_bin(gp[j - 1L], gp[j], TRUE)
+    } else {
+      if (j == m) next                        # gene edge
+      if (gs[j + 1L] == ge[j] + 1L) {
+        out$unit_type[i] <- "exon"; out$unit_id[i] <- gp[j + 1L]; next
+      }
+      b <- pick_bin(gp[j], gp[j + 1L], FALSE)
+    }
+    if (!is.na(b)) { out$unit_type[i] <- "intron"; out$unit_id[i] <- b }
+  }
+  out
+}
+
+
+#' Intronic parts of a gene, as quantification units
+#'
+#' The intronic analogue of a DEXSeq exonic part: a maximal region of the gene
+#' that is exonic in no isoform. Taken as the gene's exonic parts subtracted
+#' from its span, so exonic and intronic parts together tile the gene without
+#' gaps or overlaps.
+#'
+#' A short intron becomes ONE bin spanning it. A long one becomes TWO bins, at
+#' its low and high ends, because the interior of a long intron says nothing
+#' about whether transcription continued past a boundary at either end, and a
+#' single bin would dilute the signal across it. `max_whole >= 2 * end_width`
+#' is required so those two bins cannot overlap and double-count reads.
+#'
+#' @param start,end,part Exonic part coordinates and part numbers for ONE gene,
+#'   in any order. `part` is used only to name the bins.
+#' @param max_whole Introns up to this length give one bin spanning the whole
+#'   intron; longer ones give two end bins.
+#' @param end_width Width of each end bin for a long intron.
+#' @return Data frame of bins with columns `bin_id`, `intron_id`, `touches`
+#'   ("both" for a whole-intron bin, else "lo" or "hi"), `start`, `end`,
+#'   `width`, `intron_start`, `intron_end`, `intron_len`, `abut_part_lo` and
+#'   `abut_part_hi`. Zero rows when the gene yields no intronic part, with
+#'   attribute `"skip"` giving the reason: `"single"` (fewer than two exonic
+#'   parts), `"overlap"` (exonic parts overlap, so the tiling premise fails and
+#'   the gene must be excluded rather than silently producing negative-width
+#'   bins) or `"no_intron"` (all parts abut).
+#' @export
+intronic_parts <- function(start, end, part, max_whole = 2000L, end_width = 300L) {
+  max_whole <- as.integer(max_whole); end_width <- as.integer(end_width)
+  if (is.na(max_whole) || is.na(end_width) || end_width < 1L)
+    stop("max_whole and end_width must be positive integers", call. = FALSE)
+  if (max_whole < 2L * end_width)
+    stop("max_whole (", max_whole, ") must be >= 2 * end_width (",
+         2L * end_width, "): otherwise the two end bins overlap and ",
+         "double-count reads", call. = FALSE)
+  if (length(start) != length(end) || length(start) != length(part))
+    stop("start, end and part must be the same length", call. = FALSE)
+
+  empty <- function(reason) {
+    d <- data.frame(bin_id = character(0), intron_id = character(0),
+                    touches = character(0), start = numeric(0), end = numeric(0),
+                    width = numeric(0), intron_start = numeric(0),
+                    intron_end = numeric(0), intron_len = numeric(0),
+                    abut_part_lo = character(0), abut_part_hi = character(0),
+                    stringsAsFactors = FALSE)
+    attr(d, "skip") <- reason
+    d
+  }
+  if (length(start) < 2L) return(empty("single"))
+
+  o <- order(as.numeric(start), as.numeric(end))
+  s <- as.numeric(start)[o]; e <- as.numeric(end)[o]; p <- .part_id(part)[o]
+  ## the tiling depends on this; a violation would silently produce
+  ## negative-width or overlapping intronic parts
+  if (any(s[-1L] <= e[-length(e)])) return(empty("overlap"))
+
+  gs <- e[-length(e)] + 1                    # intron start = previous part end + 1
+  ge <- s[-1L] - 1                           # intron end   = next part start - 1
+  has <- ge >= gs                            # abutting parts leave no intron
+  if (!any(has)) return(empty("no_intron"))
+
+  lo <- p[-length(p)][has]; hi <- p[-1L][has]
+  gs <- gs[has]; ge <- ge[has]
+  ilen <- ge - gs + 1
+  whole <- ilen <= max_whole
+
+  bs <- c(gs[whole], gs[!whole],                  ge[!whole] - end_width + 1)
+  be <- c(ge[whole], gs[!whole] + end_width - 1,  ge[!whole])
+  lp <- c(lo[whole], lo[!whole], lo[!whole])
+  hp <- c(hi[whole], hi[!whole], hi[!whole])
+  il <- c(ilen[whole], ilen[!whole], ilen[!whole])
+  istart <- c(gs[whole], gs[!whole], gs[!whole])
+  iend   <- c(ge[whole], ge[!whole], ge[!whole])
+  touches <- c(rep("both", sum(whole)), rep("lo", sum(!whole)), rep("hi", sum(!whole)))
+  sfx <- ifelse(touches == "both", "", ifelse(touches == "lo", ".lo", ".hi"))
+
+  d <- data.frame(
+    bin_id = sprintf("I%s_%s%s", lp, hp, sfx),
+    intron_id = sprintf("I%s_%s", lp, hp), touches = touches,
+    start = bs, end = be, width = be - bs + 1,
+    intron_start = istart, intron_end = iend, intron_len = il,
+    abut_part_lo = lp, abut_part_hi = hp, stringsAsFactors = FALSE)
+  d <- d[order(d$start, d$end), , drop = FALSE]
+  rownames(d) <- NULL
+  attr(d, "skip") <- NA_character_
+  d
+}
