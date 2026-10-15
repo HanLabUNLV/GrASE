@@ -8,8 +8,8 @@ library(optparse)
 
 # --- Main Execution Script ---
 
-outdir = '~/GrASE_simulation/bipartition.test'
-countdir = '~/GrASE_simulation/bipartition.internal.counts'
+outdir = NULL
+countdir = NULL
 split = 'bipartition'
 model = 'betabinom_EBmap'
 masterfile = 'bipartition.ex.internal.cnt.combined.txt'
@@ -88,6 +88,19 @@ if (!is.null(opt$outdir)) {
 }
 if (!is.null(opt$countdir)) {
   countdir = opt$countdir
+}
+## DATASET PATHS ARE REQUIRED, with no default. --outdir and --countdir used to
+## fall back to ~/GrASE_simulation/..., overridden only when the flag was
+## supplied, so a run with one omitted read or wrote that tree without saying
+## anything. After the count rename that got worse: the default --file names a
+## new-scheme table (bipartition.ex.internal.cnt.combined.txt) while the
+## fallback directory held old-scheme .exoncnt.txt files, so the two disagreed
+## in silence. The package must not know about any particular dataset.
+for (nm in c("outdir", "countdir")) {
+  if (is.null(get(nm))) {
+    print_help(opt_parser)
+    stop("--", nm, " is required and has no default", call. = FALSE)
+  }
 }
 if (!is.null(opt$splittype)) {
   split = opt$splittype

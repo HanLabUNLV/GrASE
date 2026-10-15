@@ -44,8 +44,6 @@ if (is.null(opt$split)) {
   stop("Split method (--split) must be specified among 'bipartition', 'multinomial' or 'n_choose_2'.", call.=FALSE)
 }
 
-#opt$graphdir <- "~/GrASE_simulation/graphml" 
-#opt$outdir <- "~/GrASE_simulation/collapsed" 
 #opt$split <- "bipartition"
 #opt$collapse_bubbles <- TRUE
 #opt$genename = 'ENSG00000000003.14'

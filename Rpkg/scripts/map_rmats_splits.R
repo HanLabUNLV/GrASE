@@ -4,10 +4,14 @@ library(optparse)
 
 # --- Main Execution Script ---
 
-indir = "~/GrASE_simulation/"
+## --indir is REQUIRED. It used to default to ~/GrASE_simulation/, and
+## split_dir and rmats_dir were derived from it HERE, before parse_args ran --
+## so passing --indir moved indir but left both derived paths pointing at the
+## simulation tree. They are now derived after the options are read.
+indir = NULL
 analysis_type = 'bipartition'
-split_dir = paste0(indir,'/bipartition.internal.counts')
-rmats_dir <- file.path(indir, 'rMATS/rmats_post_group1_group2/')
+split_dir = NULL
+rmats_dir <- NULL
 
 
 option_list = list(
@@ -34,6 +38,12 @@ if (!is.null(opt$indir)) {
 if (!is.null(opt$type)) {
   analysis_type = opt$type
 } 
+if (is.null(indir)) {
+  print_help(opt_parser)
+  stop("--indir is required and has no default", call. = FALSE)
+}
+if (is.null(split_dir)) split_dir <- file.path(indir, 'bipartition.ex.internal.counts')
+if (is.null(rmats_dir)) rmats_dir <- file.path(indir, 'rMATS/rmats_post_group1_group2/')
 if (!is.null(opt$splitdir)) {
   split_dir = opt$splitdir
 } 

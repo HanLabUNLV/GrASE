@@ -6,12 +6,12 @@ library(optparse)
 # --- Main Execution Script ---
 
 analysis_type = 'bipartition'
-countdir = '~/GrASE_simulation/DEXSeq/count_files'
 cond1 = 'group1'
 cond2 = 'group2'
 alt = 'internal'
-input_path = '~/GrASE_simulation/bipartition.filtered'
-output_path = '~/GrASE_simulation/bipartition.internal.counts'
+countdir = NULL
+input_path = NULL
+output_path = NULL
 
 args = commandArgs(trailingOnly=TRUE)
 
@@ -60,6 +60,20 @@ if (!is.null(opt$type)) {
 if (!is.null(opt$countdir)) {
   countdir = opt$countdir
 } 
+
+## DATASET PATHS ARE REQUIRED, with no default. They used to fall back to
+## ~/GrASE_simulation/..., overridden only when the flag was supplied, so a run
+## with a flag omitted read or wrote that tree without saying anything. After
+## the count rename that got worse: the default --file names a new-scheme table
+## while the fallback directory holds old-scheme files, so the two disagree
+## silently. The package must not know about any particular dataset.
+for (nm in c("countdir", "input_path", "output_path")) {
+  if (is.null(get(nm))) {
+    print_help(opt_parser)
+    stop(nm, " is required and has no default", call. = FALSE)
+  }
+}
+
 if (!is.null(opt$cond1)) {
   cond1 = opt$cond1
 } 

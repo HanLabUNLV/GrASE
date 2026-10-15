@@ -9,12 +9,14 @@ suppressPackageStartupMessages({
 })
 
 option_list <- list(
-  make_option(c("-g", "--grase"), type = "character", default = "~/GrASE_simulation/bipartition.test/test_bipartition.internal_glmmTMB_fixed_EB.annotated.txt",
-              help = "Path to GrASE annotated exontest results file [default= %default]", metavar = "character"),
-  make_option(c("--grase2"), type = "character", default = "~/GrASE_simulation/bipartition.test/test_bipartition.external_glmmTMB_fixed_EB.annotated.txt",
-              help = "Path to GrASE second optional annotated exontest results file [default= %default]", metavar = "character"),
-  make_option(c("-s", "--saturn"), type = "character", default = "~/GrASE_simulation/saturn/saturn_group1_group2/all.group1_group2.sumExp_filteredbyCountMultiExon.txt",
-              help = "Path to Saturn results file [default= %default]", metavar = "character"),
+  ## No dataset defaults. These used to point into ~/GrASE_simulation, so the
+  ## script silently compared that tree's results whenever a flag was omitted.
+  make_option(c("-g", "--grase"), type = "character", default = NULL,
+              help = "Path to GrASE annotated exontest results file (required)", metavar = "character"),
+  make_option(c("--grase2"), type = "character", default = NULL,
+              help = "Path to a second GrASE annotated results file, e.g. the other event class (optional)", metavar = "character"),
+  make_option(c("-s", "--saturn"), type = "character", default = NULL,
+              help = "Path to Saturn results file (required)", metavar = "character"),
   make_option(c("-o", "--output"), type = "character", default = "saturn_grase_glmmTMB_fixed_EB.comparison.txt",
               help = "Output file path [default= %default]", metavar = "character")
 )
@@ -22,6 +24,12 @@ option_list <- list(
 opt_parser <- OptionParser(option_list = option_list)
 opt <- parse_args(opt_parser)
 
+for (nm in c("grase", "saturn")) {
+  if (is.null(opt[[nm]])) {
+    print_help(opt_parser)
+    stop("--", nm, " is required and has no default", call. = FALSE)
+  }
+}
 grase_file <- opt$grase
 grase2_file <- opt$grase2
 saturn_file <- opt$saturn

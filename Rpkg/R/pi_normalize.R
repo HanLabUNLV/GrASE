@@ -77,7 +77,7 @@ feature_length <- function(part_str, lens) {
 #'
 #' Two layouts are in use and both must work, because the same package annotates
 #' both projects:
-#'   flat    \code{<dir>/<gene>.dexseq.gff}            (GrASE_simulation/dexseq.gff)
+#'   flat    \code{<dir>/<gene>.dexseq.gff}            (one file per gene in <dir>)
 #'   nested  \code{<dir>/<gene>/<gene>.dexseq.gff}     (DICE grase_results/gene_files)
 #'
 #' @param gff_dir Directory holding per-gene GFFs in either layout.

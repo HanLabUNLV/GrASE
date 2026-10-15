@@ -1,8 +1,5 @@
 library(optparse)
 
-split_dir = "~/GrASE_simulation/bipartition2"
-outdir = "~/GrASE_simulation/bipartition.filtered"
-
 # Parse command line arguments
 option_list <- list(
   make_option(c("-i", "--split_dir"), type="character", default=NULL,

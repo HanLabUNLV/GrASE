@@ -7,8 +7,14 @@ library(SplicingGraphs)
 library(grase)
 
 gene    <- "ENSG00000133706.17"
-indir   <- "/mnt/data1/home/mirahan/GrASE_simulation"
-outdir  <- "/mnt/data1/home/mirahan/GrASE"
+## usage: Rscript plot_subset_133706.R <indir> [outdir]
+## Both were hardcoded absolute paths (indir into GrASE_simulation, outdir into
+## the package working copy), which tied this figure to one machine.
+args   <- commandArgs(trailingOnly = TRUE)
+if (length(args) < 1)
+  stop("usage: Rscript plot_subset_133706.R <indir> [outdir]", call. = FALSE)
+indir   <- args[1]
+outdir  <- if (length(args) >= 2) args[2] else indir
 n_min   <- 35
 n_max   <- 80
 

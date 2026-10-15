@@ -17,6 +17,6 @@ Path to the GFF, or NA_character_ if neither layout resolves.
 \description{
 Two layouts are in use and both must work, because the same package annotates
 both projects:
-flat    \code{<dir>/<gene>.dexseq.gff}            (GrASE_simulation/dexseq.gff)
+flat    \code{<dir>/<gene>.dexseq.gff}            (one file per gene in \if{html}{\out{<dir>}})
 nested  \code{<dir>/<gene>/<gene>.dexseq.gff}     (DICE grase_results/gene_files)
 }
