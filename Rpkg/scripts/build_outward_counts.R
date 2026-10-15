@@ -72,24 +72,35 @@ u <- merge(u, tu[, .(gene, unit_type, unit_id, ref_ex_part, synth_event)],
 if (anyNA(u$synth_event)) stop("anchor row failed to map to a test unit")
 
 ## ---- unit counts, two sources ---------------------------------------------
-read_counts <- function(fn, keep) {
+## FILTER ON THE RAW KEY, then transform only the survivors. The count files
+## write `"GENE":"UNIT"`; the earlier version stripped the quotes and swapped
+## the colon on EVERY row of every file and only then filtered, which on the
+## lineage panel meant 757M rows transformed (699 samples x 1.08M rows) to keep
+## 67M (8.8%) -- 91% of the string work discarded. Building the wanted keys in
+## raw form once costs 95k paste0 calls instead.
+##
+## The old `!startsWith(k, "_")` guard is gone with it: HTSeq's `_ambiguous`,
+## `_no_feature` etc. carry no quotes, so they can never match a raw key.
+raw_key <- function(gene, unit) paste0('"', gene, '":"', unit, '"')
+read_counts <- function(fn, keep_raw) {
   d <- fread(fn, header = FALSE, sep = "\t", quote = "", showProgress = FALSE,
              col.names = c("k","n"))
-  d <- d[!startsWith(k, "_")]
-  d[, k := gsub('"', "", k, fixed = TRUE)]
-  d[, k := sub(":", "|", k, fixed = TRUE)]
-  d[k %chin% keep, .(k, n = as.integer(n))]
+  d[k %chin% keep_raw, .(k, n = as.integer(n))]
 }
-want_i <- unique(tu[unit_type == "intron", paste(gene, unit_id, sep = "|")])
-want_e <- unique(tu[unit_type == "exon",   paste(gene, unit_id, sep = "|")])
+want_i <- unique(tu[unit_type == "intron", raw_key(gene, unit_id)])
+want_e <- unique(tu[unit_type == "exon",   raw_key(gene, unit_id)])
 cat(sprintf("units to fetch: %d intronic, %d exonic\n", length(want_i), length(want_e)))
 
 ifiles  <- sort(list.files(a$intron_counts, pattern = "_counts\\.txt$", full.names = TRUE))
 if (!length(ifiles)) stop("no *_counts.txt under ", a$intron_counts)
 samples <- sub("_counts\\.txt$", "", basename(ifiles))
 cat(sprintf("samples: %d\n", length(samples)))
-ic <- rbindlist(lapply(seq_along(ifiles), function(i)
-  read_counts(ifiles[i], want_i)[, sample := samples[i]]))
+## Parallel over FILES: each is independent, and the serial lapply read 1,398
+## of them one at a time on a many-core box.
+ncore <- as.integer(Sys.getenv("MC_CORES", unset = "16"))
+cat(sprintf("reading count files on %d cores\n", ncore))
+ic <- rbindlist(parallel::mclapply(seq_along(ifiles), function(i)
+  read_counts(ifiles[i], want_i)[, sample := samples[i]], mc.cores = ncore))
 
 ex_path <- function(s) file.path(a$exon_counts, sub("_SRR[0-9]+$", "", s),
                                  paste0(sub("^.*_(SRR[0-9]+)$", "\\1", s), "_counts.txt"))
@@ -97,9 +108,12 @@ ep <- vapply(samples, ex_path, "")
 if (any(!file.exists(ep)))
   stop(sprintf("no exonic count file for %d samples, e.g. %s", sum(!file.exists(ep)),
                paste(head(samples[!file.exists(ep)], 3), collapse = ", ")))
-ec <- rbindlist(lapply(seq_along(ep), function(i)
-  read_counts(ep[i], want_e)[, sample := samples[i]]))
+ec <- rbindlist(parallel::mclapply(seq_along(ep), function(i)
+  read_counts(ep[i], want_e)[, sample := samples[i]], mc.cores = ncore))
 cnt <- rbind(ic, ec)
+## now, and only now, put the key in `GENE|UNIT` form -- once, on the kept rows
+cnt[, k := gsub('"', "", k, fixed = TRUE)]
+cnt[, k := sub(":", "|", k, fixed = TRUE)]
 cat(sprintf("count rows: %d over %d units\n", nrow(cnt), uniqueN(cnt$k)))
 
 ## An unresolved unit becomes 0 downstream, not an error, and a zero unit is
@@ -135,8 +149,10 @@ select_refs <- function(pairs) {
   keyf <- tempfile(); sel <- tempfile()
   fwrite(pairs[, .(k = paste(gene, ref_ex_part, sep = "\t"))], keyf,
          col.names = FALSE, quote = FALSE)
+  ## LC_ALL=C: the keys are ASCII, and locale-aware comparison roughly halves
+  ## awk's throughput on a 56 GiB single pass.
   cmd <- sprintf(
-    "awk -F'\\t' -v OFS='\\t' 'NR==FNR{keep[$1\"\\t\"$2]=1; next} FNR==1{next} NF==%d && (($%d\"\\t\"$%d) in keep){print $%d,$%d,$%d,$%d,$%d}' %s %s | sort -u > %s",
+    "LC_ALL=C awk -F'\\t' -v OFS='\\t' 'NR==FNR{keep[$1\"\\t\"$2]=1; next} FNR==1{next} NF==%d && (($%d\"\\t\"$%d) in keep){print $%d,$%d,$%d,$%d,$%d}' %s %s | sort -u > %s",
     ncol_, idx[["gene"]], idx[["ref_ex_part"]], idx[["gene"]], idx[["ref_ex_part"]],
     idx[["sample"]], idx[["ref"]], idx[["groups"]], shQuote(keyf),
     shQuote(a$exon_combined), shQuote(sel))
@@ -144,7 +160,6 @@ select_refs <- function(pairs) {
   d <- fread(sel, header = FALSE, sep = "\t", showProgress = FALSE,
              colClasses = list(character = 1:3),
              col.names = c("gene","ref_ex_part","sample","ref","groups"))
-  d
   d
 }
 
@@ -211,7 +226,7 @@ cat("wrote ", a$out, "\n", sep = "")
 ## so in this arm they describe D and not the unit tested. Read the unit here.
 um <- rows[, .(unit_mean = mean(n), unit_sum = sum(n), n_samples = .N),
            by = .(gene, synth_event)]
-st <- merge(u[, .(gene, event, side, kind, strand, anchor, anchor_kind,
+st <- merge(u[, .(gene, event, side, kind, strand, anchor, anchor_kind, gene_edge,
                   unit_type, unit_id, ref_ex_part, synth_event)],
             um, by = c("gene","synth_event"), all.x = TRUE)
 st[, comparison := "diff1_vs_ref"]

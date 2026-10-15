@@ -303,12 +303,9 @@ if (annotate_only) {
   ## simply not applied. Without this guard the block aborted with
   ## "object 'diff1' not found" before any test ran.
   if (all(c("diff1", "diff2") %in% names(splitcnts))) {
-    d_grp <- bind_rows(
-      splitcnts %>% group_by(gene, event, groups) %>%
-        summarise(m = mean(diff1, na.rm = TRUE), .groups = "drop") %>% mutate(side = "diff1"),
-      splitcnts %>% group_by(gene, event, groups) %>%
-        summarise(m = mean(diff2, na.rm = TRUE), .groups = "drop") %>% mutate(side = "diff2"))
-    d_grp$gene <- as.character(d_grp$gene); d_grp$event <- as.character(d_grp$event)
+    ## grase::support_table defines the (gene, event, side, group) schema in one
+    ## place, so a consumer cannot quietly drop `side` from the key.
+    d_grp <- grase::support_table(splitcnts)
     message(sprintf("Support table: %d (gene,event,side,group) means", nrow(d_grp)))
   } else {
     d_grp <- NULL
@@ -354,53 +351,17 @@ if (annotate_only) {
 }
 
 ## ---- read support for the tested distinct set -------------------------------
-## d_support = the LARGER of the two contrasted groups' mean distinct counts.
-## max(), not min(): requiring both groups to clear the floor throws away exactly
-## the on/off events the test exists to find (measured on the simulation GT:
-## min() cost 200 true positives, max() cost 31, at the same precision).
-##
-## Kept separate from independent filtering, which cannot do this job: its
-## statistic is baseMean = mean(diff_i + ref), the test's DENOMINATOR, and the
-## reference usually dominates. A side with ref = 200 and diff = 0.3 has
-## baseMean ~ 200 and sails through while carrying no information about D.
+## The implementation now lives in the package as grase::add_support(), so the
+## outward-walk arm applies the SAME floor instead of reimplementing it. This
+## wrapper only supplies the two values that used to be captured as globals,
+## which is what made the function unreusable. See ?add_support for why the
+## statistic is max() over the contrast's groups and why independent filtering
+## cannot do this job.
 add_support <- function(res, contrast = NULL) {
-  if (!exists("d_grp") || is.null(d_grp) || is.null(res) || !nrow(res)) return(res)
-  if (!all(c("gene", "event", "comparison") %in% names(res))) return(res)
-  ctr <- if (!is.null(contrast)) rep_len(as.character(contrast), nrow(res))
-         else if ("contrast" %in% names(res)) as.character(res$contrast)
-         else return(res)
-  side <- sub("_vs_ref$", "", as.character(res$comparison))
-  key  <- paste(d_grp$gene, d_grp$event, d_grp$side, d_grp$groups, sep = "\r")
-
-  ## Groups come from ctr_groups (built with the contrasts), NOT from splitting
-  ## the contrast name. Name-splitting silently yielded NA -- and so skipped the
-  ## read floor entirely -- for any group containing "_vs_", and had no way to
-  ## express a K-group omnibus. Unknown contrast names still give NA support,
-  ## which leaves the row untested by the floor rather than wrongly filtered.
-  grp_sets <- if (exists("ctr_groups")) ctr_groups[ctr] else vector("list", length(ctr))
-
-  ## max over the contrast's groups: support in ANY ONE of them is enough.
-  ## min() would discard all-or-nothing switches, which is what the test is for
-  ## (measured: min cost 200 true positives vs 31 for max, at equal precision).
-  ## Loop over CONTRASTS (a handful), not rows. A per-row vapply does one
-  ## match() per row against a key vector with ~1.9M entries on the TSS/TTS
-  ## arm -- order 10^12 operations, which ran for hours single-threaded with no
-  ## output. Each contrast now contributes one vectorised match() per group,
-  ## which is what the original pairwise code did (two matches, trt and ref).
-  res$d_support <- NA_real_
-  for (cn in unique(ctr)) {
-    gs <- ctr_groups[[cn]]
-    if (is.null(gs) || !length(gs)) next
-    rows <- which(ctr == cn)
-    acc  <- rep(NA_real_, length(rows))
-    for (g in gs) {
-      m <- d_grp$m[match(paste(res$gene[rows], res$event[rows], side[rows], g,
-                               sep = "\r"), key)]
-      acc <- pmax(acc, m, na.rm = TRUE)
-    }
-    res$d_support[rows] <- acc
-  }
-  res
+  if (!exists("d_grp") || is.null(d_grp)) return(res)
+  grase::add_support(res, d_grp,
+                     if (exists("ctr_groups")) ctr_groups else list(),
+                     contrast = contrast)
 }
 
 ## Drop unsupported sides from the test universe BEFORE p-value adjustment, by

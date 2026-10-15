@@ -10,14 +10,14 @@ side_termini(path_field, kind, from_part, to_part)
 \item{path_field}{Character scalar: the side's \code{path1} or \code{path2} value,
 e.g. \code{"1-2-5-9,1-3-6-9"}. \code{NA} or \code{""} give an empty result.}
 
-\item{kind}{Character scalar, "start" or "end": which graph terminal the
+\item{kind}{Character scalar, "5prime" or "3prime": which graph terminal the
 side is anchored at, the root \code{R} or the leaf \code{L}.}
 
 \item{from_part}{Named character vector mapping an \code{ex_part} edge's SOURCE
-vertex to its part number. Used for a \code{"start"} side.}
+vertex to its part number. Used for a \code{"5prime"} side.}
 
 \item{to_part}{Named character vector mapping an \code{ex_part} edge's SINK vertex
-to its part number. Used for an \code{"end"} side.}
+to its part number. Used for a \code{"3prime"} side.}
 }
 \value{
 Character vector of zero-padded part ids, possibly empty. Routes
@@ -25,12 +25,12 @@ whose terminal vertex carries no \code{ex_part} edge are dropped.
 }
 \description{
 The terminus of a route is its first exonic part after the graph root (a
-\code{"start"} side) or its last before the leaf (an \code{"end"} side). A path field
+\code{"5prime"} side) or its last before the leaf (a \code{"3prime"} side). A path field
 lists one route per comma-separated element, vertices within a route
 separated by "-", so the terminal vertex is the second from the beginning
-for \code{"start"} and the second from the end for \code{"end"}. That vertex is then
-resolved to an exonic part through the \code{ex_part} edge sourced (\code{"start"}) or
-sunk (\code{"end"}) there.
+for \code{"5prime"} and the second from the end for \code{"3prime"}. That vertex is
+then resolved to an exonic part through the \code{ex_part} edge sourced
+(\code{"5prime"}) or sunk (\code{"3prime"}) there.
 }
 \details{
 Returns EVERY route's terminus, deduplicated, not a single position for the

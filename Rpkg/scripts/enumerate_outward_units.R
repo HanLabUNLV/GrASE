@@ -57,7 +57,7 @@
 ## Usage:
 ##   Rscript scripts/enumerate_outward_units.R --results <annotated.txt> \
 ##     --split_dir <bipartition.filtered> --graphml_dir <graphml.v34> \
-##     --exon_parts <geom_parts.tsv> --intron_manifest <intronparts_manifest.tsv> \
+##     --intron_manifest <intronparts_manifest.tsv> \
 ##     --out <units.tsv> [--mc_cores 8]
 suppressPackageStartupMessages({library(data.table); library(igraph); library(optparse)
                                 library(grase)})
@@ -66,11 +66,10 @@ o <- parse_args(OptionParser(option_list = list(
   make_option("--results",         type = "character"),
   make_option("--split_dir",       type = "character"),
   make_option("--graphml_dir",     type = "character"),
-  make_option("--exon_parts",      type = "character"),
   make_option("--intron_manifest", type = "character"),
   make_option("--out",             type = "character"),
   make_option("--mc_cores",        type = "integer", default = 8L))))
-for (r in c("results","split_dir","graphml_dir","exon_parts","intron_manifest","out"))
+for (r in c("results","split_dir","graphml_dir","intron_manifest","out"))
   if (is.null(o[[r]])) stop("--", r, " is required")
 pid <- function(x) sprintf("%03d", as.integer(x))
 
@@ -81,10 +80,45 @@ called <- unique(res[significant == TRUE, .(gene, event, side, ref_ex_part)])
 setkey(called, gene, event, side)
 cat(sprintf("called sides: %d over %d genes\n", nrow(called), uniqueN(called$gene)))
 
-ex <- fread(o$exon_parts, showProgress = FALSE)
-ex[, `:=`(start = as.numeric(start), end = as.numeric(end), part = as.integer(part))]
-setorder(ex, gene, start)
-setkey(ex, gene, part)
+## GEOMETRY COMES FROM THE GRAPH, not from a GFF-derived table. This script
+## already reads each gene's graphml to resolve a route's terminal vertex to a
+## part, so taking coordinates from a separate file meant two sources for one
+## fact. The old --exon_parts pointed at tss_edge/geom_parts.tsv, a by-product
+## of the GFF-based edge test, which is also why this arm still reached into
+## that deleted test's output directory.
+##
+## An ex_part edge spans its two vertices' positions HALF-OPEN, [lo, hi), while
+## the GFF writes a closed [start, end]; hence end = hi - 1L. Verified against
+## geom_parts.tsv on 1,872 parts over 60 genes: start == lo and end == hi - 1 on
+## every one. Strand is the sign of (to - from) along ex_part edges, median over
+## the gene: correct on 80 of 80 genes. intronparts.R builds the intronic-bin
+## manifest from the GFFs and the two agree exactly under that convention, so it
+## needs no regeneration.
+graph_geom <- function(gg) {
+  el <- as.data.table(as_edgelist(gg, names = TRUE)); setnames(el, c("from", "to"))
+  el$type <- E(gg)$ex_or_in; el$frag <- E(gg)$dexseq_fragment
+  pos <- suppressWarnings(setNames(as.numeric(V(gg)$position), V(gg)$name))
+  ep <- el[type == "ex_part" & !is.na(frag) & frag != ""]
+  if (!nrow(ep)) return(NULL)
+  ep[, `:=`(pf = pos[from], pt = pos[to])]
+  ep <- ep[!is.na(pf) & !is.na(pt)]
+  if (!nrow(ep)) return(NULL)
+  d <- ep[, .(start = min(pmin(pf, pt)), end = max(pmax(pf, pt)) - 1L),
+          by = .(part = as.integer(frag))]
+  setorder(d, start)
+  list(geo = d, strand = if (median(ep$pt - ep$pf) > 0) "+" else "-",
+       s2p = setNames(ep$frag, ep$from), k2p = setNames(ep$frag, ep$to))
+}
+
+## Is there any part OUTWARD of this one, or is it the gene's edge? Emitted here
+## rather than recomputed downstream: this is the only stage that holds the
+## gene's full part list, and score_outward_walk.R needs the answer but has no
+## other reason to load geometry. `geo` is ordered by start, so outward-and-
+## decreasing means position 1 and outward-and-increasing means the last row.
+gene_edge_flag <- function(a, dec, geo) {
+  j <- match(as.integer(a), geo$part)
+  if (dec) is.na(j) | j == 1L else is.na(j) | j == nrow(geo)
+}
 
 ip <- fread(o$intron_manifest, sep = "\t", showProgress = FALSE)
 setkey(ip, gene)
@@ -103,21 +137,19 @@ one_gene <- function(g) {
   d[, event := as.character(.I)]
   gg <- tryCatch(read_graph(gf, format = "graphml"), error = function(e) NULL)
   if (is.null(gg)) return(NULL)
-  el <- as.data.table(as_edgelist(gg, names = TRUE)); setnames(el, c("from","to"))
-  el[, `:=`(type = E(gg)$ex_or_in, frag = E(gg)$dexseq_fragment)]
-  epg <- el[type == "ex_part" & !is.na(frag) & frag != ""]
-  if (!nrow(epg)) return(NULL)
-  s2p <- setNames(epg$frag, epg$from); k2p <- setNames(epg$frag, epg$to)
-  st <- ex[J(g), strand, nomatch = NULL][1]
-  if (is.na(st)) return(NULL)
-  geo <- ex[J(g), .(part, start, end), nomatch = NULL]
+  gm <- graph_geom(gg)
+  if (is.null(gm)) return(NULL)
+  s2p <- gm$s2p; k2p <- gm$k2p; st <- gm$strand; geo <- gm$geo
   ib  <- ip[J(g), .(bin_id, abut_part_lo, abut_part_hi, touches), nomatch = NULL]
   rbindlist(lapply(seq_len(nrow(d)), function(i) {
     ## which graph terminal the side is anchored at: R gives a start, L an end.
     ## `kind` is that semantic label, not the terminal name -- outward_decreasing()
     ## pairs it with strand to get the walk direction.
-    kind <- if (identical(as.character(d$source[i]), "R")) "start" else
-            if (identical(as.character(d$sink[i]),   "L")) "end" else NA
+    ## 5prime / 3prime, not start / end: the free end of an R-anchored side is
+    ## the transcription start and of an L-anchored side the transcription end,
+    ## and the same vocabulary is used by the bounded.<end> label downstream.
+    kind <- if (identical(as.character(d$source[i]), "R")) "5prime" else
+            if (identical(as.character(d$sink[i]),   "L")) "3prime" else NA
     if (is.na(kind)) return(NULL)
     dec <- outward_decreasing(kind, st)
     rbindlist(lapply(1:2, function(sd) {
@@ -133,7 +165,7 @@ one_gene <- function(g) {
       if (!is.na(dp) && !dp %in% c("", "NA")) {
         dn <- as.integer(gsub("E", "", trimws(unlist(strsplit(dp, ",", fixed = TRUE)))))
         dn <- dn[!is.na(dn)]
-        dr <- ex[J(g, dn), nomatch = NULL]
+        dr <- geo[part %in% dn]
         if (nrow(dr)) {
           oe <- if (dec) dr$part[which.min(dr$start)] else dr$part[which.max(dr$end)]
           anchors <- rbind(anchors, data.table(anchor = pid(oe), anchor_kind = "d_edge"))
@@ -144,6 +176,7 @@ one_gene <- function(g) {
       out1 <- data.table(gene = g, event = d$event[i], side = sd, kind = kind, strand = st,
                  anchor = anchors$anchor, anchor_kind = anchors$anchor_kind,
                  unit_type = tiles$unit_type, unit_id = tiles$unit_id,
+                 gene_edge = gene_edge_flag(anchors$anchor, dec, geo),
                  ref_ex_part = cs$ref_ex_part[1])
       ## the terminus parts themselves
       tn <- anchors[anchor_kind == "terminus"]
@@ -151,6 +184,7 @@ one_gene <- function(g) {
         data.table(gene = g, event = d$event[i], side = sd, kind = kind, strand = st,
                    anchor = tn$anchor, anchor_kind = "terminus_self",
                    unit_type = "exon", unit_id = tn$anchor,
+                   gene_edge = gene_edge_flag(tn$anchor, dec, geo),
                    ref_ex_part = cs$ref_ex_part[1]) else NULL
       rbind(out1, out2)
     }))

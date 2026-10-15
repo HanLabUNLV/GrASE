@@ -1356,3 +1356,108 @@ estimate_phi_for_comparison <- function(sc, comp_name, outdir, mc_cores = 1L) {
   if (nrow(phi_df_comp) > 0) phi_df_comp$comparison <- comp_name
   phi_df_comp
 }
+
+
+## ---- read support for the tested distinct set -------------------------------
+## These two were script-local in scripts/exontest.R, where they closed over the
+## globals `d_grp` and `ctr_groups`. That is why the outward-walk arm could not
+## call them and reimplemented the same arithmetic in awk instead, keyed on
+## (gene, event, groups) with no `side` -- correct only because that arm writes
+## every unit into diff1 and leaves diff2 NA, so the two sides of an event can
+## never collide onto one key. Exported here with the dependencies as arguments
+## so there is one definition of the floor.
+
+#' Per-group mean of each side's distinct-set count
+#'
+#' One row per (gene, event, side, group): the arithmetic mean, over the samples
+#' of that group, of the side's distinct-set read count. This is the support
+#' table \code{\link{add_support}} consumes.
+#'
+#' `side` is part of the key and must stay so. A side's two distinct sets are
+#' separate tests with separate counts, and collapsing them would average a
+#' used side together with an unused one.
+#'
+#' @param counts Long-format count table with columns \code{gene},
+#'   \code{event}, \code{groups}, \code{diff1} and \code{diff2}.
+#' @return Data frame with columns \code{gene}, \code{event}, \code{groups},
+#'   \code{m} and \code{side}, or \code{NULL} when \code{diff1}/\code{diff2}
+#'   are absent -- the multinomial schema has no distinct/reference split, so
+#'   there is no "the tested distinct set" to support.
+#' @export
+support_table <- function(counts) {
+  if (is.null(counts) || !nrow(counts)) return(NULL)
+  if (!all(c("gene", "event", "groups", "diff1", "diff2") %in% names(counts)))
+    return(NULL)
+  one <- function(col, lab) {
+    m <- stats::aggregate(list(m = counts[[col]]),
+                          by = list(gene = counts$gene, event = counts$event,
+                                    groups = counts$groups),
+                          FUN = function(x) mean(x, na.rm = TRUE))
+    m$side <- lab
+    m
+  }
+  out <- rbind(one("diff1", "diff1"), one("diff2", "diff2"))
+  out$gene <- as.character(out$gene); out$event <- as.character(out$event)
+  out
+}
+
+#' Attach d_support, the read floor's statistic
+#'
+#' \code{d_support} is the LARGER of the contrasted groups' mean distinct
+#' counts for the tested side.
+#'
+#' max(), not min(): requiring both groups to clear the floor throws away
+#' exactly the on/off events the test exists to find. Measured on the
+#' simulation ground truth, min() cost 200 true positives against 31 for max()
+#' at the same precision -- an alternative start used only in the stimulated
+#' condition has a near-zero mean in the other group.
+#'
+#' This cannot be left to independent filtering, whose statistic is
+#' \code{baseMean = mean(diff_i + ref)} -- the test's DENOMINATOR, usually
+#' dominated by the shared reference. A side with ref = 200 and diff = 0.3 has
+#' baseMean ~ 200 and sails through while carrying no information about the
+#' distinct set.
+#'
+#' @param res Results table with \code{gene}, \code{event} and
+#'   \code{comparison}; \code{contrast} too unless \code{contrast} is passed.
+#' @param d_grp Support table from \code{\link{support_table}}. When
+#'   \code{NULL}, \code{res} is returned UNCHANGED and no floor is applied --
+#'   callers that rely on the floor must check for the column themselves.
+#' @param ctr_groups Named list mapping each contrast name to its group names.
+#'   Taken as given rather than split out of the contrast name, which silently
+#'   yielded NA -- and so skipped the floor entirely -- for any group whose own
+#'   name contains "_vs_", and could not express a K-group omnibus.
+#' @param contrast Optional single contrast name, recycled over \code{res},
+#'   for callers that test one contrast at a time.
+#' @return \code{res} with a \code{d_support} column. An unknown contrast name
+#'   gives NA, which leaves the row untested by the floor rather than wrongly
+#'   filtered.
+#' @export
+add_support <- function(res, d_grp, ctr_groups, contrast = NULL) {
+  if (is.null(d_grp) || is.null(res) || !nrow(res)) return(res)
+  if (!all(c("gene", "event", "comparison") %in% names(res))) return(res)
+  ctr <- if (!is.null(contrast)) rep_len(as.character(contrast), nrow(res))
+         else if ("contrast" %in% names(res)) as.character(res$contrast)
+         else return(res)
+  side <- sub("_vs_ref$", "", as.character(res$comparison))
+  key  <- paste(d_grp$gene, d_grp$event, d_grp$side, d_grp$groups, sep = "\r")
+
+  ## Loop over CONTRASTS (a handful), not rows. A per-row vapply does one
+  ## match() per row against a key vector with ~1.9M entries on the external
+  ## arm -- order 10^12 operations, which ran for hours with no output. Each
+  ## contrast now contributes one vectorised match() per group.
+  res$d_support <- NA_real_
+  for (cn in unique(ctr)) {
+    gs <- ctr_groups[[cn]]
+    if (is.null(gs) || !length(gs)) next
+    rows <- which(ctr == cn)
+    acc  <- rep(NA_real_, length(rows))
+    for (g in gs) {
+      m <- d_grp$m[match(paste(res$gene[rows], res$event[rows], side[rows], g,
+                               sep = "\r"), key)]
+      acc <- pmax(acc, m, na.rm = TRUE)
+    }
+    res$d_support[rows] <- acc
+  }
+  res
+}
