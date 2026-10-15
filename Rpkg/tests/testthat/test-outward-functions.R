@@ -1,4 +1,4 @@
-## Tests for the outward units of the TSS/TTS boundary arm.
+## Tests for the outward units of the external-event boundary arm.
 
 ## One gene, five exonic parts. 001/002 abut exactly (no intron between them),
 ## the rest are separated by gaps of differing length:
@@ -15,54 +15,54 @@ mk_bins <- function() intronic_parts(mk_geom()$start, mk_geom()$end,
                                      end_width = 300L)
 
 
-test_that("outward_decreasing covers all four kind x strand cases", {
-  expect_equal(outward_decreasing(c("TSS", "TSS", "TTS", "TTS"),
+test_that("outward_decreasing covers all four terminal x strand cases", {
+  expect_equal(outward_decreasing(c("start", "start", "end", "end"),
                                   c("+", "-", "+", "-")),
                c(TRUE, FALSE, FALSE, TRUE))
 })
 
 test_that("outward_decreasing recycles and returns empty for empty input", {
-  expect_equal(outward_decreasing(c("TSS", "TTS"), "+"), c(TRUE, FALSE))
+  expect_equal(outward_decreasing(c("start", "end"), "+"), c(TRUE, FALSE))
   expect_equal(outward_decreasing(character(0), "+"), logical(0))
 })
 
 test_that("outward_decreasing rejects bad input rather than guessing", {
-  expect_error(outward_decreasing("TSS", "*"), "strand")
-  expect_error(outward_decreasing("start", "+"), "TSS")
+  expect_error(outward_decreasing("start", "*"), "strand")
+  expect_error(outward_decreasing("TSS", "+"), "start")
 })
 
 
-test_that("side_termini takes the vertex after the root for a TSS", {
+test_that("side_termini takes the vertex after the root for a start side", {
   fp <- c("2" = "007", "3" = "009")
-  expect_equal(side_termini("1-2-5-9", "TSS", fp, c()), "007")
+  expect_equal(side_termini("1-2-5-9", "start", fp, c()), "007")
 })
 
-test_that("side_termini takes the vertex before the leaf for a TTS", {
+test_that("side_termini takes the vertex before the leaf for an end side", {
   tp <- c("5" = "011", "6" = "012")
-  expect_equal(side_termini("1-2-5-9", "TTS", c(), tp), "011")
+  expect_equal(side_termini("1-2-5-9", "end", c(), tp), "011")
 })
 
 test_that("side_termini returns one terminus PER ROUTE, deduplicated", {
   fp <- c("2" = "007", "3" = "008")
   ## two routes with different termini, and a third repeating the first
-  expect_equal(sort(side_termini("1-2-5-9,1-3-6-9,1-2-7-9", "TSS", fp, c())),
+  expect_equal(sort(side_termini("1-2-5-9,1-3-6-9,1-2-7-9", "start", fp, c())),
                c("007", "008"))
 })
 
 test_that("side_termini pads part ids to three digits", {
-  expect_equal(side_termini("1-2-9", "TSS", c("2" = "7"), c()), "007")
+  expect_equal(side_termini("1-2-9", "start", c("2" = "7"), c()), "007")
 })
 
 test_that("side_termini is empty for a blank, NA or too-short path", {
   fp <- c("2" = "007")
-  expect_equal(side_termini(NA_character_, "TSS", fp, c()), character(0))
-  expect_equal(side_termini("", "TSS", fp, c()), character(0))
-  expect_equal(side_termini("4", "TSS", fp, c()), character(0))
+  expect_equal(side_termini(NA_character_, "start", fp, c()), character(0))
+  expect_equal(side_termini("", "start", fp, c()), character(0))
+  expect_equal(side_termini("4", "start", fp, c()), character(0))
 })
 
 test_that("side_termini drops a route whose terminal vertex has no ex_part edge", {
   fp <- c("2" = "007")
-  expect_equal(side_termini("1-2-9,1-99-9", "TSS", fp, c()), "007")
+  expect_equal(side_termini("1-2-9,1-99-9", "start", fp, c()), "007")
 })
 
 

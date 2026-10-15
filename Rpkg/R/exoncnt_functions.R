@@ -41,6 +41,12 @@ sum_exon_counts <- function(count_col, counts_df) {
 #' @param gene_name Character string. Gene identifier used to construct the output file name.
 #' @param sampleinfo A named character vector mapping sample names to group labels.
 #' @param outfilesuffix Character string. Suffix appended to output file names.
+#' @param cnt_suffix Character string naming the COUNT UNIT and event class,
+#'   e.g. "ex.external" or "exsj.internal", written as
+#'   <gene>.<outfilesuffix>.<cnt_suffix>.txt. The default "exoncnt" reproduces
+#'   the historical name. The unit matters because the two layouts differ (12
+#'   columns for ex, 17 for exsj) and nothing else in the per-gene name says
+#'   which is which.
 #' @param outdir Character string. Path to output directory.
 #' @export
 #' @examples
@@ -59,7 +65,8 @@ sum_exon_counts <- function(count_col, counts_df) {
 #'   sampleinfo = sampleinfo, outfilesuffix = "bipartition", outdir = tempdir()
 #' )
 #' }
-write_exoncnt_long <- function(ref_counts_df, diff_counts_df, events, gene_name, sampleinfo, outfilesuffix, outdir) {
+write_exoncnt_long <- function(ref_counts_df, diff_counts_df, events, gene_name, sampleinfo, outfilesuffix, outdir,
+                               cnt_suffix = "exoncnt") {
 
   ref_long <- ref_counts_df[ref_counts_df$event %in% events,] %>% 
       pivot_longer(
@@ -81,7 +88,7 @@ write_exoncnt_long <- function(ref_counts_df, diff_counts_df, events, gene_name,
 #  exoncnts <- exoncnts[!is.na(exoncnts$diff),]
 #  exoncnts <- exoncnts[exoncnts$n > 10,]
   if (nrow(exoncnts) > 1) {
-    write.table(exoncnts, file=paste0(outdir,'/', gene_name, '.', outfilesuffix, '.exoncnt.txt'), quote=FALSE, sep="\t")
+    write.table(exoncnts, file=paste0(outdir,'/', gene_name, '.', outfilesuffix, '.', cnt_suffix, '.txt'), quote=FALSE, sep="\t")
   }
 
 }
@@ -94,10 +101,17 @@ write_exoncnt_long <- function(ref_counts_df, diff_counts_df, events, gene_name,
 #' @param gene_name Character string. Gene identifier for the output file name.
 #' @param sampleinfo A named character vector mapping sample names to group labels.
 #' @param outfilesuffix Character string. Suffix for output file names.
+#' @param cnt_suffix Character string naming the COUNT UNIT and event class,
+#'   e.g. "ex.external" or "exsj.internal", written as
+#'   <gene>.<outfilesuffix>.<cnt_suffix>.txt. The default "exoncnt" reproduces
+#'   the historical name. The unit matters because the two layouts differ (12
+#'   columns for ex, 17 for exsj) and nothing else in the per-gene name says
+#'   which is which.
 #' @param outdir Character string. Path to output directory.
 #' @export
 write_exoncnt_wide <- function(ref_counts_df, diff1_counts_df, diff2_counts_df,
-                               events, gene_name, sampleinfo, outfilesuffix, outdir) {
+                               events, gene_name, sampleinfo, outfilesuffix, outdir,
+                               cnt_suffix = "exoncnt") {
   # pivot ref, diff1, diff2 independently to long format, then cbind
   ref_long <- ref_counts_df[ref_counts_df$event %in% events, ] %>%
     pivot_longer(cols = all_of(names(sampleinfo)), names_to = "sample", values_to = "ref")
@@ -111,7 +125,7 @@ write_exoncnt_wide <- function(ref_counts_df, diff1_counts_df, diff2_counts_df,
   exoncnts$diff1 <- as.numeric(exoncnts$diff1)
   exoncnts$diff2 <- as.numeric(exoncnts$diff2)
   if (nrow(exoncnts) > 1) {
-    write.table(exoncnts, file = paste0(outdir, '/', gene_name, '.', outfilesuffix, '.exoncnt.txt'),
+    write.table(exoncnts, file = paste0(outdir, '/', gene_name, '.', outfilesuffix, '.', cnt_suffix, '.txt'),
                 quote = FALSE, sep = "\t")
   }
 }
@@ -124,6 +138,12 @@ write_exoncnt_wide <- function(ref_counts_df, diff1_counts_df, diff2_counts_df,
 #' @param sampleinfo A named character vector mapping sample names to group labels.
 #' @param outdir Character string. Path to output directory.
 #' @param outfilesuffix Character string. Suffix appended to output file names.
+#' @param cnt_suffix Character string naming the COUNT UNIT and event class,
+#'   e.g. "ex.external" or "exsj.internal", written as
+#'   <gene>.<outfilesuffix>.<cnt_suffix>.txt. The default "exoncnt" reproduces
+#'   the historical name. The unit matters because the two layouts differ (12
+#'   columns for ex, 17 for exsj) and nothing else in the per-gene name says
+#'   which is which.
 #' @export
 #' @examples
 #' \dontrun{
@@ -136,7 +156,8 @@ write_exoncnt_wide <- function(ref_counts_df, diff1_counts_df, diff2_counts_df,
 #'   outdir = tempdir(), outfilesuffix = "bipartition"
 #' )
 #' }
-count_bipartitions <- function(bipartition_file, countmat, sampleinfo, outdir, outfilesuffix) {
+count_bipartitions <- function(bipartition_file, countmat, sampleinfo, outdir, outfilesuffix,
+                               cnt_suffix = "exoncnt") {
   bipartitions <- utils::read.table(bipartition_file, header = TRUE, sep = "\t", stringsAsFactors = FALSE, colClasses = "character", na.strings = c("NA", ""))  # Reads columns as characters
   bipartitions$event = rownames(bipartitions)
   bipartitions <- bipartitions[!(is.na(bipartitions$setdiff1) & is.na(bipartitions$setdiff2)),]
@@ -190,7 +211,7 @@ count_bipartitions <- function(bipartition_file, countmat, sampleinfo, outdir, o
                 quote = FALSE, sep = "\t")
     write_exoncnt_wide(ref_counts_df, diff1_counts_df, diff2_counts_df,
                        events = bipartitions$event, gene_name = gene[1],
-                       sampleinfo, outfilesuffix, outdir)
+                       sampleinfo, outfilesuffix, outdir, cnt_suffix)
   }
  
   return (0)
@@ -208,6 +229,12 @@ count_bipartitions <- function(bipartition_file, countmat, sampleinfo, outdir, o
 #' @param sampleinfo A named character vector mapping sample names to group labels.
 #' @param outdir Character string. Path to output directory.
 #' @param outfilesuffix Character string. Suffix appended to output file names.
+#' @param cnt_suffix Character string naming the COUNT UNIT and event class,
+#'   e.g. "ex.external" or "exsj.internal", written as
+#'   <gene>.<outfilesuffix>.<cnt_suffix>.txt. The default "exoncnt" reproduces
+#'   the historical name. The unit matters because the two layouts differ (12
+#'   columns for ex, 17 for exsj) and nothing else in the per-gene name says
+#'   which is which.
 #' @export
 #' @examples
 #' \dontrun{
@@ -220,7 +247,8 @@ count_bipartitions <- function(bipartition_file, countmat, sampleinfo, outdir, o
 #'   outdir = tempdir(), outfilesuffix = "bipartition"
 #' )
 #' }
-count_bipartitions_both <- function(bipartition_file, countmat, sampleinfo, outdir, outfilesuffix) {
+count_bipartitions_both <- function(bipartition_file, countmat, sampleinfo, outdir, outfilesuffix,
+                                    cnt_suffix = "exoncnt") {
   bipartitions <- utils::read.table(bipartition_file, header = TRUE, sep = "\t", stringsAsFactors = FALSE, colClasses = "character", na.strings = c("NA", ""))
   bipartitions$event = rownames(bipartitions)
   bipartitions <- bipartitions[!(is.na(bipartitions$setdiff1) & is.na(bipartitions$setdiff2)), ]
@@ -293,7 +321,7 @@ count_bipartitions_both <- function(bipartition_file, countmat, sampleinfo, outd
     write_exoncnt_long(ref_joined, diff_joined,
                        events    = bp_both$event,
                        gene_name = gene[1],
-                       sampleinfo, outfilesuffix, outdir)
+                       sampleinfo, outfilesuffix, outdir, cnt_suffix)
   } else {
     print(paste0("zero read counts at setdiff exons. skipping (both sides) ", gene[1]))
   }
@@ -320,7 +348,8 @@ count_bipartitions_both <- function(bipartition_file, countmat, sampleinfo, outd
 #'   countmat = countmat, sampleinfo = sampleinfo, outdir = tempdir()
 #' )
 #' }
-count_multinomial <- function(multinomial_file, countmat, sampleinfo, outdir) {
+count_multinomial <- function(multinomial_file, countmat, sampleinfo, outdir,
+                              cnt_suffix = "exoncnt") {
   # 1. Load the definitions file
   multi_df <- utils::read.table(multinomial_file, header = TRUE, sep = "\t", stringsAsFactors = FALSE, colClasses = "character", na.strings = c("NA", ""))
   if (nrow(multi_df) == 0) return(0)
@@ -402,7 +431,7 @@ count_multinomial <- function(multinomial_file, countmat, sampleinfo, outdir) {
               quote=FALSE, sep="\t", row.names=FALSE)
   
   if (nrow(all_long) > 0) {
-    write.table(all_long, file=paste0(outdir,'/', gene_id, '.multinomial.exoncnt.txt'), 
+    write.table(all_long, file=paste0(outdir,'/', gene_id, '.multinomial.', cnt_suffix, '.txt'), 
                 quote=FALSE, sep="\t", row.names=FALSE)
   }
   

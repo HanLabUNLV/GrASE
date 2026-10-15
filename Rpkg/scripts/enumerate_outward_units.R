@@ -1,5 +1,5 @@
 #!/usr/bin/env Rscript
-## Enumerate the OUTWARD test units for the TSS/TTS boundary arm.
+## Enumerate the OUTWARD test units for the EXTERNAL-event boundary arm.
 ##
 ## WHAT THE ARM CLAIMS. A bipartition side asserts that its transcription starts
 ## (TSS) or ends (TTS) differ in usage from the other side's. A side has one
@@ -95,7 +95,7 @@ setkey(ip, gene)
 ## there. A missing unit is UNMEASURED SPACE, not a measured absence of signal.
 
 one_gene <- function(g) {
-  sf <- file.path(o$split_dir, sprintf("%s.bipartition.TSSTTS.txt", g))
+  sf <- file.path(o$split_dir, sprintf("%s.bipartition.external.txt", g))
   gf <- file.path(o$graphml_dir, sprintf("%s.graphml", g))
   if (!file.exists(sf) || !file.exists(gf)) return(NULL)
   d <- tryCatch(fread(sf, sep = "\t", showProgress = FALSE), error = function(e) NULL)
@@ -113,8 +113,11 @@ one_gene <- function(g) {
   geo <- ex[J(g), .(part, start, end), nomatch = NULL]
   ib  <- ip[J(g), .(bin_id, abut_part_lo, abut_part_hi, touches), nomatch = NULL]
   rbindlist(lapply(seq_len(nrow(d)), function(i) {
-    kind <- if (identical(as.character(d$source[i]), "R")) "TSS" else
-            if (identical(as.character(d$sink[i]),   "L")) "TTS" else NA
+    ## which graph terminal the side is anchored at: R gives a start, L an end.
+    ## `kind` is that semantic label, not the terminal name -- outward_decreasing()
+    ## pairs it with strand to get the walk direction.
+    kind <- if (identical(as.character(d$source[i]), "R")) "start" else
+            if (identical(as.character(d$sink[i]),   "L")) "end" else NA
     if (is.na(kind)) return(NULL)
     dec <- outward_decreasing(kind, st)
     rbindlist(lapply(1:2, function(sd) {

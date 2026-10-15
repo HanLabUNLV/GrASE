@@ -27,8 +27,16 @@ out_dir  <- opt$output
 
 dir.create(out_dir, showWarnings=FALSE, recursive=TRUE)
 
-exon_files <- list.files(exon_dir, pattern="\\.exoncnt\\.txt$", full.names=TRUE)
-if (length(exon_files) == 0L) stop("no .exoncnt.txt files found in: ", exon_dir)
+## Input is the `ex` unit written by exoncnt.R: <gene>.bipartition.ex.<class>.cnt.txt
+## Output is the `exsj` unit -- same rows, but a side with no exclusive exonic
+## part takes its exclusive junction instead. The UNIT LABEL IN THE NAME is the
+## only thing distinguishing the two on disk, and the layouts differ (12 columns
+## vs 17), so a mislabelled file silently misaligns every downstream parser.
+exon_files <- list.files(exon_dir, pattern="\\.ex\\.[^.]+\\.cnt\\.txt$", full.names=TRUE)
+if (length(exon_files) == 0L)
+  stop("no .ex.<class>.cnt.txt files found in: ", exon_dir,
+       "\n  (pre-rename directories hold .exoncnt.txt and are no longer read; ",
+       "see rename_units.py)")
 
 cat(sprintf("Found %d exon count files\n", length(exon_files)))
 
@@ -38,7 +46,14 @@ n_subst2_total <- 0L
 
 for (f in exon_files) {
   bname   <- basename(f)
-  sj_file <- file.path(sj_dir, sub("\\.exoncnt\\.txt$", ".sjcnt.txt", bname))
+  ## the junction counts are unit-agnostic (they ARE the junction source), so
+  ## their name carries no unit: <gene>.bipartition.sjcnt.txt
+  sj_file <- file.path(sj_dir, sub("\\.ex\\.[^.]+\\.cnt\\.txt$", ".sjcnt.txt", bname))
+  ## ex -> exsj on the way out; everything else about the name is preserved
+  oname   <- sub("\\.ex\\.", ".exsj.", bname, fixed = FALSE)
+  if (identical(oname, bname))
+    stop("input name does not carry the `ex` unit label, refusing to write an ",
+         "unlabelled exsj file: ", bname)
 
   ex <- read.table(f, header=TRUE, sep="\t", row.names=NULL,
                    stringsAsFactors=FALSE, na.strings=c("NA",""))
@@ -56,7 +71,7 @@ for (f in exon_files) {
   ex$diff2_source     <- "exon"
 
   if (!file.exists(sj_file)) {
-    write.table(ex, file.path(out_dir, bname), sep="\t", quote=FALSE, row.names=FALSE)
+    write.table(ex, file.path(out_dir, oname), sep="\t", quote=FALSE, row.names=FALSE)
     next
   }
 
@@ -129,7 +144,7 @@ for (f in exon_files) {
       select(-sj_diff2)
   }
 
-  write.table(ex, file.path(out_dir, bname), sep="\t", quote=FALSE, row.names=FALSE)
+  write.table(ex, file.path(out_dir, oname), sep="\t", quote=FALSE, row.names=FALSE)
 
   n_genes_merged  <- n_genes_merged  + 1L
   n_subst1_total  <- n_subst1_total  + length(subst1_events)

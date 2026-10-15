@@ -7,7 +7,8 @@
 outward_decreasing(kind, strand)
 }
 \arguments{
-\item{kind}{Character, "TSS" or "TTS". Vectorised.}
+\item{kind}{Character, "start" (the side is anchored at the graph root \code{R})
+or "end" (anchored at the leaf \code{L}). Vectorised.}
 
 \item{strand}{Character, "+" or "-". Vectorised, recycled against \code{kind}.}
 }
@@ -15,15 +16,17 @@ outward_decreasing(kind, strand)
 Logical vector: \code{TRUE} where outward means decreasing coordinate.
 }
 \description{
-A TSS bubble is anchored at the graph root ("R"), a TTS bubble at the leaf
-("L"). Combined with gene strand this fixes which direction leads away from
-the transcript body: outward is the direction of decreasing coordinate for a
-TSS on the plus strand and for a TTS on the minus strand.
+An external bubble is anchored at one of the graph's two terminals: the root
+\code{R}, where transcription starts, or the leaf \code{L}, where it ends. A side is
+labelled \code{"start"} or \code{"end"} accordingly. Combined with gene strand this
+fixes which direction leads away from the transcript body: outward is the
+direction of decreasing coordinate for a \code{"start"} side on the plus strand
+and for an \code{"end"} side on the minus strand.
 }
 \details{
 Trivial, but it is the predicate every other step depends on, and getting it
 backwards inverts every verdict silently rather than erroring.
 }
 \examples{
-outward_decreasing(c("TSS", "TSS", "TTS", "TTS"), c("+", "-", "+", "-"))
+outward_decreasing(c("start", "start", "end", "end"), c("+", "-", "+", "-"))
 }

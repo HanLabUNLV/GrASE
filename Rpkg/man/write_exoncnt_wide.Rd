@@ -12,7 +12,8 @@ write_exoncnt_wide(
   gene_name,
   sampleinfo,
   outfilesuffix,
-  outdir
+  outdir,
+  cnt_suffix = "exoncnt"
 )
 }
 \arguments{
@@ -31,6 +32,13 @@ write_exoncnt_wide(
 \item{outfilesuffix}{Character string. Suffix for output file names.}
 
 \item{outdir}{Character string. Path to output directory.}
+
+\item{cnt_suffix}{Character string naming the COUNT UNIT and event class,
+e.g. "ex.external" or "exsj.internal", written as
+\if{html}{\out{<gene>}}.\if{html}{\out{<outfilesuffix>}}.<cnt_suffix>.txt. The default "exoncnt" reproduces
+the historical name. The unit matters because the two layouts differ (12
+columns for ex, 17 for exsj) and nothing else in the per-gene name says
+which is which.}
 }
 \description{
 Write exon counts in wide format for 3-way testing

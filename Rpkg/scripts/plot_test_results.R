@@ -8,7 +8,7 @@
 ## call rule (the `significant` column exontest.R wrote, never re-derived here).
 ##
 ## Usage: Rscript scripts/plot_test_results.R --gene ENSG... --event 11 \
-##          --kind TSSTTS --analysis <dir> --conditions A,B,C --out fig.pdf
+##          --kind external --analysis <dir> --conditions A,B,C --out fig.pdf
 suppressPackageStartupMessages({ library(igraph); library(optparse) })
 
 CB <- c(S = "#4477AA", D1 = "#CCBB44", D2 = "#EE6677", other = "#DDDDDD")
@@ -17,14 +17,14 @@ opt_list <- list(
   make_option("--gene", type = "character"),
   make_option("--event", type = "character"),
   make_option("--analysis", type = "character"),
-  make_option("--kind", type = "character", default = "TSSTTS"),
+  make_option("--kind", type = "character", default = "external"),
   make_option("--conditions", type = "character"),
   make_option("--comparison", type = "character", default = NULL),
   make_option("--gffdir", type = "character", default = "~/DICE/dexseq.gff"),
   make_option("--bipdir", type = "character", default = "~/DICE/bipartition.filtered"),
   make_option("--graphmldir", type = "character", default = "~/DICE/graphml.v34"),
   make_option("--sjcounts", type = "character", default = ""),
-  make_option("--stack_kinds", type = "character", default = "internal,TSSTTS"),
+  make_option("--stack_kinds", type = "character", default = "internal,external"),
   make_option("--max_stack", type = "integer", default = 0L),
   make_option("--feature_contrast", type = "character", default = NULL),
   make_option("--mark_parts", type = "character", default = ""),
@@ -153,8 +153,10 @@ hop_parts <- function(u, v) {
 sj_meta <- list()
 if (nzchar(a$sjcounts)) {
   d <- path.expand(a$sjcounts)
-  cand <- c(file.path(d, paste0(gv, ".bipartition.exoncnt.txt")),
-            sort(Sys.glob(file.path(d, paste0(base_id, ".*.bipartition.exoncnt.txt")))))
+  ## the exsj unit is the one that carries intron_distinct1/2 and intron_shared;
+  ## the ex unit has no such columns, so only exsj files are worth reading here
+  cand <- c(sort(Sys.glob(file.path(d, paste0(gv, ".bipartition.exsj.*.cnt.txt")))),
+            sort(Sys.glob(file.path(d, paste0(base_id, ".*.bipartition.exsj.*.cnt.txt")))))
   for (fp in cand) {
     if (!file.exists(fp)) next
     tb <- read_tsv(fp)

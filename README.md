@@ -15,11 +15,11 @@ transcript paths are divided into two groups chosen so that each side has a
 well-defined distinct set of exonic parts, analogous to PSI-based tests but
 without a fixed event taxonomy. 
 
-**Filtering by event class.** Bubbles touching the leftmost graph node (L representing the Transcription Start Site) and the rightmost graph node (R representing the Transcription Termination Site) are classified as alternative TSS/TTS events; all others are internal alternative splicing events. Both categories are tested independently.
+**Filtering by event class.** Each graph carries two terminal nodes in transcription order: the root `R`, where transcription starts, and the leaf `L`, where it ends. Bubbles that begin at `R` or end at `L` are classified as alternative TSS/TTS events; all others are internal alternative splicing events. Both categories are tested independently.
 
 **Statistical models.** Differential path usage is tested with a beta-binomial model (via glmmTMB), with the per-test overdispersion (phi) regularised by Empirical Bayes shrinkage. Two variants are recommended and differ only in how the moderated phi is obtained: `betabinom_EBapprox` (closed form) and `betabinom_EBmap` (MAP).
 
-**Workflow.** The pipeline goes from per-gene splicing graphs (GraphML) -> bubble enumeration -> event-type filtering -> DEXSeq count aggregation -> optional junction substitution where a distinct set is empty -> statistical testing. The DEXSeq helper scripts for preparing the annotation and counting reads are bundled, so the only external input is aligned BAM files. Results can be compared against rMATS or DEXSeq output.
+**Workflow.** The pipeline goes from per-gene splicing graphs (GraphML) -> bubble enumeration -> event-type filtering -> DEXSeq count aggregation -> optional junction substitution where a distinct set is empty -> statistical testing -> localization of TSS/TTS calls against a flanking window. The DEXSeq helper scripts for preparing the annotation and counting reads are bundled, so the only external input is aligned BAM files. Results can be compared against rMATS or DEXSeq output.
 
 * Container used for running GrASE can be found here: [GrASE Container](https://drive.google.com/drive/folders/10H6NxN0T1cP0O68VwhCh55KVVb08Iqzb)
 
@@ -74,7 +74,7 @@ GFFs are deposited at
 | File | Contents |
 |------|----------|
 | `graphml.v28.tgz`, `graphml.v34.tgz` | per-gene splicing graphs |
-| `bipartitions_gencode_v{28,34}_{internal,TSSTTS}.tsv.gz` | the enumerated bipartitions |
+| `bipartitions_gencode_v{28,34}_{internal,external}.tsv.gz` | the enumerated bipartitions |
 | `dexseq.gff` | flattened exonic-part annotation, per version |
 | `gtf` | per-gene GTFs, per version |
 
@@ -198,7 +198,7 @@ Rscript Rpkg/scripts/bubble_path_split.R \
 ### Stage 2. Separate internal AS events from alternative TSS/TTS
 
 ```bash
-Rscript Rpkg/scripts/filterTSSTTS.R \
+Rscript Rpkg/scripts/filterexternal.R \
     --split_dir=${WD}/bipartition \
     --outdir=${WD}/bipartition.filtered \
     --split_type=bipartition
@@ -216,7 +216,7 @@ Rscript Rpkg/scripts/exoncnt.R \
     -o ${WD}/bipartition.internal.counts
 ```
 
-This also writes the combined master file `bipartition.internal.exoncnt.combined.txt` into the output directory, which Stage 4 reads. For TSS/TTS events use `-a TSS` (output `bipartition.TSSTTS.exoncnt.combined.txt`). For more than two groups, pass `--conditions=A,B,C` instead of `--cond1/--cond2`.
+This also writes the combined master file `bipartition.internal.exoncnt.combined.txt` into the output directory, which Stage 4 reads. For TSS/TTS events use `-a TSS` (output `bipartition.external.exoncnt.combined.txt`). For more than two groups, pass `--conditions=A,B,C` instead of `--cond1/--cond2`.
 
 ### Stage 3b. Substitute junction counts where a distinct set is empty (optional)
 
@@ -242,7 +242,7 @@ Rscript Rpkg/scripts/merge_exon_sj_counts.R \
 ```
 
 `--sjdir` holds STAR `SJ.out.tab` files. Run the counting once per event type;
-`--type internal` and `--type TSSTTS` write per-gene files with the same name, so
+`--type internal` and `--type external` write per-gene files with the same name, so
 they need separate `--output` directories. If you use this, point Stage 4 at the
 merged directory instead of the exonic one.
 
@@ -277,6 +277,61 @@ benchmark-only multinomial split).
 
 Commonly used options (defaults in brackets): `--padj_threshold` [0.01], `--min_dpi` [0.1], `--min_reads` [10], `--padj_method` [nested_BH], `--mc_cores` [min(detectCores(), 8)], `--contrasts=B:A,C:A` for several pairwise contrasts (or `A+B+C` for an omnibus test, betabinom models only). Independent filtering is on by default; `--no_independent_filtering` turns it off. Run `Rscript Rpkg/scripts/exontest.R --help` for the full list.
 
+### Stage 5. Localize TSS/TTS calls (boundary test)
+
+A TSS/TTS call says a transcript begins or ends at an annotated position. This
+stage asks whether the differential effect is confined to that feature or
+continues past it, which separates genuine boundary changes from read-through
+and from regulated intron retention read as a start-site change.
+
+The same test is repeated with a fixed window just beyond the side's free end
+substituted for its distinct set, keeping the same shared reference. Both arms
+are between-condition contrasts against a common reference, so anything in the
+flank that does not change cancels: the test does not assume the flank is empty.
+It applies to the TSS/TTS arm only, and it needs the BAMs plus a second
+counting pass, so it is a separate stage rather than part of `exontest.R`.
+
+```bash
+cp Rpkg/scripts/localization_config.template.sh my_localization.sh
+# edit the paths, panels and counting settings, then:
+bash Rpkg/scripts/run_localization_test.sh my_localization.sh all
+```
+
+Stages run individually with `bins`, `filter`, `count`, `table`, `test` or
+`score` in place of `all`; `count` is the expensive one. The counting settings
+in the config MUST match those that produced the exonic counts, or the two arms
+are not comparable.
+
+The result is a post-hoc annotation: six columns are appended to the TSS/TTS
+results table and the shape is unchanged, one row per bipartition side. Flank
+rows are an intermediate and never appear. `flank_padj`, `flank_delta_pi` and
+`flank_lfc_net` carry the flank arm's own statistics so the evidence is visible
+alongside the label; `flank_mean` and `flank_expected` support the
+`flank_empty` verdict; `localization` is the verdict itself.
+
+| `localization` | meaning |
+|---|---|
+| `boundary` | the effect does not extend past the edge. Turns on the flank effect size, not its p-value |
+| `flank_empty` | the window was counted and is empty where D's own density predicts reads. The strongest boundary evidence |
+| `continuation` | the effect extends past the edge, in the same direction |
+| `opposite` | a large flank effect of the opposite sign. Not continuation; something else moved |
+| `inconclusive` | a large same-sign flank effect that was tested and failed the call condition. Likely continuation at low power |
+| `flank_untested` | a large same-sign flank effect whose row has no padj, masked by independent filtering. Not boundary evidence |
+| `D_not_called` | the distinct set was not called, so the test cannot speak |
+| `no_flank_bin` | no window could be placed, or its emptiness is not interpretable |
+
+```r
+loc <- read.delim("flankbins/localization.<panel>.tsv")
+localized <- loc[loc$localization %in% c("boundary", "flank_empty"), ]
+```
+
+Two things to keep in mind when reading the output. A verdict exists only for
+sides whose distinct set was called, because the flank arm is counted on called
+sides alone. And the flank arm therefore faces a smaller multiple-testing
+burden than the exonic arm, which makes the flank easier to call and pushes
+verdicts toward `continuation`: read the boundary fraction as a floor rather
+than an estimate.
+
 ### Reading results
 
 ```r
@@ -303,7 +358,7 @@ the path proportion across conditions.
 
 ```bash
 Rscript Rpkg/scripts/plot_test_results.R \
-    --gene ENSG00000204472 --event 11 --kind TSSTTS \
+    --gene ENSG00000204472 --event 11 --kind external \
     --analysis ${WD}/bipartition.internal.test \
     --gffdir ${WD}/dexseq.gff --bipdir ${WD}/bipartition.filtered \
     --graphmldir ${WD}/graphml \

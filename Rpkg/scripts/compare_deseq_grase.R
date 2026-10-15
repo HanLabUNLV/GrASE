@@ -13,7 +13,12 @@ option_list <- list(
   make_option("--contrasts", type="character", default=NULL,
               help="comma-separated list of contrasts; default: auto-detect from deseq_dir"),
   make_option("--dge_prefix", type="character", default="deseq2_",
-              help="filename prefix for DGE classification files [default: deseq2_]")
+              help="filename prefix for DGE classification files [default: deseq2_]"),
+  make_option("--unit", type="character", default="ex",
+              help=paste("count unit of the results to read: ex (exclusive exonic",
+                         "part only) or exsj (exonic part, else exclusive",
+                         "junction). It selects between",
+                         "test_bipartition.<unit>.<class>_... [default: ex]"))
 )
 
 opt <- parse_args(OptionParser(option_list=option_list))
@@ -23,6 +28,9 @@ GRASE_DIR  <- path.expand(opt$grase_dir)
 OUTDIR     <- if (is.null(opt$outdir)) DESEQ_DIR else path.expand(opt$outdir)
 PADJ_THR   <- opt$padj
 DGE_PREFIX <- opt$dge_prefix
+UNIT       <- opt$unit
+if (!UNIT %in% c("ex", "exsj"))
+  stop("--unit must be ex or exsj, got: ", UNIT)
 dir.create(OUTDIR, recursive=TRUE, showWarnings=FALSE)
 
 strip_ver <- function(x) sub("\\.[0-9]+$", "", x)
@@ -36,11 +44,20 @@ if (!is.null(opt$contrasts)) {
 }
 message("Contrasts: ", paste(contrasts, collapse=", "))
 
-grase_int <- read.table(
-  file.path(GRASE_DIR, "test_bipartition.internal_betabinom_EBmap.annotated.txt"),
+## The two event classes are tested in SEPARATE exontest runs because nested_BH
+## adjusts within gene, so they arrive as two files and are unioned here. --unit
+## says which pair to read: the exsj arm used to be reached through a symlink
+## named for the ex arm, which meant a run could silently read the wrong unit.
+res_file <- function(cls)
+  file.path(GRASE_DIR, sprintf("test_bipartition.%s.%s_betabinom_EBmap.annotated.txt",
+                               UNIT, cls))
+for (f in c(res_file("internal"), res_file("external")))
+  if (!file.exists(f)) stop("no such results file: ", f,
+                            "\n  (--unit is \"", UNIT, "\"; pre-rename runs wrote ",
+                            "test_bipartition.<class>_... with no unit)")
+grase_int <- read.table(res_file("internal"),
   header=TRUE, sep="\t", stringsAsFactors=FALSE)
-grase_tss <- read.table(
-  file.path(GRASE_DIR, "test_bipartition.TSSTTS_betabinom_EBmap.annotated.txt"),
+grase_tss <- read.table(res_file("external"),
   header=TRUE, sep="\t", stringsAsFactors=FALSE)
 
 summary_rows <- list()

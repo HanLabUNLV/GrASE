@@ -4,7 +4,13 @@
 \alias{count_multinomial}
 \title{Count exonic part reads for multinomial events}
 \usage{
-count_multinomial(multinomial_file, countmat, sampleinfo, outdir)
+count_multinomial(
+  multinomial_file,
+  countmat,
+  sampleinfo,
+  outdir,
+  cnt_suffix = "exoncnt"
+)
 }
 \arguments{
 \item{multinomial_file}{Character string. Path to a multinomial results file (tab-separated,

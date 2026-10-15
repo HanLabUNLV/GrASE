@@ -11,7 +11,7 @@ suppressPackageStartupMessages({
 option_list <- list(
   make_option(c("-g", "--grase"), type = "character", default = "~/GrASE_simulation/bipartition.test/test_bipartition.internal_glmmTMB_fixed_EB.annotated.txt",
               help = "Path to GrASE annotated exontest results file [default= %default]", metavar = "character"),
-  make_option(c("--grase2"), type = "character", default = "~/GrASE_simulation/bipartition.test/test_bipartition.TSSTTS_glmmTMB_fixed_EB.annotated.txt",
+  make_option(c("--grase2"), type = "character", default = "~/GrASE_simulation/bipartition.test/test_bipartition.external_glmmTMB_fixed_EB.annotated.txt",
               help = "Path to GrASE second optional annotated exontest results file [default= %default]", metavar = "character"),
   make_option(c("-s", "--saturn"), type = "character", default = "~/GrASE_simulation/saturn/saturn_group1_group2/all.group1_group2.sumExp_filteredbyCountMultiExon.txt",
               help = "Path to Saturn results file [default= %default]", metavar = "character"),

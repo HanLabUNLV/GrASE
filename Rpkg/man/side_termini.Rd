@@ -10,25 +10,27 @@ side_termini(path_field, kind, from_part, to_part)
 \item{path_field}{Character scalar: the side's \code{path1} or \code{path2} value,
 e.g. \code{"1-2-5-9,1-3-6-9"}. \code{NA} or \code{""} give an empty result.}
 
-\item{kind}{Character scalar, "TSS" or "TTS".}
+\item{kind}{Character scalar, "start" or "end": which graph terminal the
+side is anchored at, the root \code{R} or the leaf \code{L}.}
 
 \item{from_part}{Named character vector mapping an \code{ex_part} edge's SOURCE
-vertex to its part number. Used for a TSS.}
+vertex to its part number. Used for a \code{"start"} side.}
 
 \item{to_part}{Named character vector mapping an \code{ex_part} edge's SINK vertex
-to its part number. Used for a TTS.}
+to its part number. Used for an \code{"end"} side.}
 }
 \value{
 Character vector of zero-padded part ids, possibly empty. Routes
 whose terminal vertex carries no \code{ex_part} edge are dropped.
 }
 \description{
-The terminus of a route is its first exonic part after the graph root (TSS)
-or its last before the leaf (TTS). A path field lists one route per
-comma-separated element, vertices within a route separated by "-", so the
-terminal vertex is the second from the start for a TSS and the second from
-the end for a TTS. That vertex is then resolved to an exonic part through
-the \code{ex_part} edge sourced (TSS) or sunk (TTS) there.
+The terminus of a route is its first exonic part after the graph root (a
+\code{"start"} side) or its last before the leaf (an \code{"end"} side). A path field
+lists one route per comma-separated element, vertices within a route
+separated by "-", so the terminal vertex is the second from the beginning
+for \code{"start"} and the second from the end for \code{"end"}. That vertex is then
+resolved to an exonic part through the \code{ex_part} edge sourced (\code{"start"}) or
+sunk (\code{"end"}) there.
 }
 \details{
 Returns EVERY route's terminus, deduplicated, not a single position for the

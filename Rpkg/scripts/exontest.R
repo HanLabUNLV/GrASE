@@ -12,7 +12,7 @@ outdir = '~/GrASE_simulation/bipartition.test'
 countdir = '~/GrASE_simulation/bipartition.internal.counts'
 split = 'bipartition'
 model = 'betabinom_EBmap'
-masterfile = 'bipartition.internal.exoncnt.combined.txt'
+masterfile = 'bipartition.ex.internal.cnt.combined.txt'
 phifile = 'phi.glmmtmb.txt'
 cond1 = 'group1'; cond2 = 'group2'
 args = commandArgs(trailingOnly=TRUE)
@@ -72,7 +72,9 @@ make_option(c("--use_prec_loess"), action="store_true", default=FALSE,
   make_option(c("--min_dpi"), type="double", default=0.1,
               help="minimum |delta_pi| (path proportion effect size) for the significant column; events with |delta_pi| < min_dpi are not significant [default: 0.1]", metavar="double"),
   make_option(c("--mc_cores"), type="integer", default=NULL,
-              help="number of parallel worker processes for mclapply [default: %default]", metavar="integer")
+              help="number of parallel worker processes for mclapply [default: %default]", metavar="integer"),
+  make_option(c("--retest"), action="store_true", default=FALSE,
+              help="force a full re-test even when a complete results file and cached support table already exist; without it an existing, not-stale results file is reused and only the annotation stage runs [default: %default]")
 );
  
 opt_parser = OptionParser(option_list=option_list);
@@ -172,11 +174,105 @@ if (!dir.exists(outdir)) {
   dir.create(outdir, recursive = TRUE)
 }
 exoncnt_master <- paste0(countdir,'/', masterfile)
-out_prefix <- sub("^([^.]+\\.[^.]+).*", "\\1", masterfile)
+## out_prefix names every output of this run, and it takes THREE dot-components
+## of the input table: <split>.<unit>.<class>, e.g. bipartition.exsj.external.
+##
+## It used to take two, which was ambiguous for the junction-substituted tables:
+## bipartition.merged.internal.* and bipartition.merged.TSSTTS.* BOTH reduced to
+## "bipartition.merged", so the two event classes wrote the same filenames and
+## the second run silently overwrote the first. Three drivers worked around it
+## with a post-hoc `mv`, and where that mv was missing the files are still on
+## disk with no class in the name (grase_omnibus_test, grase_activation_cutrule).
+## With the unit label in field 2 and the class in field 3, all four
+## (unit, class) combinations are distinct here and no rename is needed.
+out_prefix <- sub("^([^.]+\\.[^.]+\\.[^.]+).*", "\\1", masterfile)
+if (!grepl("^[^.]+\\.(ex|exsj)\\.", out_prefix))
+  warning("--file name does not look like <split>.<unit>.<class>.cnt.combined.txt: ",
+          masterfile, "\n  out_prefix is \"", out_prefix,
+          "\" -- output names may not identify the count unit")
 out_resultfile=paste0(outdir,'/test_', out_prefix,'_', model, '.txt')
 
 
-if (file.exists(exoncnt_master)) {
+## Contrast group sets and the omnibus->pairs map depend only on --contrasts,
+## not on the counts, so they are built OUTSIDE the master-file block: the
+## annotate-only path needs them for add_support() too.
+## contrast name -> its group set, for add_support(). Previously the groups
+## were recovered by splitting the contrast NAME on "_vs_", which breaks
+## silently for a group whose own name contains "_vs_" (d_support becomes NA
+## and the read floor never fires) and cannot express an omnibus at all.
+ctr_groups <- setNames(lapply(contrasts, `[[`, "groups"),
+                       vapply(contrasts, `[[`, character(1), "name"))
+
+## omnibus contrast name -> the names of the PAIRWISE contrasts it spans.
+## is_significant() gates an omnibus row on whether any of these clears the
+## effect-size floors, because the omnibus row itself has no single direction
+## (delta_pi and lfc_diff_net are NA there). Only pairs that were actually
+## requested can be used; an omnibus whose pairs were not also requested maps
+## to an empty vector, and its rows then fail closed rather than passing on
+## padj alone.
+pair_names <- vapply(Filter(function(ct) identical(ct$type, "pair"), contrasts),
+                     `[[`, character(1), "name")
+omnibus_pairs <- lapply(Filter(function(ct) identical(ct$type, "omnibus"), contrasts),
+  function(ct) {
+    cand <- c(outer(ct$groups, ct$groups, function(a, b) paste0(a, "_vs_", b)))
+    intersect(cand, pair_names)
+  })
+names(omnibus_pairs) <- vapply(
+  Filter(function(ct) identical(ct$type, "omnibus"), contrasts),
+  `[[`, character(1), "name")
+if (!length(omnibus_pairs)) omnibus_pairs <- NULL
+
+
+## ---- annotate-only short circuit --------------------------------------------
+## exontest.R is linear: the count-table read, the fit and the annotation merge
+## all run on every invocation. So a run that completed the fit and then failed
+## in the annotation stage -- which is what happens when countdir is missing the
+## per-gene <gene>.<splittype>.txt files -- could only be recovered by repeating
+## the entire 56 GiB read and the fit. The chunk checkpoints spare the fit; they
+## do not spare the read.
+##
+## When the results file and the cached support table are both present and NOT
+## older than the count table, skip straight to annotation. The mtime test is
+## what keeps this from silently reusing a stale result: regenerate the counts
+## and the short circuit disarms itself. --retest forces the full path.
+d_grp_file <- paste0(outdir, '/d_grp_', out_prefix, '_', model, '.rds')
+annotate_only <- FALSE
+if (!isTRUE(opt$retest) && file.exists(out_resultfile)) {
+  if (!file.exists(exoncnt_master) ||
+      file.mtime(out_resultfile) >= file.mtime(exoncnt_master)) {
+    annotate_only <- TRUE
+    message("ANNOTATE ONLY: reusing ", out_resultfile,
+            "\n  skipping the count-table read and the model fit.",
+            "\n  pass --retest to force a full re-test.")
+  } else {
+    message("results file is older than the count table -- re-testing from scratch")
+  }
+}
+
+if (annotate_only) {
+  ## Reuse the completed test results instead of recomputing them. The read of
+  ## the count table and the whole model chain are skipped; only d_grp is
+  ## restored, because add_support() needs it to recompute `significant` after
+  ## the annotation merge attaches setdiff1/setdiff2.
+  d_grp <- if (file.exists(d_grp_file)) readRDS(d_grp_file) else NULL
+  if (!is.null(d_grp)) {
+    message(sprintf("Reusing cached support table: %d rows", nrow(d_grp)))
+  } else {
+    ## No cache (a results file written before d_grp caching existed). This is
+    ## fine: add_support() returns its input UNCHANGED when d_grp is NULL, and
+    ## the results file already carries the d_support column computed on the
+    ## full counts, which survives the annotation join. So add_significant()
+    ## still applies the --min_reads floor to the same values. Assert the column
+    ## is there, because if it is not the floor would silently stop applying.
+    hdr <- names(read.table(out_resultfile, header = TRUE, nrows = 1))
+    if (!"d_support" %in% hdr)
+      stop("annotate-only: ", out_resultfile, " has no d_support column and no ",
+           "cached support table at ", d_grp_file, ", so the --min_reads floor ",
+           "cannot be applied. Re-run with --retest.")
+    message("No cached support table; using the d_support column already in ",
+            basename(out_resultfile))
+  }
+} else if (file.exists(exoncnt_master)) {
   splitcnts <- read.table(exoncnt_master, header=TRUE, row.names=NULL)
   # Include all groups mentioned in any contrast; drop samples from other groups.
   splitcnts$groups <- factor(splitcnts$groups, levels = all_groups)
@@ -207,6 +303,14 @@ if (file.exists(exoncnt_master)) {
                     split, min_reads))
   }
 
+  ## Cache the support table. It is the ONLY thing the annotation stage needs
+  ## from the count table, and it is ~5M rows against the table's 648M, so
+  ## caching it is what makes --annotate_only possible at all.
+  if (!is.null(d_grp)) {
+    saveRDS(d_grp, d_grp_file)
+    message("Support table cached to ", d_grp_file)
+  }
+
   ## L: a NAMED LIST of contrast matrices, columns = "groups<level>".
   ## A pairwise contrast is one row (+1 trt, -1 ref) and reproduces the former
   ## 1-df (est/se)^2 exactly. An omnibus over K groups is K-1 rows of successive
@@ -230,31 +334,6 @@ if (file.exists(exoncnt_master)) {
   })
   names(L) <- vapply(contrasts, `[[`, character(1), "name")
 
-  ## contrast name -> its group set, for add_support(). Previously the groups
-  ## were recovered by splitting the contrast NAME on "_vs_", which breaks
-  ## silently for a group whose own name contains "_vs_" (d_support becomes NA
-  ## and the read floor never fires) and cannot express an omnibus at all.
-  ctr_groups <- setNames(lapply(contrasts, `[[`, "groups"),
-                         vapply(contrasts, `[[`, character(1), "name"))
-
-  ## omnibus contrast name -> the names of the PAIRWISE contrasts it spans.
-  ## is_significant() gates an omnibus row on whether any of these clears the
-  ## effect-size floors, because the omnibus row itself has no single direction
-  ## (delta_pi and lfc_diff_net are NA there). Only pairs that were actually
-  ## requested can be used; an omnibus whose pairs were not also requested maps
-  ## to an empty vector, and its rows then fail closed rather than passing on
-  ## padj alone.
-  pair_names <- vapply(Filter(function(ct) identical(ct$type, "pair"), contrasts),
-                       `[[`, character(1), "name")
-  omnibus_pairs <- lapply(Filter(function(ct) identical(ct$type, "omnibus"), contrasts),
-    function(ct) {
-      cand <- c(outer(ct$groups, ct$groups, function(a, b) paste0(a, "_vs_", b)))
-      intersect(cand, pair_names)
-    })
-  names(omnibus_pairs) <- vapply(
-    Filter(function(ct) identical(ct$type, "omnibus"), contrasts),
-    `[[`, character(1), "name")
-  if (!length(omnibus_pairs)) omnibus_pairs <- NULL
 } else {
   print('exoncnt dataset file does not exist.')
   print('please combine the exoncounts into one file and specify the filename.')
@@ -329,6 +408,10 @@ filter_unsupported <- function(res, contrast = NULL) {
   res
 }
 
+## Everything from here to the end of the model chain builds the test from the
+## 56 GiB count table and fits it. In annotate-only mode the results file on
+## disk already holds all of it, so the whole region is skipped.
+if (!annotate_only) {
 if (split != "multinomial") {
 
   make_comparison <- function(sc, diff_col, ref_col, comp_name) {
@@ -849,6 +932,7 @@ if (model == 'betabinom_EBmap') {
   print ("choose between betabinom_EBmap, betabinom_EBapprox, betabinom_MLE, dirmult_EBplugin, wilcoxon")
 
 }
+}  ## end if (!annotate_only)
 
 
 

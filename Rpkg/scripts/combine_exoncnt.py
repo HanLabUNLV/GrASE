@@ -25,7 +25,12 @@ INTRON = ['intron_distinct1', 'intron_distinct2', 'intron_shared']
 def main():
     countdir, out = sys.argv[1], sys.argv[2]
     cols = COLS + (INTRON if '--keep-intron' in sys.argv else [])
-    files = sorted(glob.glob(os.path.join(countdir, '*.bipartition.exoncnt.txt')))
+    # <gene>.bipartition.<unit>.<class>.cnt.txt, unit in {ex, exsj}. Matching on
+    # .cnt.txt rather than a fixed unit keeps one combiner for both.
+    files = sorted(glob.glob(os.path.join(countdir, '*.bipartition.*.cnt.txt')))
+    if not files:
+        sys.exit('no *.bipartition.<unit>.<class>.cnt.txt files in %s '
+                 '(pre-rename dirs hold .exoncnt.txt)' % countdir)
     print('per-gene files: %d' % len(files))
     orders, nrow, nskip = {}, 0, 0
     with open(out, 'w') as o:

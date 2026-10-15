@@ -46,7 +46,7 @@ for (f in split_files) {
   gene <- sub("\\.all\\.txt$", "", basename(f))
   gene <- sub("\\.txt$", "", basename(f))
   filename_internal = file.path(outdir, paste0(gene, ".internal.txt"))
-  filename_TSS = file.path(outdir, paste0(gene, ".TSSTTS.txt"))
+  filename_external = file.path(outdir, paste0(gene, ".external.txt"))
 
   split_df <- tryCatch({
     read.table(f, sep="\t", header=TRUE)
@@ -63,7 +63,7 @@ for (f in split_files) {
       write.table(split_internal, file = filename_internal, sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)
     }
     if (nrow(split_TSS) > 0) { 
-      write.table(split_TSS, file = filename_TSS, sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)
+      write.table(split_TSS, file = filename_external, sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)
     }
   }
 }

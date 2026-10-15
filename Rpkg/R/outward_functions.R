@@ -1,6 +1,6 @@
-## Outward units for the TSS/TTS boundary arm.
+## Outward units for the EXTERNAL-event boundary arm.
 ##
-## THE QUESTION THESE SERVE. A GrASE TSS/TTS call says a bipartition side's
+## THE QUESTION THESE SERVE. A GrASE external-event call says a side's
 ## distinct set differs in usage between conditions. It does not say where
 ## transcription begins or ends. To ask that, walk outward from the side's
 ## annotated termini and test, with the same shared reference, whether signal
@@ -31,41 +31,45 @@
 
 #' Does walking outward mean decreasing coordinate?
 #'
-#' A TSS bubble is anchored at the graph root ("R"), a TTS bubble at the leaf
-#' ("L"). Combined with gene strand this fixes which direction leads away from
-#' the transcript body: outward is the direction of decreasing coordinate for a
-#' TSS on the plus strand and for a TTS on the minus strand.
+#' An external bubble is anchored at one of the graph's two terminals: the root
+#' `R`, where transcription starts, or the leaf `L`, where it ends. A side is
+#' labelled `"start"` or `"end"` accordingly. Combined with gene strand this
+#' fixes which direction leads away from the transcript body: outward is the
+#' direction of decreasing coordinate for a `"start"` side on the plus strand
+#' and for an `"end"` side on the minus strand.
 #'
 #' Trivial, but it is the predicate every other step depends on, and getting it
 #' backwards inverts every verdict silently rather than erroring.
 #'
-#' @param kind Character, "TSS" or "TTS". Vectorised.
+#' @param kind Character, "start" (the side is anchored at the graph root `R`)
+#'   or "end" (anchored at the leaf `L`). Vectorised.
 #' @param strand Character, "+" or "-". Vectorised, recycled against `kind`.
 #' @return Logical vector: `TRUE` where outward means decreasing coordinate.
 #' @examples
-#' outward_decreasing(c("TSS", "TSS", "TTS", "TTS"), c("+", "-", "+", "-"))
+#' outward_decreasing(c("start", "start", "end", "end"), c("+", "-", "+", "-"))
 #' @export
 outward_decreasing <- function(kind, strand) {
   kind <- as.character(kind); strand <- as.character(strand)
   n <- max(length(kind), length(strand))
   if (!length(kind) || !length(strand)) return(logical(0))
   kind <- rep_len(kind, n); strand <- rep_len(strand, n)
-  bad <- !kind %in% c("TSS", "TTS") | !strand %in% c("+", "-")
+  bad <- !kind %in% c("start", "end") | !strand %in% c("+", "-")
   if (any(bad))
-    stop("kind must be TSS or TTS and strand + or -; bad entries at ",
+    stop("kind must be \"start\" or \"end\" and strand + or -; bad entries at ",
          paste(which(bad), collapse = ", "), call. = FALSE)
-  (kind == "TSS" & strand == "+") | (kind == "TTS" & strand == "-")
+  (kind == "start" & strand == "+") | (kind == "end" & strand == "-")
 }
 
 
 #' Terminus exonic parts of a bipartition side, one per route
 #'
-#' The terminus of a route is its first exonic part after the graph root (TSS)
-#' or its last before the leaf (TTS). A path field lists one route per
-#' comma-separated element, vertices within a route separated by "-", so the
-#' terminal vertex is the second from the start for a TSS and the second from
-#' the end for a TTS. That vertex is then resolved to an exonic part through
-#' the `ex_part` edge sourced (TSS) or sunk (TTS) there.
+#' The terminus of a route is its first exonic part after the graph root (a
+#' `"start"` side) or its last before the leaf (an `"end"` side). A path field
+#' lists one route per comma-separated element, vertices within a route
+#' separated by "-", so the terminal vertex is the second from the beginning
+#' for `"start"` and the second from the end for `"end"`. That vertex is then
+#' resolved to an exonic part through the `ex_part` edge sourced (`"start"`) or
+#' sunk (`"end"`) there.
 #'
 #' Returns EVERY route's terminus, deduplicated, not a single position for the
 #' side. Which terminus carries the differential effect is the question the walk
@@ -73,16 +77,17 @@ outward_decreasing <- function(kind, strand) {
 #'
 #' @param path_field Character scalar: the side's `path1` or `path2` value,
 #'   e.g. `"1-2-5-9,1-3-6-9"`. `NA` or `""` give an empty result.
-#' @param kind Character scalar, "TSS" or "TTS".
+#' @param kind Character scalar, "start" or "end": which graph terminal the
+#'   side is anchored at, the root `R` or the leaf `L`.
 #' @param from_part Named character vector mapping an `ex_part` edge's SOURCE
-#'   vertex to its part number. Used for a TSS.
+#'   vertex to its part number. Used for a `"start"` side.
 #' @param to_part Named character vector mapping an `ex_part` edge's SINK vertex
-#'   to its part number. Used for a TTS.
+#'   to its part number. Used for an `"end"` side.
 #' @return Character vector of zero-padded part ids, possibly empty. Routes
 #'   whose terminal vertex carries no `ex_part` edge are dropped.
 #' @export
 side_termini <- function(path_field, kind, from_part, to_part) {
-  kind <- match.arg(as.character(kind), c("TSS", "TTS"))
+  kind <- match.arg(as.character(kind), c("start", "end"))
   if (length(path_field) != 1L)
     stop("path_field must be a single value", call. = FALSE)
   if (is.na(path_field) || !nzchar(trimws(path_field))) return(character(0))
@@ -92,11 +97,11 @@ side_termini <- function(path_field, kind, from_part, to_part) {
   verts <- vapply(strsplit(routes, "-", fixed = TRUE), function(v) {
     ## a route needs at least a terminal node and the root or leaf beside it
     if (length(v) < 2L) return(NA_character_)
-    if (kind == "TSS") v[2L] else v[length(v) - 1L]
+    if (kind == "start") v[2L] else v[length(v) - 1L]
   }, character(1))
   verts <- verts[!is.na(verts)]
   if (!length(verts)) return(character(0))
-  map <- if (kind == "TSS") from_part else to_part
+  map <- if (kind == "start") from_part else to_part
   parts <- unname(map[verts])
   parts <- parts[!is.na(parts) & nzchar(parts)]
   unique(.part_id(parts))

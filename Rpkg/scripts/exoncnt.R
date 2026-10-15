@@ -31,7 +31,7 @@ option_list = list(
   make_option(c("--conditions"), type="character", default=NULL,
               help="comma-separated list of all conditions, e.g. CD4,CD4_STIM,TH1,TH2,TH17 (overrides --cond1/--cond2)", metavar="character"),
   make_option(c("-a", "--alt"), type="character",
-              help="choose between 'internal' (internal AS) or 'TSS'(alternative TSS) ", metavar="character"),
+              help="event class: 'internal' (bubble between internal vertices) or 'external' (bubble touching a graph terminal, R or L)", metavar="character"),
   make_option(c("--mc_cores"), type="integer", default=NULL,
               help="parallel workers [default: mc.cores option, else min(detectCores(), 8)]",
               metavar="integer")
@@ -67,12 +67,10 @@ if (!is.null(opt$cond2)) {
   cond2 = opt$cond2
 } 
 if (!is.null(opt$alt)) {
-  if (opt$alt == 'internal') {
-    alt = 'internal'
-  } else if (opt$alt == 'TSS') {
-    alt = 'TSSTTS'
+  if (opt$alt %in% c('internal', 'external')) {
+    alt = opt$alt
   } else {
-    stop ("choose between 'internal' (internal AS) or 'TSS'(alternative TSS) ")
+    stop("--alt must be 'internal' or 'external'")
   }
 }
 
@@ -126,6 +124,14 @@ names(sampleinfo) <- rownames(sampleTable)
 
 
 
+## Count-unit label. This script measures every distinct set in exclusive
+## EXONIC parts, so its unit is always `ex`; merge_exon_sj_counts.R turns that
+## into `exsj` where a side has no exonic part and takes its junction instead.
+## The label goes in the per-gene FILE NAME because the two layouts differ (12
+## columns vs 17) and a file moved out of its directory was otherwise
+## indistinguishable -- see the schema note in merged_exon_sj_path.
+cnt_label <- paste0('ex.', alt, '.cnt')
+
 if (analysis_type == 'all' || analysis_type == 'bipartition') {
 
   # Like 'bipartition' but emits both setdiff1 and setdiff2 as separate events
@@ -140,9 +146,10 @@ if (analysis_type == 'all' || analysis_type == 'bipartition') {
       gene_id <- sub(paste0("\\.bipartition\\.",alt,"\\.txt$"), "", basename(f))
       gene_counts <- counts_list[[gene_id]]
       if (!is.null(gene_counts)) {
-        file_path <- file.path(output_path, paste0(gene_id, ".bipartition.exoncnt.txt"))
+        file_path <- file.path(output_path, paste0(gene_id, ".bipartition.", cnt_label, ".txt"))
         if (!file.exists(file_path) || file.size(file_path) == 0) {
-          count_bipartitions(bipartition_file = f, countmat = gene_counts, sampleinfo, output_path, 'bipartition')
+          count_bipartitions(bipartition_file = f, countmat = gene_counts, sampleinfo, output_path, 'bipartition',
+                             cnt_suffix = cnt_label)
         }
       }
     }, error = function(e) {
@@ -171,7 +178,8 @@ if (analysis_type == 'all' || analysis_type == 'bipartition') {
       #count_bipartitions(bipartition_file = f, countmat = read_counts[read_counts$gene==gene_id,], sampleinfo, output_path, 'n_choose_2')
       gene_counts <- counts_list[[gene_id]]
       if (!is.null(gene_counts)) {
-        count_bipartitions(bipartition_file = f, countmat = gene_counts, sampleinfo, output_path, 'n_choose_2')
+        count_bipartitions(bipartition_file = f, countmat = gene_counts, sampleinfo, output_path, 'n_choose_2',
+                           cnt_suffix = cnt_label)
       }
  
     }, error = function(e) {
@@ -203,7 +211,11 @@ if (analysis_type == 'all' || analysis_type == 'bipartition') {
       #count_multinomial(multinomial_file = f, countmat = read_counts[read_counts$gene==gene_id,], sampleinfo, output_path)
       gene_counts <- counts_list[[gene_id]]
       if (!is.null(gene_counts)) {
-        count_multinomial(multinomial_file = f, countmat = gene_counts, sampleinfo, output_path)
+        ## multinomial has no distinct/reference split, so no junction can be
+        ## substituted and its unit is always `ex`; the label is carried anyway so
+        ## the concat pattern below matches one naming scheme, not two.
+        count_multinomial(multinomial_file = f, countmat = gene_counts, sampleinfo, output_path,
+                          cnt_suffix = cnt_label)
       }
     }, error = function(e) {
       msg <- sprintf("[%s] ERROR in %s (PID %d): %s\n",
@@ -251,8 +263,11 @@ concat_exoncnt_files <- function(input_dir, pattern, output_file, label) {
 # Run concatenation for each analysis type
   concat_exoncnt_files(
     input_dir = output_path,
-    pattern = paste0("\\.",analysis_type, "\\.exoncnt\\.txt$"),
-    output_file = paste0(output_path, '/', analysis_type,'.',alt,'.exoncnt.combined.txt'),
+    pattern = paste0("\\.", analysis_type, "\\.", cnt_label, "\\.txt$"),
+    ## <split>.<unit>.<class>.cnt.combined.txt -- unit in field 2 and class in
+    ## field 3, so exontest.R's out_prefix on THREE components is unique across
+    ## all four (unit, class) combinations and needs no post-hoc rename.
+    output_file = paste0(output_path, '/', analysis_type, '.', cnt_label, '.combined.txt'),
     label = analysis_type
   )
 
