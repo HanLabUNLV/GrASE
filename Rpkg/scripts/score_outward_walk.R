@@ -103,7 +103,7 @@
 ##
 ## If --group_means does not exist it is built from --combined with awk (the
 ## combined table runs to gigabytes; a line-by-line R loop over it is not
-## viable, same reason as build_flank_counts.R).
+## viable).
 suppressPackageStartupMessages({ library(data.table); library(optparse)
                                  library(grase) })
 

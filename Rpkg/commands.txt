@@ -115,13 +115,10 @@ Rscript scripts/compare_rmats_grase.R \
 Rscript scripts/integrate.R
 
 
-# localization (boundary) test for the TSS/TTS arm
-# Asks whether a called TSS/TTS effect stops at the annotated boundary or
-# continues past it. Needs the BAMs and a second counting pass, so it is driven
-# by its own config rather than a single command.
-cp scripts/localization_config.template.sh my_localization.sh   # then edit paths/panels
-bash scripts/run_localization_test.sh my_localization.sh all
-# individual stages: bins | filter | count | table | test | score  (count is the slow one)
-# output: <OUT>/localization.<panel>.tsv -- the TSS/TTS results table with
-# flank_padj, flank_delta_pi, flank_lfc_net, flank_mean, flank_expected and
-# localization appended. Localized = localization in (boundary, flank_empty).
+# The localization (boundary) test for the TSS/TTS arm was REMOVED on
+# 2026-10-14. Its window was anchored on the distinct set's own edge rather
+# than on a transcription terminus, so only 25.5% of its output answered the
+# question it claimed to; score_localization.R also applied no read floor, and
+# 69.9% of its boundary verdicts sat below min_reads. Do not revive it or quote
+# its numbers. The replacement is the outward walk, which enumerates a test
+# unit per terminus instead of placing one window per side.

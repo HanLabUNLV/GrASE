@@ -1,0 +1,54 @@
+# Only the package and its documented drivers belong in this repo. Everything
+# below is run output, a scratch driver, or a working copy that accumulates in
+# the working tree and has twice been swept into a commit by a careless
+# `git add -A`.
+#
+# A .gitignore does NOT affect files that are already tracked, so nothing
+# currently in the repo is removed by this. To commit something that matches a
+# rule below, use `git add -f <path>`.
+
+# Shell drivers. These are per-machine: they hardcode absolute paths and name
+# specific datasets, so they are not reusable and do not belong in the package.
+# createfiles.sh is the exception -- it is Stage 0 in the documentation.
+*.sh
+!scripts/createfiles.sh
+
+# Run logs and captured stdout
+*.log
+*.out
+
+# Timestamped and reason-tagged working copies: foo.R.bak_cores, but also
+# foo.R.bak9_1104 -- the numbered form does not match bak_*, so both patterns
+# are needed.
+*.bak
+*.bak_*
+*.bak[0-9]*
+*.orig
+*.rej
+*.stale_*
+
+# R build and check artefacts
+*.Rcheck/
+..Rcheck/
+.Rhistory
+.RData
+.Rproj.user/
+*.tar.gz
+
+# Python
+__pycache__/
+*.pyc
+
+# Manuscripts and figures. Deliberate figures go in with `git add -f`.
+*.docx
+*.pdf
+*.png
+
+# GrASE_simulation is a SEPARATE repository, symlinked in here for convenience.
+# It must never be committed as part of this one.
+GrASE_simulation
+
+# Editor and tooling state
+.claude/
+.DS_Store
+*.swp

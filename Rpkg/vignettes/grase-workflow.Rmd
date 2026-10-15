@@ -32,10 +32,9 @@ The complete workflow has six stages, each driven by a command-line Rscript:
 |-------|--------|---------|
 | 0 | `createfiles.sh` (shell) | Prepare per-gene GTF, DEXSeq GFF, and splicing graphs |
 | 1 | `bubble_path_split.R` | Enumerate alternative path groups per bubble |
-| 2 | `filterexternal.R` | Separate internal AS events from alternative TSS/TTS events |
+| 2 | `filterExternal.R` | Separate internal AS events from alternative TSS/TTS events |
 | 3 | `exoncnt.R` | Aggregate DEXSeq read counts onto the split exonic parts |
 | 4 | `exontest.R` | Test for differential exon usage and annotate results |
-| 5 | `run_localization_test.sh` | Boundary test: does a TSS/TTS effect stop at the annotated edge |
 
 ---
 
@@ -502,84 +501,6 @@ Key columns of the annotated output:
 
 With `--gff_dir`, the output also carries `len_D`, `len_S`, `pi_ref_perbase`,
 `pi_trt_perbase` and `delta_pi_perbase`.
-
----
-
-## Stage 5. Localize TSS/TTS calls (boundary test)
-
-A TSS/TTS call asserts that a transcript begins or ends at an annotated
-position. Nothing in Stage 4 checks that assertion: a change in read density
-over the distinct exonic parts can equally come from read-through by another
-isoform, or from a retained intron whose coverage happens to sit where the
-alternative first exon is annotated. Both produce a real, reproducible
-`delta_pi` that is not a start-site change at all.
-
-The localization test repeats the Stage 4 test with a fixed window immediately
-beyond the side's free end substituted for its distinct set, keeping the same
-shared reference. Both arms are between-condition contrasts against a common
-reference, so anything in the flank that does not change cancels. That is why
-the window is taken regardless of what lies beyond the boundary, with no
-minimum-width gate and no requirement that the flank be empty.
-
-It applies to the TSS/TTS arm only, and it needs the aligned BAMs plus a second
-counting pass, so it is a separate stage rather than an option on `exontest.R`.
-
-```bash
-cp Rpkg/scripts/localization_config.template.sh my_localization.sh
-# edit paths, panels and counting settings, then:
-bash Rpkg/scripts/run_localization_test.sh my_localization.sh all
-```
-
-The config names the split tables, graphs, per-gene DEXSeq GFFs, the exonic
-count table and results, a BAM list, and one or more panels with their
-contrasts. Stages run individually with `bins`, `filter`, `count`, `table`,
-`test` or `score` in place of `all`. Two settings repay attention: the counting
-flags must match those that produced the exonic counts, or the arms are not
-comparable; and the sample ids in the BAM list must equal the `sample` column of
-the exonic count table, or the arms cannot be joined.
-
-The flank arm is tested as a **separate** `exontest.R` run, not folded into the
-exonic one. `nested_BH` adjusts within gene, so adding flank events would raise
-each gene's test count and move the exonic adjusted p-values that have already
-been reported.
-
-### Reading the verdict
-
-Six columns are appended to the TSS/TTS results table; the shape is unchanged,
-one row per bipartition side, and the flank rows never appear. `flank_padj`,
-`flank_delta_pi` and `flank_lfc_net` carry the flank arm's own statistics, so
-the evidence sits beside the label rather than behind it; `flank_mean` and
-`flank_expected` support the `flank_empty` verdict; `localization` is the
-verdict.
-
-| `localization` | meaning |
-|---|---|
-| `boundary` | the effect does not extend past the edge. Turns on the flank effect size, not its p-value, because "not called" conflates no effect with no power |
-| `flank_empty` | the window was counted and is empty where D's own density predicts reads. The strongest boundary evidence |
-| `continuation` | the effect extends past the edge, in the same direction |
-| `opposite` | a large flank effect of the opposite sign. Not continuation; something else moved |
-| `inconclusive` | a large same-sign flank effect that was tested and failed the call condition. Likely continuation at low power |
-| `flank_untested` | a large same-sign flank effect whose row has no padj, masked by independent filtering. Not boundary evidence |
-| `D_not_called` | the distinct set was not called, so the test cannot speak |
-| `no_flank_bin` | no window could be placed (a junction-sourced side has no exonic terminus), or its emptiness is not interpretable |
-
-```{r localization-read, eval = FALSE}
-loc <- read.delim("flankbins/localization.<panel>.tsv")
-localized <- loc[loc$localization %in% c("boundary", "flank_empty"), ]
-nrow(localized)
-table(loc$localization[loc$significant %in% TRUE])
-```
-
-Report the rate over decided sides, `boundary` plus `continuation`, and state
-the `inconclusive` count alongside rather than folding it into either arm.
-
-Two caveats belong with any number taken from this stage. A verdict exists only
-for sides whose distinct set was called, because the flank arm is counted on
-called sides alone. And restricting the flank arm that way leaves it facing a
-smaller multiple-testing burden than the exonic arm, which makes the flank
-easier to call and pushes verdicts toward `continuation`: a `boundary` verdict
-survived an arm that was, if anything, easier to call than the distinct set, so
-the boundary fraction is a floor rather than an estimate.
 
 ## Visualising results
 

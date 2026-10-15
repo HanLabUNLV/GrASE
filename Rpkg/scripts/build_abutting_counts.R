@@ -14,7 +14,8 @@
 ## asks whether the differential stops at the terminus, and what lies beyond is
 ## whatever the annotation says lies beyond, not a synthetic window.
 ##
-## SUPERSEDES build_flank_counts.R. That script used a fixed 150bp window keyed
+## SUPERSEDES the fixed-window flank test (build_flank_counts.R, deleted
+## 2026-10-14). That script used a fixed 150bp window keyed
 ## per SIDE, which (a) could fall outside any annotated unit, producing verdicts
 ## that described the window rather than the biology, and (b) emitted the same
 ## interval once per side sharing a terminus -- 35,011 bins for 22,034 distinct
