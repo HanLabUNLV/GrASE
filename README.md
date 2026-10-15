@@ -85,6 +85,12 @@ DEXSeq GFF the graphs were built from**. Counts made against a different
 annotation will not join: the exonic part numbers (`E001`, `E002`, ...) are assigned by
 `dexseq_prepare_annotation.py` and are meaningful only relative to that GFF.
 
+Every command below writes `${WD}` for the project directory, so set it once:
+
+```bash
+WD=/path/to/project
+```
+
 ```bash
 # Resolve the bundled counter.
 DEXSEQ_COUNT=$(Rscript -e 'cat(system.file("python","dexseq_count.py",package="grase"))')
@@ -124,7 +130,6 @@ Split the genome GTF by gene, build per-gene DEXSeq GFF files, count reads, and
 generate the splicing graphs:
 
 ```bash
-WD=~/GrASE_simulation
 mkdir -p ${WD}/{ref,gtf,dexseq.gff,graphml}
 
 # Split full GTF into per-gene files
@@ -174,7 +179,7 @@ Rscript Rpkg/scripts/generate_graphs.R --indir ${WD}
 Expected input layout:
 
 ```
-~/GrASE_simulation/
+<project>/
 |-- ref/genelist  gene IDs to build graphs for (one per line)
 |-- gtf/          ENSG*.gtf          (one per gene)
 |-- dexseq.gff/   ENSG*.dexseq.gff
@@ -213,10 +218,10 @@ Rscript Rpkg/scripts/exoncnt.R \
     --cond1=group1 --cond2=group2 \
     -a internal \
     -i ${WD}/bipartition.filtered \
-    -o ${WD}/bipartition.internal.counts
+    -o ${WD}/bipartition.ex.internal.counts
 ```
 
-This also writes the combined master file `bipartition.internal.exoncnt.combined.txt` into the output directory, which Stage 4 reads. For TSS/TTS events use `-a TSS` (output `bipartition.external.exoncnt.combined.txt`). For more than two groups, pass `--conditions=A,B,C` instead of `--cond1/--cond2`.
+This also writes the combined master file `bipartition.ex.internal.cnt.combined.txt` into the output directory, which Stage 4 reads. For TSS/TTS events use `-a TSS` (output `bipartition.ex.external.cnt.combined.txt`). For more than two groups, pass `--conditions=A,B,C` instead of `--cond1/--cond2`.
 
 ### Stage 3b. Substitute junction counts where a distinct set is empty (optional)
 
@@ -236,9 +241,9 @@ Rscript Rpkg/scripts/bipartition_sjcnt.R \
     --type       internal
 
 Rscript Rpkg/scripts/merge_exon_sj_counts.R \
-    --exon_counts ${WD}/bipartition.internal.counts \
+    --exon_counts ${WD}/bipartition.ex.internal.counts \
     --sj_counts   ${WD}/sjcnt \
-    --output      ${WD}/bipartition.merged.counts
+    --output      ${WD}/bipartition.exsj.internal.counts
 ```
 
 `--sjdir` holds STAR `SJ.out.tab` files. Run the counting once per event type;
@@ -250,9 +255,9 @@ merged directory instead of the exonic one.
 
 ```bash
 Rscript Rpkg/scripts/exontest.R \
-    --file=bipartition.internal.exoncnt.combined.txt \
+    --file=bipartition.ex.internal.cnt.combined.txt \
     --outdir=${WD}/bipartition.internal.test \
-    --countdir=${WD}/bipartition.internal.counts/ \
+    --countdir=${WD}/bipartition.ex.internal.counts/ \
     --gff_dir=${WD}/dexseq.gff \
     --splittype=bipartition \
     --phi=phi.internal.txt \
@@ -281,7 +286,7 @@ Commonly used options (defaults in brackets): `--padj_threshold` [0.01], `--min_
 
 ```r
 results <- read.table(
-    "~/GrASE_simulation/bipartition.internal.test/test_bipartition.internal_betabinom_EBapprox.annotated.txt",
+    "${WD}/bipartition.internal.test/test_bipartition.ex.internal_betabinom_EBapprox.annotated.txt",
     header = TRUE, sep = "\t"
 )
 sig <- results[results$significant %in% TRUE, ]
@@ -370,13 +375,13 @@ covers.
 # Also reads ${WD}/graphml/ and ${WD}/dexseq.gff/, which are not options.
 Rscript Rpkg/scripts/map_rmats_splits.R \
     --indir ${WD} --type bipartition \
-    --splitdir ${WD}/bipartition.internal.counts \
+    --splitdir ${WD}/bipartition.ex.internal.counts \
     --rmatsdir ${WD}/rMATS/rmats_post_group1_group2/ \
     --outdir ${WD}/map_rmats/results.bipartition
 
 # Step 2a: GrASE against rMATS
 Rscript Rpkg/scripts/compare_rmats_grase.R \
-    --grase ${WD}/bipartition.internal.test/test_bipartition.internal_betabinom_EBapprox.annotated.txt \
+    --grase ${WD}/bipartition.internal.test/test_bipartition.ex.internal_betabinom_EBapprox.annotated.txt \
     --rmats_dir ${WD}/rMATS/rmats_post_group1_group2/ \
     --map_dir ${WD}/map_rmats/results.bipartition/ \
     --output ${WD}/bipartition.internal.test/rmats_grase_comparison.txt
