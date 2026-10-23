@@ -18,6 +18,7 @@ opt_list <- list(
   make_option("--event", type = "character"),
   make_option("--analysis", type = "character"),
   make_option("--kind", type = "character", default = "external"),
+  make_option("--unit", type = "character", default = "exsj"),
   make_option("--conditions", type = "character"),
   make_option("--comparison", type = "character", default = NULL),
   make_option("--gffdir", type = "character", default = "~/DICE/dexseq.gff"),
@@ -169,10 +170,12 @@ if (nzchar(a$sjcounts)) {
   }
 }
 
+## result files are named by count unit and event class
+## (test_bipartition.<unit>.<class>_...); the unprefixed name is the pre-rename layout
 read_gene_rows <- function(kind) {
-  for (p in c(file.path(andir, sprintf("test_bipartition.%s_betabinom_EBmap.annotated.txt", kind)),
-              file.path(andir, "exontest_results",
-                        sprintf("test_bipartition.%s_betabinom_EBmap.annotated.txt", kind)))) {
+  fn <- sprintf("test_bipartition.%s_betabinom_EBmap.annotated.txt",
+                c(if (nzchar(a$unit)) paste(a$unit, kind, sep = "."), kind))
+  for (p in c(file.path(andir, fn), file.path(andir, "exontest_results", fn))) {
     if (!file.exists(p)) next
     tb <- read_tsv(p)
     return(tb[sub("\\..*$", "", tb$gene) == base_id, , drop = FALSE])
@@ -495,7 +498,10 @@ if (is.null(matched)) {
         if (e %in% parts(S)) rectp(idx[[e]], yy - box_h / 2, 0.86, box_h, CB[["S"]])
         else if (hollow) rect(idx[[e]], yy - box_h / 2, idx[[e]] + 0.86, yy + box_h / 2,
                               col = NA, border = CB[[grp]], lwd = 0.6)
-        else rectp(idx[[e]], yy - box_h / 2, 0.86, box_h, CB[[grp]])
+        else if (e %in% parts(if (grp == "D1") D1 else D2))
+          rectp(idx[[e]], yy - box_h / 2, 0.86, box_h, CB[[grp]])
+        else rect(idx[[e]], yy - box_h / 2, idx[[e]] + 0.86, yy + box_h / 2,
+                  col = NA, border = CB[[grp]], lwd = 0.6)
       }
     }
     if (hollow) {
