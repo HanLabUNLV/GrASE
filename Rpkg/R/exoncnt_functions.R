@@ -42,7 +42,7 @@ sum_exon_counts <- function(count_col, counts_df) {
 #' @param sampleinfo A named character vector mapping sample names to group labels.
 #' @param outfilesuffix Character string. Suffix appended to output file names.
 #' @param cnt_suffix Character string naming the COUNT UNIT and event class,
-#'   e.g. "ex.external" or "exsj.internal", written as
+#'   e.g. "ex.terminal" or "exsj.internal", written as
 #'   <gene>.<outfilesuffix>.<cnt_suffix>.txt. The default "exoncnt" reproduces
 #'   the historical name. The unit matters because the two layouts differ (12
 #'   columns for ex, 17 for exsj) and nothing else in the per-gene name says
@@ -102,7 +102,7 @@ write_exoncnt_long <- function(ref_counts_df, diff_counts_df, events, gene_name,
 #' @param sampleinfo A named character vector mapping sample names to group labels.
 #' @param outfilesuffix Character string. Suffix for output file names.
 #' @param cnt_suffix Character string naming the COUNT UNIT and event class,
-#'   e.g. "ex.external" or "exsj.internal", written as
+#'   e.g. "ex.terminal" or "exsj.internal", written as
 #'   <gene>.<outfilesuffix>.<cnt_suffix>.txt. The default "exoncnt" reproduces
 #'   the historical name. The unit matters because the two layouts differ (12
 #'   columns for ex, 17 for exsj) and nothing else in the per-gene name says
@@ -139,7 +139,7 @@ write_exoncnt_wide <- function(ref_counts_df, diff1_counts_df, diff2_counts_df,
 #' @param outdir Character string. Path to output directory.
 #' @param outfilesuffix Character string. Suffix appended to output file names.
 #' @param cnt_suffix Character string naming the COUNT UNIT and event class,
-#'   e.g. "ex.external" or "exsj.internal", written as
+#'   e.g. "ex.terminal" or "exsj.internal", written as
 #'   <gene>.<outfilesuffix>.<cnt_suffix>.txt. The default "exoncnt" reproduces
 #'   the historical name. The unit matters because the two layouts differ (12
 #'   columns for ex, 17 for exsj) and nothing else in the per-gene name says
@@ -230,7 +230,7 @@ count_bipartitions <- function(bipartition_file, countmat, sampleinfo, outdir, o
 #' @param outdir Character string. Path to output directory.
 #' @param outfilesuffix Character string. Suffix appended to output file names.
 #' @param cnt_suffix Character string naming the COUNT UNIT and event class,
-#'   e.g. "ex.external" or "exsj.internal", written as
+#'   e.g. "ex.terminal" or "exsj.internal", written as
 #'   <gene>.<outfilesuffix>.<cnt_suffix>.txt. The default "exoncnt" reproduces
 #'   the historical name. The unit matters because the two layouts differ (12
 #'   columns for ex, 17 for exsj) and nothing else in the per-gene name says

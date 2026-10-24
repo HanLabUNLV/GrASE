@@ -32,7 +32,7 @@ The complete workflow has six stages, each driven by a command-line Rscript:
 |-------|--------|---------|
 | 0 | `createfiles.sh` (shell) | Prepare per-gene GTF, DEXSeq GFF, and splicing graphs |
 | 1 | `bubble_path_split.R` | Enumerate alternative path groups per bubble |
-| 2 | `filterExternal.R` | Separate internal AS events from alternative TSS/TTS events |
+| 2 | `filterTerminal.R` | Separate internal AS events from alternative TSS/TTS events |
 | 3 | `exoncnt.R` | Aggregate DEXSeq read counts onto the split exonic parts |
 | 4 | `exontest.R` | Test for differential exon usage and annotate results |
 
@@ -260,17 +260,17 @@ transcription start/termination sites (TSS/TTS) rather than internal alternative
 splicing. Stage 2 separates each gene's split file into two subsets:
 
 - **internal**  -  bubbles entirely within the gene body
-- **external**  -  bubbles that touch the start or end of the gene
+- **terminal**  -  bubbles that touch the start or end of the gene
 
 ```bash
-Rscript scripts/filterexternal.R \
+Rscript scripts/filterTerminal.R \
     --split_dir="${WD}/bipartition" \
     --outdir="${WD}/bipartition.filtered" \
     --split_type='bipartition'
 
 ```
 
-**Output:** per-gene files with `.internal.txt` or `.external.txt` suffixes in the filtered
+**Output:** per-gene files with `.internal.txt` or `.terminal.txt` suffixes in the filtered
 output directory.
 
 ---
@@ -280,7 +280,7 @@ output directory.
 Stage 3 reads DEXSeq per-sample count files, maps them to the exonic parts belonging to
 each alternative path, and produces per-event count tables that Stage 4 can test.
 
-Run separately for each split type and each event category (internal / external):
+Run separately for each split type and each event category (internal / terminal):
 
 ```bash
 # bipartition  -  internal AS events
@@ -299,7 +299,7 @@ Rscript scripts/exoncnt.R \
     --cond1=group1 --cond2=group2 \
     -a TSS \
     -i ${WD}/bipartition.filtered \
-    -o ${WD}/bipartition.ex.external.counts
+    -o ${WD}/bipartition.ex.terminal.counts
 ```
 
 Repeat the two commands above for another split type, if you are reproducing the
@@ -314,7 +314,7 @@ substituting the appropriate `-t`, `-i`, and `-o` values.
 | `-t` / `--type` | Split type; use `bipartition` |
 | `--cond1`, `--cond2` | Condition labels matching the count subdirectory names |
 | `--conditions` | Comma-separated list of all conditions for a multi-group run, e.g. `CD4,CD8,NK,B`. Overrides `--cond1`/`--cond2`. |
-| `-a` / `--alt` | Event category: `internal` or `TSS` (alias for external) |
+| `-a` / `--alt` | Event category: `internal` or `TSS` (alias for terminal) |
 | `-i` / `--input_path` | Directory of filtered split files from Stage 2 |
 | `-o` / `--output_path` | Directory for per-gene count output files |
 
@@ -375,7 +375,7 @@ Rscript scripts/merge_exon_sj_counts.R \
 `bipartition_sjcnt.R` also takes `--conditions` in place of `--cond1`/`--cond2`,
 matching `exoncnt.R`.
 
-Run the counting once per event type: `--type internal` and `--type external` write
+Run the counting once per event type: `--type internal` and `--type terminal` write
 per-gene files with the same name, so they need separate `--output` directories.
 
 Stage 4 then runs on the merged directory instead of the exonic one. A
@@ -562,9 +562,9 @@ across conditions.
 
 ```bash
 Rscript scripts/plot_test_results.R \
-    --gene ENSG00000204472 --event 11 --kind external \
+    --gene ENSG00000204472 --event 11 --kind terminal \
     --analysis ~/DICE/grase_lineage_exsj \
-    --sjcounts ~/DICE/counts_lineage/bipartition.exsj.external.counts \
+    --sjcounts ~/DICE/counts_lineage/bipartition.exsj.terminal.counts \
     --conditions B,CD4,CD8,NK,MONO.CLASSIC \
     --symbol "AIF1 (Iba1)" \
     --out figs/AIF1_ev11.pdf
@@ -572,7 +572,7 @@ Rscript scripts/plot_test_results.R \
 
 | Option | Description |
 |--------|-------------|
-| `--gene`, `--event`, `--kind` | The bipartition to draw; `--kind` is `internal` or `external` |
+| `--gene`, `--event`, `--kind` | The bipartition to draw; `--kind` is `internal` or `terminal` |
 | `--analysis` | Directory of `exontest.R` results |
 | `--sjcounts` | Merged count directory, needed when a side is junction-sourced |
 | `--conditions` | Comma-separated, in the order to plot |
@@ -615,7 +615,7 @@ you ran.
 ```bash
 Rscript scripts/compare_saturn_grase.R \
     --grase ${WD}/bipartition.internal.test/test_bipartition.ex.internal_betabinom_EBapprox.annotated.txt \
-    --grase2 ${WD}/bipartition.external.test/test_bipartition.ex.external_betabinom_EBapprox.annotated.txt \
+    --grase2 ${WD}/bipartition.terminal.test/test_bipartition.ex.terminal_betabinom_EBapprox.annotated.txt \
     --saturn ${WD}/saturn/saturn_group1_group2/all.group1_group2.sumExp_filteredbyCountMultiExon.txt \
     --output ${WD}/bipartition.internal.test/saturn_grase_betabinom_EBapprox_comparison.txt
 ```
@@ -701,7 +701,7 @@ Rscript scripts/bubble_path_split.R \
     --split=bipartition &> bipartition.log
 
 # Stage 2: separate internal from TSS/TTS events
-Rscript scripts/filterexternal.R \
+Rscript scripts/filterTerminal.R \
     --split_dir=${WD}/bipartition \
     --outdir=${WD}/bipartition.filtered \
     --split_type=bipartition

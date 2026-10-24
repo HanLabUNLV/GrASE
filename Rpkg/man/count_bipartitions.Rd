@@ -27,7 +27,7 @@ followed by \code{gene} and \code{exon} columns.}
 \item{outfilesuffix}{Character string. Suffix appended to output file names.}
 
 \item{cnt_suffix}{Character string naming the COUNT UNIT and event class,
-e.g. "ex.external" or "exsj.internal", written as
+e.g. "ex.terminal" or "exsj.internal", written as
 \if{html}{\out{<gene>}}.\if{html}{\out{<outfilesuffix>}}.<cnt_suffix>.txt. The default "exoncnt" reproduces
 the historical name. The unit matters because the two layouts differ (12
 columns for ex, 17 for exsj) and nothing else in the per-gene name says

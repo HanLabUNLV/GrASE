@@ -31,7 +31,7 @@ option_list = list(
   make_option(c("--conditions"), type="character", default=NULL,
               help="comma-separated list of all conditions, e.g. CD4,CD4_STIM,TH1,TH2,TH17 (overrides --cond1/--cond2)", metavar="character"),
   make_option(c("-a", "--alt"), type="character",
-              help="event class: 'internal' (bubble between internal vertices) or 'external' (bubble touching a graph terminal, R or L)", metavar="character"),
+              help="event class: 'internal' (bubble between internal vertices) or 'terminal' (bubble touching a graph terminal, R or L)", metavar="character"),
   make_option(c("--mc_cores"), type="integer", default=NULL,
               help="parallel workers [default: mc.cores option, else min(detectCores(), 8)]",
               metavar="integer")
@@ -81,10 +81,10 @@ if (!is.null(opt$cond2)) {
   cond2 = opt$cond2
 } 
 if (!is.null(opt$alt)) {
-  if (opt$alt %in% c('internal', 'external')) {
+  if (opt$alt %in% c('internal', 'terminal')) {
     alt = opt$alt
   } else {
-    stop("--alt must be 'internal' or 'external'")
+    stop("--alt must be 'internal' or 'terminal'")
   }
 }
 

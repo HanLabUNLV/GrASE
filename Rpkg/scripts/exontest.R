@@ -188,7 +188,7 @@ if (!dir.exists(outdir)) {
 }
 exoncnt_master <- paste0(countdir,'/', masterfile)
 ## out_prefix names every output of this run, and it takes THREE dot-components
-## of the input table: <split>.<unit>.<class>, e.g. bipartition.exsj.external.
+## of the input table: <split>.<unit>.<class>, e.g. bipartition.exsj.terminal.
 ##
 ## It used to take two, which was ambiguous for the junction-substituted tables:
 ## bipartition.merged.internal.* and bipartition.merged.TSSTTS.* BOTH reduced to

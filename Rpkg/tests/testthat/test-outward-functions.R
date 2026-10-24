@@ -1,4 +1,4 @@
-## Tests for the outward units of the external-event boundary arm.
+## Tests for the outward units of the terminal-event boundary arm.
 
 ## One gene, five exonic parts. 001/002 abut exactly (no intron between them),
 ## the rest are separated by gaps of differing length:

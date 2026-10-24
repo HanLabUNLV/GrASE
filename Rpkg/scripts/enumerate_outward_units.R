@@ -1,5 +1,5 @@
 #!/usr/bin/env Rscript
-## Enumerate the OUTWARD test units for the EXTERNAL-event boundary arm.
+## Enumerate the OUTWARD test units for the TERMINAL-event boundary arm.
 ##
 ## WHAT THE ARM CLAIMS. A bipartition side asserts that its transcription starts
 ## (TSS) or ends (TTS) differ in usage from the other side's. A side has one
@@ -129,7 +129,7 @@ setkey(ip, gene)
 ## there. A missing unit is UNMEASURED SPACE, not a measured absence of signal.
 
 one_gene <- function(g) {
-  sf <- file.path(o$split_dir, sprintf("%s.bipartition.external.txt", g))
+  sf <- file.path(o$split_dir, sprintf("%s.bipartition.terminal.txt", g))
   gf <- file.path(o$graphml_dir, sprintf("%s.graphml", g))
   if (!file.exists(sf) || !file.exists(gf)) return(NULL)
   d <- tryCatch(fread(sf, sep = "\t", showProgress = FALSE), error = function(e) NULL)

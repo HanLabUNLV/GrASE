@@ -9,56 +9,56 @@ Rscript scripts/bubble_path_split.R --graphdir=${WD}/graphml --outdir=${WD}/mult
 Rscript scripts/bubble_path_split.R --graphdir=${WD}/graphml --outdir=${WD}/n_choose_2 --split=n_choose_2 &> n_choose_2.log &
 
 # filter split by internal bubbles and alternative TSS/TTS
-Rscript scripts/filterexternal.R --split_dir="${WD}/bipartition" --outdir="${WD}/bipartition.filtered" --split_type='bipartition'
-Rscript scripts/filterexternal.R --split_dir="${WD}/multinomial" --outdir="${WD}/multinomial.filtered" --split_type='multinomial'
-Rscript scripts/filterexternal.R --split_dir="${WD}/n_choose_2" --outdir="${WD}/n_choose_2.filtered" --split_type='n_choose_2'
+Rscript scripts/filterTerminal.R --split_dir="${WD}/bipartition" --outdir="${WD}/bipartition.filtered" --split_type='bipartition'
+Rscript scripts/filterTerminal.R --split_dir="${WD}/multinomial" --outdir="${WD}/multinomial.filtered" --split_type='multinomial'
+Rscript scripts/filterTerminal.R --split_dir="${WD}/n_choose_2" --outdir="${WD}/n_choose_2.filtered" --split_type='n_choose_2'
 
 
 # read counts for the distinct and reference exonic parts
 Rscript scripts/exoncnt.R -c ${WD}/DEXSeq/count_files  -t bipartition  --cond1=group1 --cond2=group2 -a internal -i ${WD}/bipartition.filtered -o ${WD}/bipartition.ex.internal.counts
-Rscript scripts/exoncnt.R -c ${WD}/DEXSeq/count_files  -t bipartition  --cond1=group1 --cond2=group2 -a TSS -i ${WD}/bipartition.filtered  -o ${WD}/bipartition.ex.external.counts
+Rscript scripts/exoncnt.R -c ${WD}/DEXSeq/count_files  -t bipartition  --cond1=group1 --cond2=group2 -a TSS -i ${WD}/bipartition.filtered  -o ${WD}/bipartition.ex.terminal.counts
 
 Rscript scripts/exoncnt.R -c ${WD}/DEXSeq/count_files  -t multinomial  --cond1=group1 --cond2=group2 -a internal -i ${WD}/multinomial.filtered  -o ${WD}/multinomial.ex.internal.counts
-Rscript scripts/exoncnt.R -c ${WD}/DEXSeq/count_files  -t multinomial  --cond1=group1 --cond2=group2 -a TSS -i ${WD}/multinomial.filtered -o ${WD}/multinomial.ex.external.counts
+Rscript scripts/exoncnt.R -c ${WD}/DEXSeq/count_files  -t multinomial  --cond1=group1 --cond2=group2 -a TSS -i ${WD}/multinomial.filtered -o ${WD}/multinomial.ex.terminal.counts
 
 Rscript scripts/exoncnt.R -c ${WD}/DEXSeq/count_files  -t n_choose_2  --cond1=group1 --cond2=group2 -a internal -i ${WD}/n_choose_2.filtered  -o ${WD}/n_choose_2.ex.internal.counts
-Rscript scripts/exoncnt.R -c ${WD}/DEXSeq/count_files  -t n_choose_2  --cond1=group1 --cond2=group2 -a TSS -i ${WD}/n_choose_2.filtered  -o ${WD}/n_choose_2.ex.external.counts
+Rscript scripts/exoncnt.R -c ${WD}/DEXSeq/count_files  -t n_choose_2  --cond1=group1 --cond2=group2 -a TSS -i ${WD}/n_choose_2.filtered  -o ${WD}/n_choose_2.ex.terminal.counts
 
 # test for different usage of alternative paths (bipartition)
 # glmmTMB_noprior
 Rscript scripts/exontest.R --file=bipartition.ex.internal.cnt.combined.txt --outdir="${WD}/bipartition.test" --countdir="${WD}/bipartition.ex.internal.counts/" --splittype=bipartition --model=betabinom_MLE --cond1='group1' --cond2='group2' &> bipart.internal.glmmTMB_noprior.log 
-Rscript scripts/exontest.R --file=bipartition.ex.external.cnt.combined.txt --outdir="${WD}/bipartition.test" --countdir="${WD}/bipartition.ex.external.counts/" --splittype=bipartition --model=betabinom_MLE --cond1='group1' --cond2='group2' &>  bipart.external.glmmTMB_noprior.log 
+Rscript scripts/exontest.R --file=bipartition.ex.terminal.cnt.combined.txt --outdir="${WD}/bipartition.test" --countdir="${WD}/bipartition.ex.terminal.counts/" --splittype=bipartition --model=betabinom_MLE --cond1='group1' --cond2='group2' &>  bipart.terminal.glmmTMB_noprior.log 
 #
 # betabinom_EBmap
 Rscript scripts/exontest.R --file=bipartition.ex.internal.cnt.combined.txt --outdir="${WD}/bipartition.test" --countdir="${WD}/bipartition.ex.internal.counts/" --splittype=bipartition --phi=phi.glmmtmb.internal.txt --model=betabinom_EBmap --cond1='group1' --cond2='group2' &> bipart.internal.betabinom_EBmap.log
-Rscript scripts/exontest.R --file=bipartition.ex.external.cnt.combined.txt --outdir="${WD}/bipartition.test" --countdir="${WD}/bipartition.ex.external.counts/" --splittype=bipartition --phi=phi.glmmtmb.external.txt --model=betabinom_EBmap --cond1='group1' --cond2='group2' &>  bipart.external.betabinom_EBmap.log
+Rscript scripts/exontest.R --file=bipartition.ex.terminal.cnt.combined.txt --outdir="${WD}/bipartition.test" --countdir="${WD}/bipartition.ex.terminal.counts/" --splittype=bipartition --phi=phi.glmmtmb.terminal.txt --model=betabinom_EBmap --cond1='group1' --cond2='group2' &>  bipart.terminal.betabinom_EBmap.log
 # betabinom_EBapprox
 Rscript scripts/exontest.R --file=bipartition.ex.internal.cnt.combined.txt --outdir="${WD}/bipartition.test" --countdir="${WD}/bipartition.ex.internal.counts/" --splittype=bipartition --phi=phi.glmmtmb.internal.txt --model=betabinom_EBapprox --cond1='group1' --cond2='group2' &> bipart.internal.betabinom_EBapprox.log
-Rscript scripts/exontest.R --file=bipartition.ex.external.cnt.combined.txt --outdir="${WD}/bipartition.test" --countdir="${WD}/bipartition.ex.external.counts/" --splittype=bipartition --phi=phi.glmmtmb.external.txt --model=betabinom_EBapprox --cond1='group1' --cond2='group2' &>  bipart.external.betabinom_EBapprox.log
+Rscript scripts/exontest.R --file=bipartition.ex.terminal.cnt.combined.txt --outdir="${WD}/bipartition.test" --countdir="${WD}/bipartition.ex.terminal.counts/" --splittype=bipartition --phi=phi.glmmtmb.terminal.txt --model=betabinom_EBapprox --cond1='group1' --cond2='group2' &>  bipart.terminal.betabinom_EBapprox.log
 # wilcoxon
 Rscript scripts/exontest.R --file=bipartition.ex.internal.cnt.combined.txt --outdir="${WD}/bipartition.test" --countdir="${WD}/bipartition.ex.internal.counts/" --splittype=bipartition --phi=phi.glmmtmb.internal.txt --model=wilcoxon --cond1='group1' --cond2='group2' &> bipart.internal.wilcoxon.log 
-Rscript scripts/exontest.R --file=bipartition.ex.external.cnt.combined.txt --outdir="${WD}/bipartition.test" --countdir="${WD}/bipartition.ex.external.counts/" --splittype=bipartition --phi=phi.glmmtmb.external.txt --model=wilcoxon --cond1='group1' --cond2='group2' &>  bipart.external.wilcoxon.log 
+Rscript scripts/exontest.R --file=bipartition.ex.terminal.cnt.combined.txt --outdir="${WD}/bipartition.test" --countdir="${WD}/bipartition.ex.terminal.counts/" --splittype=bipartition --phi=phi.glmmtmb.terminal.txt --model=wilcoxon --cond1='group1' --cond2='group2' &>  bipart.terminal.wilcoxon.log 
 
 
 # test for different usage of alternative paths (n_choose_2)
 # betabinom_MLE
 Rscript scripts/exontest.R --file=n_choose_2.ex.internal.cnt.combined.txt --outdir="${WD}/n_choose_2.test" --countdir="${WD}/n_choose_2.ex.internal.counts/" --splittype=n_choose_2 --model=betabinom_MLE --cond1='group1' --cond2='group2' &> nc2.internal.glmmTMB_noprior.log
-Rscript scripts/exontest.R --file=n_choose_2.ex.external.cnt.combined.txt --outdir="${WD}/n_choose_2.test" --countdir="${WD}/n_choose_2.ex.external.counts/" --splittype=n_choose_2 --model=betabinom_MLE --cond1='group1' --cond2='group2' &> nc2.external.glmmTMB_noprior.log
+Rscript scripts/exontest.R --file=n_choose_2.ex.terminal.cnt.combined.txt --outdir="${WD}/n_choose_2.test" --countdir="${WD}/n_choose_2.ex.terminal.counts/" --splittype=n_choose_2 --model=betabinom_MLE --cond1='group1' --cond2='group2' &> nc2.terminal.glmmTMB_noprior.log
 # betabinom_EBmap
 Rscript scripts/exontest.R --file=n_choose_2.ex.internal.cnt.combined.txt --outdir="${WD}/n_choose_2.test" --countdir="${WD}/n_choose_2.ex.internal.counts/" --splittype=n_choose_2 --phi=phi.glmmtmb.internal.txt --model=betabinom_EBmap --cond1='group1' --cond2='group2' &> nc2.internal.betabinom_EBmap.log
-Rscript scripts/exontest.R --file=n_choose_2.ex.external.cnt.combined.txt --outdir="${WD}/n_choose_2.test" --countdir="${WD}/n_choose_2.ex.external.counts/" --splittype=n_choose_2 --phi=phi.glmmtmb.external.txt --model=betabinom_EBmap --cond1='group1' --cond2='group2' &>  nc2.external.betabinom_EBmap.log
+Rscript scripts/exontest.R --file=n_choose_2.ex.terminal.cnt.combined.txt --outdir="${WD}/n_choose_2.test" --countdir="${WD}/n_choose_2.ex.terminal.counts/" --splittype=n_choose_2 --phi=phi.glmmtmb.terminal.txt --model=betabinom_EBmap --cond1='group1' --cond2='group2' &>  nc2.terminal.betabinom_EBmap.log
 # betabinom_EBapprox
 Rscript scripts/exontest.R --file=n_choose_2.ex.internal.cnt.combined.txt --outdir="${WD}/n_choose_2.test" --countdir="${WD}/n_choose_2.ex.internal.counts/" --splittype=n_choose_2 --phi=phi.glmmtmb.internal.txt --model=betabinom_EBapprox --cond1='group1' --cond2='group2' &> nc2.internal.betabinom_EBapprox.log
-Rscript scripts/exontest.R --file=n_choose_2.ex.external.cnt.combined.txt --outdir="${WD}/n_choose_2.test" --countdir="${WD}/n_choose_2.ex.external.counts/" --splittype=n_choose_2 --phi=phi.glmmtmb.external.txt --model=betabinom_EBapprox --cond1='group1' --cond2='group2' &>  nc2.external.betabinom_EBapprox.log
+Rscript scripts/exontest.R --file=n_choose_2.ex.terminal.cnt.combined.txt --outdir="${WD}/n_choose_2.test" --countdir="${WD}/n_choose_2.ex.terminal.counts/" --splittype=n_choose_2 --phi=phi.glmmtmb.terminal.txt --model=betabinom_EBapprox --cond1='group1' --cond2='group2' &>  nc2.terminal.betabinom_EBapprox.log
 # wilcoxon
 Rscript scripts/exontest.R --file=n_choose_2.ex.internal.cnt.combined.txt --outdir="${WD}/n_choose_2.test" --countdir="${WD}/n_choose_2.ex.internal.counts/" --splittype=n_choose_2 --phi=phi.glmmtmb.internal.txt --model=wilcoxon --cond1='group1' --cond2='group2' &> nc2.internal.wilcoxon.log 
-Rscript scripts/exontest.R --file=n_choose_2.ex.external.cnt.combined.txt --outdir="${WD}/n_choose_2.test" --countdir="${WD}/n_choose_2.ex.external.counts/" --splittype=n_choose_2 --phi=phi.glmmtmb.external.txt --model=wilcoxon --cond1='group1' --cond2='group2' &>  nc2.external.wilcoxon.log
+Rscript scripts/exontest.R --file=n_choose_2.ex.terminal.cnt.combined.txt --outdir="${WD}/n_choose_2.test" --countdir="${WD}/n_choose_2.ex.terminal.counts/" --splittype=n_choose_2 --phi=phi.glmmtmb.terminal.txt --model=wilcoxon --cond1='group1' --cond2='group2' &>  nc2.terminal.wilcoxon.log
 
 
 # test for different usage of alternative paths (multinomial)
 # dirmult_EBplugin
 Rscript scripts/exontest.R --file=multinomial.ex.internal.cnt.combined.txt --outdir="${WD}/multinomial.test" --countdir="${WD}/multinomial.ex.internal.counts/" --splittype=multinomial --prec=prec_multinomial.internal.txt --model=dirmult_EBplugin --cond1='group1' --cond2='group2' &> multinomial.internal.dirmult_EBplugin.log
-Rscript scripts/exontest.R --file=multinomial.ex.external.cnt.combined.txt --outdir="${WD}/multinomial.test" --countdir="${WD}/multinomial.ex.external.counts/" --splittype=multinomial --prec=prec_multinomial.external.txt --model=dirmult_EBplugin --cond1='group1' --cond2='group2' &> multinomial.external.dirmult_EBplugin.log
+Rscript scripts/exontest.R --file=multinomial.ex.terminal.cnt.combined.txt --outdir="${WD}/multinomial.test" --countdir="${WD}/multinomial.ex.terminal.counts/" --splittype=multinomial --prec=prec_multinomial.terminal.txt --model=dirmult_EBplugin --cond1='group1' --cond2='group2' &> multinomial.terminal.dirmult_EBplugin.log
 
 
 
@@ -70,19 +70,19 @@ Rscript scripts/exontest.R --file=multinomial.ex.external.cnt.combined.txt --out
 # compare GrASE results with Saturn results
 Rscript scripts/compare_saturn_grase.R \
   --grase ${WD}/bipartition.test/test_bipartition.ex.internal_glmmTMB_MAP_prior.annotated.txt \
-  --grase2 ${WD}/bipartition.test/test_bipartition.ex.external_glmmTMB_MAP_prior.annotated.txt \
+  --grase2 ${WD}/bipartition.test/test_bipartition.ex.terminal_glmmTMB_MAP_prior.annotated.txt \
   --saturn ${WD}/saturn/saturn_group1_group2/all.group1_group2.sumExp_filteredbyCountMultiExon.txt \
   --output ${WD}/bipartition.test/saturn_grase_glmmTMB_MAP_prior_comparison.txt > saturn_grase_glmmTMB_MAP_prior.log
 
 Rscript scripts/compare_saturn_grase.R \
   --grase ${WD}/bipartition.test/test_bipartition.ex.internal_glmmTMB_fixed_EB.annotated.txt \
-  --grase2 ${WD}/bipartition.test/test_bipartition.ex.external_glmmTMB_fixed_EB.annotated.txt \
+  --grase2 ${WD}/bipartition.test/test_bipartition.ex.terminal_glmmTMB_fixed_EB.annotated.txt \
   --saturn ${WD}/saturn/saturn_group1_group2/all.group1_group2.sumExp_filteredbyCountMultiExon.txt \
   --output ${WD}/bipartition.test/saturn_grase_glmmTMB_fixed_EB_comparison.txt > saturn_grase_glmmTMB_fixed_EB.log
 
 Rscript scripts/compare_saturn_grase.R \
   --grase ${WD}/bipartition.test/test_bipartition.ex.internal_wilcoxon.annotated.txt \
-  --grase2 ${WD}/bipartition.test/test_bipartition.ex.external_wilcoxon.annotated.txt \
+  --grase2 ${WD}/bipartition.test/test_bipartition.ex.terminal_wilcoxon.annotated.txt \
   --saturn ${WD}/saturn/saturn_group1_group2/all.group1_group2.sumExp_filteredbyCountMultiExon.txt \
   --output ${WD}/bipartition.test/saturn_grase_wilcoxon_comparison.txt > saturn_grase_wilcoxon.log
 

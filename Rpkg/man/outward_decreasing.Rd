@@ -17,7 +17,7 @@ the leaf \code{L}). Vectorised.}
 Logical vector: \code{TRUE} where outward means decreasing coordinate.
 }
 \description{
-An external bubble is anchored at one of the graph's two terminals: the root
+A terminal bubble is anchored at one of the graph's two terminals: the root
 \code{R}, where transcription starts, or the leaf \code{L}, where it ends. A side is
 labelled \code{"5prime"} or \code{"3prime"} accordingly. Combined with gene strand this
 fixes which direction leads away from the transcript body: outward is the

@@ -51,13 +51,13 @@ message("Contrasts: ", paste(contrasts, collapse=", "))
 res_file <- function(cls)
   file.path(GRASE_DIR, sprintf("test_bipartition.%s.%s_betabinom_EBmap.annotated.txt",
                                UNIT, cls))
-for (f in c(res_file("internal"), res_file("external")))
+for (f in c(res_file("internal"), res_file("terminal")))
   if (!file.exists(f)) stop("no such results file: ", f,
                             "\n  (--unit is \"", UNIT, "\"; pre-rename runs wrote ",
                             "test_bipartition.<class>_... with no unit)")
 grase_int <- read.table(res_file("internal"),
   header=TRUE, sep="\t", stringsAsFactors=FALSE)
-grase_tss <- read.table(res_file("external"),
+grase_tss <- read.table(res_file("terminal"),
   header=TRUE, sep="\t", stringsAsFactors=FALSE)
 
 summary_rows <- list()

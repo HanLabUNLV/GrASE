@@ -1443,7 +1443,7 @@ add_support <- function(res, d_grp, ctr_groups, contrast = NULL) {
   key  <- paste(d_grp$gene, d_grp$event, d_grp$side, d_grp$groups, sep = "\r")
 
   ## Loop over CONTRASTS (a handful), not rows. A per-row vapply does one
-  ## match() per row against a key vector with ~1.9M entries on the external
+  ## match() per row against a key vector with ~1.9M entries on the terminal
   ## arm -- order 10^12 operations, which ran for hours with no output. Each
   ## contrast now contributes one vectorised match() per group.
   res$d_support <- NA_real_

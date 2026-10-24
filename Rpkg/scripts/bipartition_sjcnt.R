@@ -27,7 +27,7 @@ option_list <- list(
               help="output directory"),
   make_option(c("-t", "--type"),      type="character", metavar="character",
               default="internal",
-              help="bipartition type suffix to match: internal | external [default: internal]"),
+              help="bipartition type suffix to match: internal | terminal [default: internal]"),
   make_option(c("-c", "--cores"),     type="integer",   default=NULL,
               metavar="integer",
               help="number of parallel cores [default: 32]"),

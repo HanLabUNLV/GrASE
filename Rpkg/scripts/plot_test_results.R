@@ -8,7 +8,7 @@
 ## call rule (the `significant` column exontest.R wrote, never re-derived here).
 ##
 ## Usage: Rscript scripts/plot_test_results.R --gene ENSG... --event 11 \
-##          --kind external --analysis <dir> --conditions A,B,C --out fig.pdf
+##          --kind terminal --analysis <dir> --conditions A,B,C --out fig.pdf
 suppressPackageStartupMessages({ library(igraph); library(optparse) })
 
 CB <- c(S = "#4477AA", D1 = "#CCBB44", D2 = "#EE6677", other = "#DDDDDD")
@@ -17,7 +17,7 @@ opt_list <- list(
   make_option("--gene", type = "character"),
   make_option("--event", type = "character"),
   make_option("--analysis", type = "character"),
-  make_option("--kind", type = "character", default = "external"),
+  make_option("--kind", type = "character", default = "terminal"),
   make_option("--unit", type = "character", default = "exsj"),
   make_option("--conditions", type = "character"),
   make_option("--comparison", type = "character", default = NULL),
@@ -25,7 +25,7 @@ opt_list <- list(
   make_option("--bipdir", type = "character", default = "~/DICE/bipartition.filtered"),
   make_option("--graphmldir", type = "character", default = "~/DICE/graphml.v34"),
   make_option("--sjcounts", type = "character", default = ""),
-  make_option("--stack_kinds", type = "character", default = "internal,external"),
+  make_option("--stack_kinds", type = "character", default = "internal,terminal"),
   make_option("--max_stack", type = "integer", default = 0L),
   make_option("--feature_contrast", type = "character", default = NULL),
   make_option("--mark_parts", type = "character", default = ""),
