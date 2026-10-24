@@ -33,14 +33,18 @@
 ##
 ## Usage:
 ##   Rscript scripts/build_outward_counts.R --units intronparts/outward_units.tsv \
-##     --intron_counts intronparts/counts --exon_counts count_files \
+##     --intron_counts intronparts/counts,intronparts/counts_ig \
+##     --exon_counts count_files \
 ##     --exon_combined <...exoncnt.combined.txt> \
 ##     --out intronparts/outward.exoncnt.combined.txt \
 ##     --out_sides intronparts/outward_side_table.tsv [--ref_cache <file>]
 suppressPackageStartupMessages({library(data.table); library(optparse)})
 a <- parse_args(OptionParser(option_list = list(
   make_option("--units",         type = "character"),
-  make_option("--intron_counts", type = "character"),
+  make_option("--intron_counts", type = "character",
+              help = "one counts directory, or several comma-separated: the
+                      intronic tiling is counted in passes (within-gene bins,
+                      intergenic gene-edge flanks) and unioned here"),
   make_option("--exon_counts",   type = "character"),
   make_option("--exon_combined", type = "character"),
   make_option("--out",           type = "character"),
@@ -50,9 +54,24 @@ a <- parse_args(OptionParser(option_list = list(
 for (r in c("units","intron_counts","exon_counts","exon_combined","out","out_sides"))
   if (is.null(a[[r]])) stop("--", r, " is required")
 
+## ID COLUMNS ARE CHARACTER, NOT NUMBERS THAT HAPPEN TO PARSE. An exonic part
+## id is `sprintf("%03d")` (enumerate_outward_units.R's pid), so reading it
+## without colClasses typed `anchor` integer and fwrite then wrote the side
+## table's `046` as `46`. Nothing failed: the scorer ranks on
+## as.integer(anchor), so it was unaffected, but every downstream join against
+## a GFF part number silently matched only the parts numbered >= 100 -- which
+## is why the python side analyses all call .zfill(3). unit_id and ref_ex_part
+## are listed for the same reason: both are usually non-numeric and so arrive
+## as character by luck, but a panel whose units were all exonic would hit the
+## identical bug on unit_id.
 u <- fread(a$units, sep = "\t", showProgress = FALSE,
-           colClasses = list(character = c("gene","event")))
+           colClasses = list(character = c("gene","event","side","anchor",
+                                           "unit_id","ref_ex_part")))
 cat(sprintf("anchor rows: %d\n", nrow(u)))
+if (!all(grepl("^[0-9]{3,}$", u$anchor)))
+  stop("anchor is not in pid() form (3+ digits, zero padded): e.g. ",
+       paste(head(unique(u$anchor[!grepl("^[0-9]{3,}$", u$anchor)]), 3),
+             collapse = ", "))
 
 ## ---- test units ------------------------------------------------------------
 tu <- unique(u[, .(gene, unit_type, unit_id, ref_ex_part)])
@@ -91,16 +110,40 @@ want_i <- unique(tu[unit_type == "intron", raw_key(gene, unit_id)])
 want_e <- unique(tu[unit_type == "exon",   raw_key(gene, unit_id)])
 cat(sprintf("units to fetch: %d intronic, %d exonic\n", length(want_i), length(want_e)))
 
-ifiles  <- sort(list.files(a$intron_counts, pattern = "_counts\\.txt$", full.names = TRUE))
-if (!length(ifiles)) stop("no *_counts.txt under ", a$intron_counts)
-samples <- sub("_counts\\.txt$", "", basename(ifiles))
-cat(sprintf("samples: %d\n", length(samples)))
+## INTRONIC COUNTS MAY ARRIVE IN SEVERAL DIRECTORIES. The tiling is counted in
+## passes -- the within-gene bins against one GFF, the intergenic gene-edge
+## flanks against another -- because folding the flanks into the first GFF would
+## change read assignment for every bin already counted. Each pass writes its
+## own counts directory, so --intron_counts takes a comma-separated list and the
+## passes are unioned here. The directories must cover the same samples and must
+## not share bin ids; both are asserted, because a directory passed twice, or
+## two GFFs emitting the same bin id, would double a unit's counts in silence.
+idirs <- trimws(strsplit(a$intron_counts, ",", fixed = TRUE)[[1]])
+idirs <- idirs[nzchar(idirs)]
+if (!length(idirs)) stop("--intron_counts is empty")
+iflist <- lapply(idirs, function(d) {
+  fs <- sort(list.files(d, pattern = "_counts\\.txt$", full.names = TRUE))
+  if (!length(fs)) stop("no *_counts.txt under ", d)
+  fs
+})
+isets   <- lapply(iflist, function(fs) sort(sub("_counts\\.txt$", "", basename(fs))))
+samples <- isets[[1]]
+for (i in seq_along(idirs))
+  if (!identical(isets[[i]], samples))
+    stop(sprintf("--intron_counts dirs disagree on samples: %s has %d, %s has %d",
+                 idirs[1], length(samples), idirs[i], length(isets[[i]])))
+ifiles  <- unlist(iflist, use.names = FALSE)
+isample <- sub("_counts\\.txt$", "", basename(ifiles))
+cat(sprintf("samples: %d  (intronic passes: %d, count files: %d)\n",
+            length(samples), length(idirs), length(ifiles)))
 ## Parallel over FILES: each is independent, and the serial lapply read 1,398
 ## of them one at a time on a many-core box.
 ncore <- as.integer(Sys.getenv("MC_CORES", unset = "16"))
 cat(sprintf("reading count files on %d cores\n", ncore))
 ic <- rbindlist(parallel::mclapply(seq_along(ifiles), function(i)
-  read_counts(ifiles[i], want_i)[, sample := samples[i]], mc.cores = ncore))
+  read_counts(ifiles[i], want_i)[, sample := isample[i]], mc.cores = ncore))
+if (anyDuplicated(ic, by = c("k","sample")))
+  stop("a unit appears in more than one --intron_counts pass -- overlapping bin ids")
 
 ex_path <- function(s) file.path(a$exon_counts, sub("_SRR[0-9]+$", "", s),
                                  paste0(sub("^.*_(SRR[0-9]+)$", "\\1", s), "_counts.txt"))

@@ -4,7 +4,14 @@
 \alias{intronic_parts}
 \title{Intronic parts of a gene, as quantification units}
 \usage{
-intronic_parts(start, end, part, max_whole = 2000L, end_width = 300L)
+intronic_parts(
+  start,
+  end,
+  part,
+  max_whole = 2000L,
+  end_width = 300L,
+  intergenic_width = 0L
+)
 }
 \arguments{
 \item{start, end, part}{Exonic part coordinates and part numbers for ONE gene,

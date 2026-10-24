@@ -85,7 +85,16 @@ option_list <- list(
   make_option("--W", type = "integer", default = 300L,
               help = "end-bin width for parts longer than T [default %default]"),
   make_option("--genes", type = "character", default = NULL,
-              help = "optional file of gene ids to restrict to (default: all)")
+              help = "optional file of gene ids to restrict to (default: all)"),
+  ## Flanks OUTSIDE the gene span, so a terminus at the gene's outermost part
+  ## has something outward to test instead of being `drop: gene edge`. 0 = off,
+  ## which is the historical behaviour and keeps bin ids unchanged. Use 300 to
+  ## match --W: an intergenic gap is unbounded exactly as a long intron is, so
+  ## the reason a long intron gets a --W bin at EACH end rather than one whole
+  ## bin applies unchanged. The T >= 2W check does NOT apply -- a flank has one
+  ## side and cannot overlap itself.
+  make_option("--intergenic_width", type = "integer", default = 0L,
+              help = "flank width outside the gene span, 0 = none [default %default]")
 )
 opt <- parse_args(OptionParser(option_list = option_list))
 for (r in c("gff_dir", "outdir")) {
@@ -135,7 +144,8 @@ for (fp in gff_files) {
   ## and a `skip` reason, which is tallied rather than treated as an error:
   ## overlapping exonic parts break the premise of the tiling, so that gene is
   ## excluded instead of silently yielding negative-width bins.
-  b <- intronic_parts(start, end, part, max_whole = opt$T, end_width = opt$W)
+  b <- intronic_parts(start, end, part, max_whole = opt$T, end_width = opt$W,
+                      intergenic_width = opt$intergenic_width)
   if (!nrow(b)) {
     sk <- attr(b, "skip")
     if (identical(sk, "overlap"))     n_overlap  <- n_overlap + 1L

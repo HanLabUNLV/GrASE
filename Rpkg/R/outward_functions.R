@@ -1,6 +1,6 @@
-## Outward units for the EXTERNAL-event boundary arm.
+## Outward units for the TERMINAL-event boundary arm.
 ##
-## THE QUESTION THESE SERVE. A GrASE external-event call says a side's
+## THE QUESTION THESE SERVE. A GrASE terminal-event call says a side's
 ## distinct set differs in usage between conditions. It does not say where
 ## transcription begins or ends. To ask that, walk outward from the side's
 ## annotated termini and test, with the same shared reference, whether signal
@@ -31,7 +31,7 @@
 
 #' Does walking outward mean decreasing coordinate?
 #'
-#' An external bubble is anchored at one of the graph's two terminals: the root
+#' A terminal bubble is anchored at one of the graph's two terminals: the root
 #' `R`, where transcription starts, or the leaf `L`, where it ends. A side is
 #' labelled `"5prime"` or `"3prime"` accordingly. Combined with gene strand this
 #' fixes which direction leads away from the transcript body: outward is the
@@ -172,18 +172,41 @@ outward_unit <- function(part, decreasing, geom, intron_bins = NULL) {
     if (length(k)) bid[k[1L]] else NA_character_
   }
 
+  ## THE INTERGENIC FLANK at a gene edge, when the manifest carries one.
+  ## A flank abuts a SINGLE part, so the unused side is NA: IG_below has
+  ## abut_part_hi = the gene's lowest part and lo = NA, IG_above has
+  ## abut_part_lo = the highest part and hi = NA. Matching on `touches` FIRST
+  ## keeps an NA abutting part from colliding with an ordinary bin. Returns NA
+  ## when the manifest has no flanks (intergenic_width = 0, the default) or
+  ## where mk_intergenic() suppressed one at a chromosome start, so behaviour
+  ## without flanks is byte-identical to before.
+  pick_ig <- function(p, dec) {
+    if (!has_bins) return(NA_character_)
+    k <- if (dec) which(btc == "intergenic_below" & bhi == p)
+         else      which(btc == "intergenic_above" & blo == p)
+    if (length(k)) bid[k[1L]] else NA_character_
+  }
+
   want <- .part_id(part)
   for (i in seq_len(n)) {
     j <- match(want[i], gp)
     if (is.na(j)) next
     if (decreasing[i]) {
-      if (j == 1L) next                       # gene edge
+      if (j == 1L) {                          # gene edge: flank, if built
+        b <- pick_ig(gp[j], TRUE)
+        if (!is.na(b)) { out$unit_type[i] <- "intron"; out$unit_id[i] <- b }
+        next
+      }
       if (ge[j - 1L] == gs[j] - 1L) {         # contiguous tiling
         out$unit_type[i] <- "exon"; out$unit_id[i] <- gp[j - 1L]; next
       }
       b <- pick_bin(gp[j - 1L], gp[j], TRUE)
     } else {
-      if (j == m) next                        # gene edge
+      if (j == m) {                           # gene edge: flank, if built
+        b <- pick_ig(gp[j], FALSE)
+        if (!is.na(b)) { out$unit_type[i] <- "intron"; out$unit_id[i] <- b }
+        next
+      }
       if (gs[j + 1L] == ge[j] + 1L) {
         out$unit_type[i] <- "exon"; out$unit_id[i] <- gp[j + 1L]; next
       }
@@ -222,7 +245,15 @@ outward_unit <- function(part, decreasing, geom, intron_bins = NULL) {
 #'   the gene must be excluded rather than silently producing negative-width
 #'   bins) or `"no_intron"` (all parts abut).
 #' @export
-intronic_parts <- function(start, end, part, max_whole = 2000L, end_width = 300L) {
+intronic_parts <- function(start, end, part, max_whole = 2000L, end_width = 300L,
+                           intergenic_width = 0L) {
+  ## intergenic_width: flank width for the gene-edge bins, 0 = none (default).
+  ## USE 300L, matching end_width, if these are built. An intergenic gap is
+  ## unbounded exactly as a long intron is, so the reason a long intron gets an
+  ## end_width bin at each end rather than one whole bin applies unchanged; and
+  ## of the existing 300 bp intronic end bins only ~22-25% clear the read floor,
+  ## so a narrower flank would lose about half the judgeable cases. Settled
+  ## 2026-10-21. Not yet exposed by scripts/intronparts.R.
   max_whole <- as.integer(max_whole); end_width <- as.integer(end_width)
   if (is.na(max_whole) || is.na(end_width) || end_width < 1L)
     stop("max_whole and end_width must be positive integers", call. = FALSE)
@@ -243,18 +274,76 @@ intronic_parts <- function(start, end, part, max_whole = 2000L, end_width = 300L
     attr(d, "skip") <- reason
     d
   }
-  if (length(start) < 2L) return(empty("single"))
+  intergenic_width <- as.integer(intergenic_width)
+  if (is.na(intergenic_width) || intergenic_width < 0L)
+    stop("intergenic_width must be a non-negative integer", call. = FALSE)
 
+  ## INTERGENIC GAPS. Beyond the gene's outermost exonic part there is no
+  ## annotated feature, but transcription does not stop at an annotation --
+  ## read-through past the 3' end is exactly what a gene-edge terminus cannot
+  ## currently be tested against. The intergenic gap is unbounded, so it
+  ## contributes ONE end bin of `end_width`, the same rule a long intron gets.
+  ##
+  ## "Intergenic" names the gap's position relative to THIS gene, not a
+  ## guarantee that no other gene is there: a neighbouring gene can overlap it,
+  ## and those cases must be marked unusable by the caller rather than counted,
+  ## because dexseq_count resolves ambiguity at gene level and would drop the
+  ## reads for both genes.
+  ## An intergenic gap abuts a single part, so the unused side of the
+  ## manifest's abut_part_lo/hi pair is NA.
+  ##
+  ## NAMING, deliberately NOT "lo"/"hi". For an intron, `touches` says which
+  ## END OF THE GAP the bin occupies, so "hi" means the bin sits at the gap's
+  ## high-coordinate end and therefore abuts abut_part_hi. An intergenic gap
+  ## below the gene occupies its own gap's HIGH end by that rule, which would
+  ## make the natural-language reading ("the low one") the exact opposite of
+  ## the encoded one. So these use "intergenic_below"/"intergenic_above",
+  ## naming the side of the GENE they sit on, and no reader has to resolve
+  ## which convention is in play. abut_part_lo/hi are unchanged: they keep
+  ## their coordinate meaning, with the absent side NA.
+  ##
+  ## These are emitted even for a gene with no introns at all -- a single-exon
+  ## gene has two intergenic gaps and zero intronic parts -- so they are built
+  ## BEFORE the no-intron returns rather than appended to them.
+  mk_intergenic <- function(s, e, p) {
+    if (intergenic_width < 1L) return(NULL)
+    lo_s <- min(s) - intergenic_width; lo_e <- min(s) - 1
+    hi_s <- max(e) + 1;           hi_e <- max(e) + intergenic_width
+    lo_p <- p[which.min(s)];      hi_p <- p[which.max(e)]
+    keep <- lo_s >= 1
+    data.frame(
+      bin_id = c(if (keep) sprintf("IG_below_%s", lo_p), sprintf("IG_above_%s", hi_p)),
+      intron_id = c(if (keep) sprintf("IG_below_%s", lo_p), sprintf("IG_above_%s", hi_p)),
+      touches = c(if (keep) "intergenic_below", "intergenic_above"),
+      start = c(if (keep) lo_s, hi_s), end = c(if (keep) lo_e, hi_e),
+      width = c(if (keep) lo_e - lo_s + 1, hi_e - hi_s + 1),
+      intron_start = NA_real_, intron_end = NA_real_, intron_len = NA_real_,
+      abut_part_lo = c(if (keep) NA_character_, hi_p),
+      abut_part_hi = c(if (keep) lo_p, NA_character_),
+      stringsAsFactors = FALSE)
+  }
+  with_intergenic <- function(d, ig, reason) {
+    out <- if (is.null(ig)) d else rbind(d, ig)
+    out <- out[order(out$start, out$end), , drop = FALSE]
+    rownames(out) <- NULL
+    attr(out, "skip") <- reason
+    out
+  }
+
+  if (length(start) < 1L) return(empty("single"))
   o <- order(as.numeric(start), as.numeric(end))
   s <- as.numeric(start)[o]; e <- as.numeric(end)[o]; p <- .part_id(part)[o]
   ## the tiling depends on this; a violation would silently produce
-  ## negative-width or overlapping intronic parts
-  if (any(s[-1L] <= e[-length(e)])) return(empty("overlap"))
+  ## negative-width or overlapping intronic parts. A gene that fails it gets
+  ## NO intergenic gaps either -- its coordinates cannot be trusted.
+  if (length(s) > 1L && any(s[-1L] <= e[-length(e)])) return(empty("overlap"))
+  ig <- mk_intergenic(s, e, p)
+  if (length(start) < 2L) return(with_intergenic(empty("single"), ig, "single"))
 
   gs <- e[-length(e)] + 1                    # intron start = previous part end + 1
   ge <- s[-1L] - 1                           # intron end   = next part start - 1
   has <- ge >= gs                            # abutting parts leave no intron
-  if (!any(has)) return(empty("no_intron"))
+  if (!any(has)) return(with_intergenic(empty("no_intron"), ig, "no_intron"))
 
   lo <- p[-length(p)][has]; hi <- p[-1L][has]
   gs <- gs[has]; ge <- ge[has]
@@ -277,8 +366,5 @@ intronic_parts <- function(start, end, part, max_whole = 2000L, end_width = 300L
     start = bs, end = be, width = be - bs + 1,
     intron_start = istart, intron_end = iend, intron_len = il,
     abut_part_lo = lp, abut_part_hi = hp, stringsAsFactors = FALSE)
-  d <- d[order(d$start, d$end), , drop = FALSE]
-  rownames(d) <- NULL
-  attr(d, "skip") <- NA_character_
-  d
+  with_intergenic(d, ig, NA_character_)
 }
