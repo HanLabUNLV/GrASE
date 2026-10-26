@@ -263,7 +263,12 @@ res <- as.data.table(res)
 allu <- unique(u[, .(gene, event = synth_event, contrast,
                      comparison = "diff1_vs_ref")])
 allu <- as.data.table(grase::add_support(as.data.frame(allu), d_grp, CTR))
-u <- merge(u, res[, .(gene, synth_event = event, contrast, called)],
+## delta_pi rides along so DOWNSTREAM CAN MATCH DIRECTION. A differential
+## long-read reference that ignores sign is half noise: a terminus called up in
+## the treatment lineage scores a hit from a transcript exclusive to the
+## reference lineage, which dilutes a real effect toward the null. The sign of
+## delta_pi says which lineage the call claims the terminus is used in.
+u <- merge(u, res[, .(gene, synth_event = event, contrast, called, delta_pi)],
            by = c("gene", "synth_event", "contrast"), all.x = TRUE)
 u <- merge(u, allu[, .(gene, synth_event = event, contrast, d_support)],
            by = c("gene", "synth_event", "contrast"), all.x = TRUE)
@@ -297,10 +302,12 @@ u <- merge(u, unique(cl[, .(gene, event, side, contrast)]),
 ## ---- assemble t_i beside U_i on rank -------------------------------------
 ts <- u[anchor_kind == "terminus_self"]
 w <- merge(ts[, .(gene, event, side, contrast, rank, anchor, gene_edge,
-                  part_called = called, part_min_read_support = min_read_support,
+                  part_called = called, part_dpi = delta_pi,
+                  part_min_read_support = min_read_support,
                   part_tested = tested, part_zero = zero_count)],
            u[anchor_kind == "terminus",
              .(gene, event, side, contrast, rank, flank_called = called,
+               flank_dpi = delta_pi,
                flank_min_read_support = min_read_support, flank_present = TRUE,
                flank_tested = tested, flank_zero = zero_count, flank_ds = d_support,
                flank_unit = unit_id)],

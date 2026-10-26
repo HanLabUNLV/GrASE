@@ -12,11 +12,21 @@ IsoQuant transcript model whose matching end lies within +/-W bp of the
 terminus", differing in what the model must do:
 
   exists      a + b > 0                       a transcript ENDS here
-  share       |a/gtot_trt - b/gtot_ref| >= DSHARE, gene >= MINGENE in both
   exclusive   (a >= MINPRES and b == 0) or (b >= MINPRES and a == 0)
 
-`exists` answers an existence question, `share` and `exclusive` a differential
-one. Rates are reported against a rank-matched within-gene background (a
+`exists` answers an existence question and `exclusive` a differential one.
+
+THE `share` REFERENCE WAS REMOVED. It was
+  |a/gtot_trt - b/gtot_ref| >= DSHARE, gene >= MINGENE in both
+which uses IsoQuant counts as a QUANTIFIER -- it normalises by a gene total and
+thresholds the difference of two ratios. IsoQuant is not established as an
+accurate quantifier, so nothing here may depend on its magnitudes. `exists` and
+`exclusive` use it only to detect a model end, with MINPRES as a presence floor,
+which is the use it can carry. gtot is gone from this tree entirely; anything
+needing an expression control uses the terminus's own DEXSeq count from
+part_shortread_expr.tsv instead.
+
+Rates are reported against a rank-matched within-gene background (a
 random exonic part of the same gene at the same rank), and group-vs-group
 comparison is a Mantel-Haenszel OR stratified by EXACT rank -- never a ratio
 of two obs/exp values, which is invalid because obs/exp is a rate ratio whose
@@ -35,16 +45,14 @@ Gene edge: with the intergenic flanks built (IG=1) a gene-edge terminus HAS an
 outward flank, so those termini are INCLUDED. Without them the flank is absent
 and the walk cannot judge the side.
 
-Usage: IG=1 python3 -I outward_walk_longread.py [window] [dshare] [minpres] [mingene]
+Usage: IG=1 python3 -I outward_walk_longread.py [window] [minpres] [mode]
 """
 import os, re, csv, math, bisect, collections, sys
 from scipy.stats import chi2
 
 W       = int(sys.argv[1])   if len(sys.argv) > 1 else 100
-DSHARE  = float(sys.argv[2]) if len(sys.argv) > 2 else 0.1
-MINPRES = int(sys.argv[3])   if len(sys.argv) > 3 else 2
-MINGENE = int(sys.argv[4])   if len(sys.argv) > 4 else 10
-MODE    = sys.argv[5]        if len(sys.argv) > 5 else "pooled"
+MINPRES = int(sys.argv[2])   if len(sys.argv) > 2 else 2
+MODE    = sys.argv[3]        if len(sys.argv) > 3 else "pooled"
 D = os.environ.get("DICE", "/mnt/data1/home/mirahan/DICE")
 IG  = os.environ.get("IG", "0") == "1"
 MAN = f"{D}/intronparts_ig/intronparts_manifest.tsv" if IG else \
@@ -68,18 +76,32 @@ if MODE == "matched": TR = MATCHED
 LIN = ["CD4","CD8","B","MONO.CLASSIC"]
 PAIRS = [("CD4","B"),("CD8","B"),("MONO.CLASSIC","B"),
          ("CD8","CD4"),("MONO.CLASSIC","CD4"),("MONO.CLASSIC","CD8")]
-DEFS = ("exists","share","exclusive")
+DEFS = ("exists","exclusive")          # the REPORTED references
+## BOTH REFERENCES ARE DIRECTIONAL, so each index is built in two halves. A call
+## says which lineage the terminus is used in -- the sign of part_dpi -- and only
+## long-read evidence in THAT lineage corroborates it. Until 2026-10-26 both
+## references ignored direction, which credits wrong-direction coincidences and
+## dilutes a real effect toward the null; with roughly half the hits available in
+## the wrong lineage that is a large dilution, not a rounding.
+##
+##   exists     the transcript is seen in the claimed lineage       a > 0
+##   exclusive  and is wholly absent from the other       a >= MINPRES, b == 0
+##
+## They are a hierarchy, not alternatives: exclusive implies exists. The _trt
+## and _ref halves are the same test with the lineages swapped, selected by the
+## sign of dpi. The BACKGROUND has no call and so no direction; there the union
+## of the two halves is used, which for exists reduces to the old a + b > 0.
+IDX  = ("exists_trt","exists_ref","excl_trt","excl_ref")
 
 O = f"{D}/longread/isoquant_TBM/OUT"
-mgene = {}; mcoord = {}
+mcoord = {}
 for ln in open(f"{O}/OUT.transcript_models.gtf"):
     f = ln.split("\t")
     if len(f) < 9 or f[2] != "transcript": continue
-    t = re.search(r'transcript_id "([^"]+)"', f[8]); g = re.search(r'gene_id "([^"]+)"', f[8])
+    t = re.search(r'transcript_id "([^"]+)"', f[8])
     if not t: continue
     c, s, e, st = f[0], int(f[3]), int(f[4]), f[6]
     mcoord[t.group(1)] = (c, st, s if st == "+" else e, e if st == "+" else s)
-    if g: mgene[t.group(1)] = g.group(1)
 cnt = {}
 with open(f"{O}/OUT.transcript_model_grouped_counts.tsv") as fh:
     hdr = fh.readline().rstrip("\n").split("\t")[1:]
@@ -90,37 +112,40 @@ with open(f"{O}/OUT.transcript_model_grouped_counts.tsv") as fh:
         for val, l in zip(p[1:], lof):
             if l: v[l] += float(val)
         if sum(v.values()) > 0: cnt[p[0]] = v
-gtot = collections.defaultdict(lambda: dict.fromkeys(LIN, 0.0))
-for m, v in cnt.items():
-    g = mgene.get(m)
-    if g:
-        for l in LIN: gtot[g][l] += v[l]
 tot = {l: sum(v[l] for v in cnt.values()) for l in LIN}
 print(f"  mode {MODE} | libraries {len(TR)} | models with counts {len(cnt)} | window+/-{W}")
 print("  lineage totals: " + "  ".join("%s %.0f" % (l, tot[l]) for l in LIN))
-ev = {}
-for trt, ref in PAIRS:
-    ev[(trt,ref)] = sum(1 for g in gtot if gtot[g][trt] >= MINGENE and gtot[g][ref] >= MINGENE)
-print("  genes evaluable for `share` (>= %d counts in both): " % MINGENE
-      + "  ".join("%s/%s %d" % (a[:4], b[:4], n) for (a,b), n in ev.items()))
 
 def build(trt, ref):
-    out = {(d, e): collections.defaultdict(list) for d in DEFS for e in ("5","3")}
+    out = {(d, e): collections.defaultdict(list) for d in IDX for e in ("5","3")}
     for m, v in cnt.items():
         co = mcoord.get(m)
         if not co: continue
         c, st, five, three = co
-        g = mgene.get(m); a, b = v[trt], v[ref]
-        ok = {"exists": (a + b) > 0}
-        ok["share"] = bool(g and gtot[g][trt] >= MINGENE and gtot[g][ref] >= MINGENE
-                           and abs(a/gtot[g][trt] - b/gtot[g][ref]) >= DSHARE)
-        ok["exclusive"] = (a >= MINPRES and b == 0) or (b >= MINPRES and a == 0)
-        for d in DEFS:
+        a, b = v[trt], v[ref]
+        ok = {"exists_trt": a > 0, "exists_ref": b > 0}
+        ok["excl_trt"] = a >= MINPRES and b == 0
+        ok["excl_ref"] = b >= MINPRES and a == 0
+        for d in IDX:
             if ok[d]:
                 out[(d,"5")][(c,st)].append(five); out[(d,"3")][(c,st)].append(three)
     for k in out:
         for kk in out[k]: out[k][kk] = sorted(set(out[k][kk]))
     return out
+
+def hit(ds, d, e, c, st, pos, dpi):
+    """One reference, resolved for direction. Both are directional: `exists`
+    asks whether a transcript ends here IN THE LINEAGE THE CALL CLAIMS, and
+    `exclusive` additionally that it is absent from the other. dpi is the
+    terminus's part_dpi and its sign picks the lineage. With dpi None there is
+    no claim to match -- an uncalled background part -- and the union of the two
+    halves is used, which for exists is the old a + b > 0."""
+    pre = "exists" if d == "exists" else "excl"
+    if dpi is None:
+        return (near(ds[(pre + "_trt", e)], c, st, pos) or
+                near(ds[(pre + "_ref", e)], c, st, pos))
+    if dpi == 0: return False
+    return near(ds[(pre + ("_trt" if dpi > 0 else "_ref"), e)], c, st, pos)
 
 def near(d, c, st, pos):
     v = d.get((c, st))
@@ -166,7 +191,22 @@ have = {k for k, d in pair.items()
 print("  judgeable termini (both anchor rows resolved): %d of %d" %
       (len(have), len(pair)))
 def rbin(r): return str(r) if r < 5 else ("5-9" if r < 10 else "10+")
-RB = ["0","1","2","3","4","5-9","10+"]
+
+## THE EXPECTATION IS MATCHED ON RANK AND ON DISTANCE. rbin alone is not
+## enough: inside an exact rank, parts >=1kb from the gene boundary carry the
+## long-read end at 0.11 the odds of parts <1kb (5' `exists`), because DEXSeq
+## flattening splits a first exon into several parts that all sit within 99 bp
+## of the boundary and rank spreads them over ranks 0-3. So a background part
+## is comparable only when it matches BOTH. d_near is measured to the boundary
+## the terminus faces; the opposite boundary controls position only indirectly
+## and is not used.
+DB = [0, 100, 300, 1000, 3000, 10000, 30000, 100000]
+def dbin(x): return bisect.bisect_right(DB, x) - 1
+span_of = {g: (min(a for a, b in d.values()), max(b for a, b in d.values()))
+           for g, d in plen.items()}
+def dnear(g, pos, low):
+    lo, hi = span_of[g]
+    return max((pos - lo) if low else (hi - pos), 0)
 verd = collections.defaultdict(list)
 for r in csv.DictReader(open(f"{PAN}/outward_walk_verdict.tsv"), delimiter="\t"):
     # `gene_edge` stays TRUE geometrically even once a flank exists, so it must
@@ -200,6 +240,10 @@ for trt, ref in PAIRS:
         pos = co[0] if low else co[1]
         rk = (int(anc)-1) if low else (npart[g]-int(anc))
         pc = r["part_called"] == "TRUE"; tc = r["flank_called"] == "TRUE"
+        ## the call's claimed lineage. NA for an uncalled terminus, which has no
+        ## claim, so its references fall back to the non-directional union.
+        try: dpi = float(r["part_dpi"])
+        except (KeyError, ValueError): dpi = None
         # THREE-WAY, not binary. C2+ is `part_called AND NOT flank_called`, so it
         # conditions on the NEIGHBOURHOOD being differentially quiet -- while the
         # Q2 reference asks whether a differentially-used boundary is nearby,
@@ -211,7 +255,8 @@ for trt, ref in PAIRS:
         grp = "walk_stops" if (pc and not tc) else ("walk_continues" if (pc and tc) else "no_claim")
         e = "5" if kind == "5prime" else "3"
         cell = (kind, grp)
-        cells[cell] += 1; rank_n[(cell, rbin(max(rk,0)))] += 1
+        cells[cell] += 1
+        rank_n[(cell, (rbin(max(rk,0)), dbin(dnear(g, pos, low))))] += 1
         n_rk[(kind, grp, max(rk,0))] += 1
         ## LABELS. walk_stops is split by WHICH branch of u_dead fired,
         ## because `not flank_called` has two very different causes: the flank
@@ -226,7 +271,7 @@ for trt, ref in PAIRS:
                         else "walkS:depth")
         for L in labs: lab_n[(kind, L, rkx)] += 1
         for d in DEFS:
-            if near(ds[(d,e)], chrom_of[g], strand, pos):
+            if hit(ds, d, e, chrom_of[g], strand, pos, dpi):
                 hits[(cell, d)] += 1; h_rk[(kind, grp, d, rkx)] += 1
                 for L in labs: lab_h[(kind, L, d, rkx)] += 1
     for g in {r["gene"] for r in verd.get(f"{trt}_vs_{ref}", [])} & set(plen):
@@ -236,30 +281,34 @@ for trt, ref in PAIRS:
             for idx, pn in enumerate(P):
                 s0, e0 = plen[g][pn]
                 pos = s0 if low else e0
-                b = rbin(idx if low else N-1-idx)
+                b = (rbin(idx if low else N-1-idx), dbin(dnear(g, pos, low)))
                 bg_n[(kind, b)] += 1
                 for d in DEFS:
-                    if near(ds[(d,e)], chrom_of[g], strand, pos): bg_h[(kind, d, b)] += 1
+                    ## dpi None: a background part carries no claim to match
+                    if hit(ds, d, e, chrom_of[g], strand, pos, None):
+                        bg_h[(kind, d, b)] += 1
 
-## Enrichment of each group against the rank-matched BACKGROUND -- a random
-## exonic part at the same rank, NOT another group. These are read one at a
+## Enrichment of each group against the MATCHED BACKGROUND -- a random exonic
+## part at the same rank AND the same distance from the gene boundary it
+## faces, NOT another group. These are read one at a
 ## time and must NOT be divided by one another: the group-vs-group question is
 ## the Mantel-Haenszel test below. obs and exp are pooled as COUNTS and
 ## divided once, never by averaging two obs/exp values.
 def pooled(kind, grp):
     n = cells[(kind, grp)]
     res = {}
+    cs = [c for (gk, c) in rank_n if gk == (kind, grp)]
     for d in DEFS:
         obs = hits[((kind, grp), d)]
-        exp = sum(rank_n[((kind, grp), bb)] *
-                  (bg_h[(kind, d, bb)] / bg_n[(kind, bb)] if bg_n[(kind, bb)] else 0)
-                  for bb in RB)
+        exp = sum(rank_n[((kind, grp), c)] *
+                  (bg_h[(kind, d, c)] / bg_n[(kind, c)] if bg_n[(kind, c)] else 0)
+                  for c in cs)
         res[d] = (obs, exp, (obs / exp) if exp else float('nan'))
     return n, res
 
-print("\n### each walk group against the rank-matched within-gene background")
-print("  %-8s %-14s %9s | %-22s | %-22s | %-22s" %
-      ("end", "grp", "n", "exists (Q1)", "share (Q2)", "exclusive (Q2)"))
+print("\n### each walk group against the rank- and distance-matched background")
+print("  %-8s %-14s %9s | %-22s | %-22s" %
+      ("end", "grp", "n", "exists (Q1)", "exclusive (Q2)"))
 POOL = {}
 for kind in ("5prime", "3prime"):
     for grp in ("walk_stops", "walk_continues", "no_claim"):
@@ -270,7 +319,9 @@ for kind in ("5prime", "3prime"):
         for d in DEFS:
             obs, exp, oe = res[d]
             out += ["%5.1f%%" % (100*obs/n), "%5.1f%%" % (100*exp/n), "%6.2f" % oe]
-        print("  %-8s %-14s %9d | %s %s %s | %s %s %s | %s %s %s" % (kind, grp, n, *out))
+        ## the row follows DEFS; it assumed three references until `share` went
+        print(("  %-8s %-14s %9d" + " | %s %s %s" * len(DEFS))
+              % (kind, grp, n, *out))
 
 ## THE WALK'S OWN DISCRIMINATION, as a Mantel-Haenszel odds ratio stratified by
 ## EXACT rank.

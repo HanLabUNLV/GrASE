@@ -68,7 +68,15 @@ o <- parse_args(OptionParser(option_list = list(
   make_option("--graphml_dir",     type = "character"),
   make_option("--intron_manifest", type = "character"),
   make_option("--out",             type = "character"),
-  make_option("--mc_cores",        type = "integer", default = 8L))))
+  make_option("--mc_cores",        type = "integer", default = 8L),
+  make_option("--all_sides",       action = "store_true", default = FALSE,
+              help = "enumerate EVERY tested terminal side, not only the called
+                      ones. For building a matched control set: an uncalled
+                      side's termini are the same geometry, and the long-read
+                      check is positional, so no counting is needed. Writes a
+                      `called` column so the two can be told apart. Do not use
+                      this for the production units table -- build_outward_counts.R
+                      would then count every side in the annotation."))))
 for (r in c("results","split_dir","graphml_dir","intron_manifest","out"))
   if (is.null(o[[r]])) stop("--", r, " is required")
 pid <- function(x) sprintf("%03d", as.integer(x))
@@ -76,9 +84,22 @@ pid <- function(x) sprintf("%03d", as.integer(x))
 res <- fread(o$results, sep = "\t", showProgress = FALSE,
              colClasses = list(character = c("gene","event")))
 res[, side := fifelse(comparison == "diff1_vs_ref", 1L, 2L)]
-called <- unique(res[significant == TRUE, .(gene, event, side, ref_ex_part)])
+## ref_ex_part is per (gene, event, side) and does not depend on the call, so
+## taking it for every tested side is the same lookup over a bigger set.
+sig <- unique(res[significant == TRUE, .(gene, event, side)])
+sig[, called := TRUE]
+if (o$all_sides) {
+  called <- unique(res[, .(gene, event, side, ref_ex_part)])
+  called <- merge(called, sig, by = c("gene", "event", "side"), all.x = TRUE)
+  called[is.na(called), called := FALSE]
+} else {
+  called <- unique(res[significant == TRUE, .(gene, event, side, ref_ex_part)])
+  called[, called := TRUE]
+}
 setkey(called, gene, event, side)
-cat(sprintf("called sides: %d over %d genes\n", nrow(called), uniqueN(called$gene)))
+cat(sprintf("%s sides: %d over %d genes (called %d)\n",
+            if (o$all_sides) "all tested" else "called",
+            nrow(called), uniqueN(called$gene), sum(called$called)))
 
 ## GEOMETRY COMES FROM THE GRAPH, not from a GFF-derived table. This script
 ## already reads each gene's graphml to resolve a route's terminal vertex to a
@@ -177,7 +198,7 @@ one_gene <- function(g) {
                  anchor = anchors$anchor, anchor_kind = anchors$anchor_kind,
                  unit_type = flanks$unit_type, unit_id = flanks$unit_id,
                  gene_edge = gene_edge_flag(anchors$anchor, dec, geo),
-                 ref_ex_part = cs$ref_ex_part[1])
+                 ref_ex_part = cs$ref_ex_part[1], called = cs$called[1])
       ## the terminus parts themselves
       tn <- anchors[anchor_kind == "terminus"]
       out2 <- if (nrow(tn))
@@ -185,7 +206,7 @@ one_gene <- function(g) {
                    anchor = tn$anchor, anchor_kind = "terminus_self",
                    unit_type = "exon", unit_id = tn$anchor,
                    gene_edge = gene_edge_flag(tn$anchor, dec, geo),
-                   ref_ex_part = cs$ref_ex_part[1]) else NULL
+                   ref_ex_part = cs$ref_ex_part[1], called = cs$called[1]) else NULL
       rbind(out1, out2)
     }))
   }))
