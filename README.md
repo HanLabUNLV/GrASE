@@ -74,7 +74,7 @@ GFFs are deposited at
 | File | Contents |
 |------|----------|
 | `graphml.v28.tgz`, `graphml.v34.tgz` | per-gene splicing graphs |
-| `bipartitions_gencode_v{28,34}_{internal,external}.tsv.gz` | the enumerated bipartitions |
+| `bipartitions_gencode_v{28,34}_{internal,terminal}.tsv.gz` | the enumerated bipartitions |
 | `dexseq.gff` | flattened exonic-part annotation, per version |
 | `gtf` | per-gene GTFs, per version |
 
@@ -203,7 +203,7 @@ Rscript Rpkg/scripts/bubble_path_split.R \
 ### Stage 2. Separate internal AS events from alternative TSS/TTS
 
 ```bash
-Rscript Rpkg/scripts/filterexternal.R \
+Rscript Rpkg/scripts/filterTerminal.R \
     --split_dir=${WD}/bipartition \
     --outdir=${WD}/bipartition.filtered \
     --split_type=bipartition
@@ -221,7 +221,7 @@ Rscript Rpkg/scripts/exoncnt.R \
     -o ${WD}/bipartition.ex.internal.counts
 ```
 
-This also writes the combined master file `bipartition.ex.internal.cnt.combined.txt` into the output directory, which Stage 4 reads. For TSS/TTS events use `-a TSS` (output `bipartition.ex.external.cnt.combined.txt`). For more than two groups, pass `--conditions=A,B,C` instead of `--cond1/--cond2`.
+This also writes the combined master file `bipartition.ex.internal.cnt.combined.txt` into the output directory, which Stage 4 reads. For TSS/TTS events use `-a TSS` (output `bipartition.ex.terminal.cnt.combined.txt`). For more than two groups, pass `--conditions=A,B,C` instead of `--cond1/--cond2`.
 
 ### Stage 3b. Substitute junction counts where a distinct set is empty (optional)
 
@@ -247,7 +247,7 @@ Rscript Rpkg/scripts/merge_exon_sj_counts.R \
 ```
 
 `--sjdir` holds STAR `SJ.out.tab` files. Run the counting once per event type;
-`--type internal` and `--type external` write per-gene files with the same name, so
+`--type internal` and `--type terminal` write per-gene files with the same name, so
 they need separate `--output` directories. If you use this, point Stage 4 at the
 merged directory instead of the exonic one.
 
@@ -308,7 +308,7 @@ the path proportion across conditions.
 
 ```bash
 Rscript Rpkg/scripts/plot_test_results.R \
-    --gene ENSG00000204472 --event 11 --kind external \
+    --gene ENSG00000204472 --event 11 --kind terminal \
     --analysis ${WD}/bipartition.internal.test \
     --gffdir ${WD}/dexseq.gff --bipdir ${WD}/bipartition.filtered \
     --graphmldir ${WD}/graphml \
