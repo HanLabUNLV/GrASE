@@ -27,16 +27,16 @@
 ## of inward units. The inward arm is separate and needs that guard.
 ##
 ## THE TERMINUS PART ITSELF IS ALSO A TEST UNIT (anchor_kind = "terminus_self").
-## Testing only the tile OUTWARD of each start answers "does the effect continue
+## Testing only the flank OUTWARD of each start answers "does the effect continue
 ## past it" but never "is this start used at all". With both, the walk along a
 ## side alternates
 ##     U_n  t_n  U_n-1  t_n-1  ...  U_1  t_1  [D]
 ## from outermost inward, and the real start is the outermost t_i that is called
 ## with everything outward of it uncalled -- a localization rather than a
-## bounded/unbounded flag. It also rescues sides whose outermost tile is below
+## bounded/unbounded flag. It also rescues sides whose outermost flank is below
 ## the read floor: if t_n itself is powered and uncalled, that start is unused
 ## regardless of what lies beyond it. 72.4% of terminus parts are not reachable
-## as any anchor's outward tile, so this is not redundant; all are exonic, so
+## as any anchor's outward flank, so this is not redundant; all are exonic, so
 ## their counts come from the existing per-part DEXSeq files with no new
 ## counting pass.
 ##
@@ -47,7 +47,7 @@
 ## stays the side's own ref_ex_part in every case.
 ##
 ## ROWS ARE KEYED BY UNIT, NOT BY TERMINUS. A side's termini are often
-## consecutive parts (PDCD4 event 11 side 1: 001, 002, 003, 004), so the tiles
+## consecutive parts (PDCD4 event 11 side 1: 001, 002, 003, 004), so the flanks
 ## outward of them collapse onto one another and onto the termini themselves.
 ## Emitting per terminus would test the same unit repeatedly under different
 ## labels. The test unit is (gene, unit, ref_ex_part) -- reference counts are
@@ -172,10 +172,10 @@ one_gene <- function(g) {
         }
       }
       if (!nrow(anchors)) return(NULL)
-      tiles <- outward_unit(anchors$anchor, dec, geo, ib)
+      flanks <- outward_unit(anchors$anchor, dec, geo, ib)
       out1 <- data.table(gene = g, event = d$event[i], side = sd, kind = kind, strand = st,
                  anchor = anchors$anchor, anchor_kind = anchors$anchor_kind,
-                 unit_type = tiles$unit_type, unit_id = tiles$unit_id,
+                 unit_type = flanks$unit_type, unit_id = flanks$unit_id,
                  gene_edge = gene_edge_flag(anchors$anchor, dec, geo),
                  ref_ex_part = cs$ref_ex_part[1])
       ## the terminus parts themselves
@@ -197,8 +197,8 @@ L <- parallel::mclapply(genes, one_gene, mc.cores = o$mc_cores)
 u <- rbindlist(L[!vapply(L, is.null, TRUE)], fill = TRUE)
 cat(sprintf("anchor rows: %d\n", nrow(u)))
 n_edge <- sum(is.na(u$unit_id)); u <- u[!is.na(unit_id)]
-cat(sprintf("  at a gene edge, no outward tile: %d\n", n_edge))
-cat(sprintf("  anchors: %d terminus tiles, %d terminus parts, %d D-edge\n",
+cat(sprintf("  at a gene edge, no outward flank: %d\n", n_edge))
+cat(sprintf("  anchors: %d terminus flanks, %d terminus parts, %d D-edge\n",
             sum(u$anchor_kind == "terminus"), sum(u$anchor_kind == "terminus_self"),
             sum(u$anchor_kind == "d_edge")))
 cat(sprintf("  distinct (gene, unit, ref) test units: %d  from %d anchor rows (collapse %.1f%%)\n",

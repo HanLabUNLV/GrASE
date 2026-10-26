@@ -5,14 +5,14 @@
 ## B  CURRENT scorer, old run, no flanks   intronparts/outward_walk_verdict.tsv
 ## C  CURRENT scorer, new run, WITH flanks intronparts/ig/outward_walk_verdict.tsv
 ##
-## B - A isolates the scorer change (the u_dead reorder: a measured-thin tile is
+## B - A isolates the scorer change (the u_dead reorder: a measured-thin flank is
 ## a positive). C - B isolates the flanks plus the re-run's effect on padj.
 ## Reporting C - A alone would credit the flanks with all three.
 ##
 ## Usage: Rscript ig_decompose.R
 suppressPackageStartupMessages(library(data.table))
 setwd(Sys.getenv("DICE", "/mnt/data1/home/mirahan/DICE"))
-K <- c("gene","event","side","contrast","trank")
+K <- c("gene","event","side","contrast","rank")
 rd <- function(f) fread(f, sep="\t", showProgress=FALSE,
                         colClasses=list(character=c("gene","event")))
 
@@ -63,7 +63,7 @@ cat(sprintf("\n  %d gene-edge termini; still positive %d (%.1f%%); now NEGATIVE 
             100*sum(ge$term_positive_y, na.rm=TRUE)/nrow(ge),
             sum(ge$term_verdict_y == "signal continues outward"),
             100*sum(ge$term_verdict_y == "signal continues outward")/nrow(ge),
-            sum(ge$term_verdict_y == "outward tile unmeasurable")))
+            sum(ge$term_verdict_y == "outward flank unmeasurable")))
 
 cat("=== side level, A / B / C\n")
 sd <- function(f) fread(f, sep="\t", showProgress=FALSE,
@@ -103,7 +103,7 @@ cat(sprintf("  gene-edge termini %d; still positive %d (%.1f%%); now NEGATIVE %d
             100*sum(geL$term_positive_y, na.rm=TRUE)/nrow(geL),
             sum(geL$term_verdict_y == "signal continues outward", na.rm=TRUE),
             100*sum(geL$term_verdict_y == "signal continues outward", na.rm=TRUE)/nrow(geL),
-            sum(geL$term_verdict_y == "outward tile unmeasurable", na.rm=TRUE)))
+            sum(geL$term_verdict_y == "outward flank unmeasurable", na.rm=TRUE)))
 print(geL[, .(termini=.N), by=.(term_verdict_y)][order(-termini)])
 SL0 <- sd("intronparts/lineage/outward_walk_verdict.sides.tsv")
 SL1 <- sd("intronparts/lineage/ig/outward_walk_verdict.sides.tsv")
@@ -115,9 +115,9 @@ for (cn in sort(unique(SL1$contrast))) {
     100*sum(a$positive)/sum(a$n_judgeable>0), 100*sum(b$positive)/sum(b$n_judgeable>0),
     100*sum(a$positive)/nrow(a), 100*sum(b$positive)/nrow(b)))
 }
-cat("\n=== unmeasurable tiles, both panels\n")
+cat("\n=== unmeasurable flanks, both panels\n")
 for (nm in c("activation","lineage")) {
   d <- if (nm=="activation") C else L1
-  cat(sprintf("  %-11s term_verdict == 'outward tile unmeasurable': %d of %d\n",
-              nm, sum(d$term_verdict=="outward tile unmeasurable"), nrow(d)))
+  cat(sprintf("  %-11s term_verdict == 'outward flank unmeasurable': %d of %d\n",
+              nm, sum(d$term_verdict=="outward flank unmeasurable"), nrow(d)))
 }

@@ -7,7 +7,7 @@ with open(f"{D}/intronparts_ig/intronparts_manifest.tsv") as fh:
     for line in fh:
         f = line.rstrip("\n").split("\t")
         b = f[ix["bin_id"]]
-        if "IG_below" not in b and "IG_above" not in b:
+        if "IG_before" not in b and "IG_after" not in b:
             continue
         bins.append((f[ix["chrom"]], int(f[ix["start"]]), int(f[ix["end"]]),
                      f[ix["gene"]], b))

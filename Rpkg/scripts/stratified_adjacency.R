@@ -21,7 +21,7 @@
 ## crude and stratified ratios are close, which is itself the finding: the
 ## locality is not an artefact of pooling genes.
 ##
-## THE TILING. A gene's exonic parts and intronic bins tile it without gaps or
+## THE TILING. A gene's exonic parts and intronic bins flank it without gaps or
 ## overlaps, so adjacency is well defined. Part numbers are coordinate-ordered,
 ## so index 2P for exonic part P places the bins between them: a whole-intron
 ## bin at 2*lo+1, and for a long intron split in two, its low-end bin at

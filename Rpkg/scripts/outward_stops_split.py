@@ -3,9 +3,9 @@
 
 TWO things, and the second one supersedes a test that was wrong.
 
-(1) Split `walk_stops` by whether its verdict rests on a MEASURED outward tile
-    or an UNPOWERED one. `walk_stops` is `part_called AND NOT tile_called`, and
-    "not called" has two very different causes: the tile was quantified and the
+(1) Split `walk_stops` by whether its verdict rests on a MEASURED outward flank
+    or an UNPOWERED one. `walk_stops` is `part_called AND NOT flank_called`, and
+    "not called" has two very different causes: the flank was quantified and the
     test said no (a measurement), or it never cleared the read floor / was never
     tested (an absence of measurement scored as a boundary). At 3' the second
     kind dominates, so the pooled figure may be reporting the unpowered half.
@@ -13,39 +13,29 @@ TWO things, and the second one supersedes a test that was wrong.
 (2) Compare `walk_stops` against `walk_continues` with a MANTEL-HAENSZEL odds
     ratio stratified by EXACT rank, which is the correct estimator for that
     comparison. It replaces the ratio-of-two-obs/exp-values this script used
-    before 2026-10-22, which is not a valid test:
-
-      obs/exp is a ratio of RATES against a common rank-matched background, so
-      its headroom depends on the baseline. At 3' rank 0 the background is
-      ~76%, capping any o/e at 1.32x; at rank 20 it is ~6% and o/e can reach
-      17x. The two groups do NOT share a rank distribution -- 31% of 3'
-      walk_stops sits at ranks 0-1 against 8% of walk_continues -- so dividing
-      their o/e values hands the comparison to whichever group holds the
-      headroom. At 3' that is walk_continues, and the division alone inverted
-      the result: the published 0.84x becomes 1.61x once the groups are
-      compared WITHIN rank on the odds scale, which has no ceiling. The
-      5' conclusion is unaffected in direction (1.20x -> 2.30x).
-
-    obs/exp against the background is still printed, because "is this group
-    enriched at all" is a fair question and the background is the right
-    comparison for it. What must not be done is divide two of those numbers.
-    Breslow-Day is reported with the MH OR, since MH assumes a common odds
-    ratio across strata.
+    before 2026-10-22; why that is invalid is in outward_walk_longread.py's
+    header and is not restated here. obs/exp against the background is still
+    printed for the two strata, because "is this group enriched at all" is a
+    fair question; what must not be done is divide two of those numbers.
 
 Strata of `walk_stops` come from the scorer's own `term_verdict`, verified to
 partition it exactly:
-    MEASURED    drop: outward tested, uncalled   tile tested, not called
-                drop: outward empty              tile measured at exactly zero
-    UNPOWERED   drop: outward near-empty         tile below the read floor
-                drop: outward untestable         tile never tested
-    (excluded)  outward tile unmeasurable        flank ambiguity, positive FALSE
+    MEASURED    drop: outward tested, uncalled   flank tested, not called
+                drop: outward empty              flank measured at exactly zero
+    UNPOWERED   drop: outward near-empty         flank below the read floor
+                drop: outward untestable         flank never tested
+    (excluded)  outward flank unmeasurable        flank ambiguity, positive FALSE
 
 References, the matching window and the background are reused from
 outward_walk_longread.py by executing it with its stdout discarded, so there is
-one definition of the reference, not two. Standardisation here is on EXACT rank
-rather than that script's bins; the two agree to ~0.01 (see
-outward_rank_sensitivity.py), so nothing about the published o/e table hinges
-on the binning -- only on the division.
+one definition of the reference, not two. Standardisation here is on EXACT
+rank rather than that script's bins.
+
+NON-REDUNDANCY RULE. Only the two walk_stops strata are printed in the o/e and
+MH tables: outward_walk_longread.py already prints walk_stops, walk_continues
+and no_claim panel-wide, and repeating them here produced two copies of the
+same figures. The whole-group rows are still ACCUMULATED, because the
+headroom block needs their rank distribution.
 
 Usage: IG=1 python3 -I outward_stops_split.py [ratio] [window] [dshare] [minpres] [mingene] [mode]
 """
@@ -59,14 +49,14 @@ sys.stderr.write("reusing %s (its stdout discarded)\n" % MAIN)
 with contextlib.redirect_stdout(io.StringIO()):
     exec(compile(open(MAIN).read(), MAIN, "exec"), G)
 for nm in ("build", "near", "verd", "meta", "plen", "npart", "have",
-           "chrom_of", "pair", "rank_anchor", "strand_of", "DEFS", "PAIRS", "IG",
+           "chrom_of", "pair", "strand_of", "DEFS", "PAIRS", "IG",
            "mh_or"):
     globals()[nm] = G[nm]
 
 MEASURED  = ("drop: outward tested, uncalled", "drop: outward empty")
 UNPOWERED = ("drop: outward near-empty", "drop: outward untestable")
 def stratum(r):
-    pc = r["part_called"] == "TRUE"; tc = r["tile_called"] == "TRUE"
+    pc = r["part_called"] == "TRUE"; tc = r["flank_called"] == "TRUE"
     if not pc:  return "no_claim"
     if tc:      return "walk_continues"
     tv = r["term_verdict"]
@@ -74,7 +64,10 @@ def stratum(r):
     if tv in UNPOWERED: return "stops_unpowered"
     return None
 GRPS  = ["stops_measured", "stops_unpowered", "walk_stops", "walk_continues", "no_claim"]
-STOPS = ["stops_measured", "stops_unpowered", "walk_stops"]
+## PRINTED strata. GRPS is what gets accumulated; these two lists are what
+## gets printed, and they exclude whatever outward_walk_longread.py prints.
+OE_GRPS = ["stops_measured", "stops_unpowered"]
+STOPS = ["stops_measured", "stops_unpowered"]
 ENDS  = ("5prime", "3prime")
 
 ## BACKGROUND at EXACT rank: every exonic part of every gene in the analysis.
@@ -116,13 +109,12 @@ for trt, ref in PAIRS:
     ds = build(trt, ref)
     for r in verd.get("%s_vs_%s" % (trt, ref), []):
         key = (r["gene"], r["event"], r["side"])
-        anc = rank_anchor.get((key, int(r["trank"])))
-        if anc is None: continue
+        anc = "%03d" % int(r["anchor"])
         k = (r["gene"], r["event"], r["side"], anc)
         if k not in have or k not in meta: continue
         g = r["gene"]
         if g not in plen: continue
-        co = plen[g].get(anc)   # rank_anchor is canonical %03d
+        co = plen[g].get(anc)   # canonical %03d
         if not co: continue
         grp = stratum(r)
         if grp is None: continue
@@ -153,15 +145,16 @@ def oe(kind, gr, d):
 ## walk_stops with walk_continues panel-wide. Here it is applied to the two
 ## halves of walk_stops separately, which is the point of this script.
 
-print("\n### walk_stops split by whether the outward tile was MEASURED   IG=%s" % IG)
+print("\n### walk_stops split by whether the outward flank was MEASURED   IG=%s" % IG)
 print("### enrichment against the rank-matched BACKGROUND (a random exonic part at")
 print("### the same rank). DO NOT divide two of these -- see the MH block below.")
+print("### walk_stops / walk_continues / no_claim are in outward_walk_longread.py.")
 print("  %-8s %-16s %8s | %-22s | %-22s | %-22s" %
       ("end", "stratum", "n", "exists (Q1)", "share (Q2)", "exclusive (Q2)"))
 print("  %-8s %-16s %8s | %6s %6s %7s | %6s %6s %7s | %6s %6s %7s" %
       ("", "", "", "obs", "exp", "o/e", "obs", "exp", "o/e", "obs", "exp", "o/e"))
 for kind in ENDS:
-    for gr in GRPS:
+    for gr in OE_GRPS:
         n = n_g[(kind, gr)]
         if not n: continue
         out = []
@@ -204,9 +197,9 @@ for kind in ENDS:
         print("  %-8s %-16s %8d  ranks 0-1: %5.1f%%" % (kind, gr, n, 100*lo/n))
 
 ## The per-stratum DENSITY table (median unit_mean / unit_length for terminus
-## and tile) was removed with the depth criterion on 2026-10-23. What it showed
+## and flank) was removed with the depth criterion on 2026-10-23. What it showed
 ## still holds and is the reason the two strata must stay split: walk_continues
-## needs a tile ABOVE the read floor and unpowered stops needs one BELOW it, so
+## needs a flank ABOVE the read floor and unpowered stops needs one BELOW it, so
 ## the strata are selected in opposite directions on coverage. That is a
 ## statement about selection, not a criterion, and the stratum sizes below carry
 ## it without computing a density.

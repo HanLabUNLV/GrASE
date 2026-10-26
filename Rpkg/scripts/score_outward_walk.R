@@ -10,7 +10,7 @@
 ##
 ## UNITS. For a called partition, its terminus parts t_1 .. t_n are the ex_part edges
 ## sourced at the first vertex after R (sunk at the last vertex before L for a
-## TTS), ordered OUTERMOST FIRST. For each t_i, U_i is the tile immediately
+## TTS), ordered OUTERMOST FIRST. For each t_i, U_i is the flank immediately
 ## outward of it: the abutting exonic part when the tiling is contiguous there,
 ## otherwise the intronic part between them. U_i does not exist when t_i is the
 ## gene's outermost part, or when the gene has no intronic bins at all --
@@ -30,7 +30,7 @@
 ##   signal outward      U_k clears the floor and is called: no drop
 ##   drop: measured      U_k clears the floor and is uncalled -- drop OBSERVED
 ##   drop: gene edge     U_k does not exist, t_k is the gene's edge
-##   drop: tile below floor
+##   drop: flank below floor
 ##                       U_k exists but is under the floor; the drop is
 ##                       ASSERTED, not measured
 ##
@@ -39,9 +39,9 @@
 ## figure move when a threshold changed. Report them separately, never summed
 ## into a single "localized" fraction.
 ##
-## ONLY U_k CAN CONTRADICT. The boundary claim is about t_k, so a called tile
+## ONLY U_k CAN CONTRADICT. The boundary claim is about t_k, so a called flank
 ## further out is a separate event -- another start, or an effect that skips the
-## intervening tile -- and does not negate a drop immediately beyond the start.
+## intervening flank -- and does not negate a drop immediately beyond the start.
 ## The alternative (any U_i with i <= k contradicts) was tried and moves 1.1% of
 ## sides; it is strictly more conservative and was dropped as superseded.
 ##
@@ -49,8 +49,8 @@
 ## WHAT MUST TRAVEL WITH THE NUMBERS.
 ##
 ## 1. The five positive kinds, as five rows. They differ in how much of the
-##    outward space was quantified -- from a tile tested above the floor to no
-##    tile at all -- and on the activation panel the untestable and gene-edge
+##    outward space was quantified -- from a flank tested above the floor to no
+##    flank at all -- and on the activation panel the untestable and gene-edge
 ##    kinds are together the majority of positives. Pooling them into one
 ##    figure is what made every earlier headline number move when a threshold
 ##    changed.
@@ -98,10 +98,10 @@ opt_list <- list(
               help = "outward combined count table, only needed to build --group_means"),
   make_option("--intronparts", type = "character", help = "intronparts_manifest.tsv"),
   make_option("--unmeasurable", type = "character", default = NULL,
-              help = "optional TSV (gene, bin_id) of outward tiles that CANNOT be
+              help = "optional TSV (gene, bin_id) of outward flanks that CANNOT be
                       measured, because a neighbouring gene's bin covers them
                       completely and dexseq_count discards every read touching
-                      two genes as _ambiguous. Such a tile reads exactly 0 no
+                      two genes as _ambiguous. Such a flank reads exactly 0 no
                       matter what is transcribed there, so without this list it
                       would score as `drop: outward empty` -- the strongest
                       positive -- purely from annotation geometry."),
@@ -161,9 +161,9 @@ d_grp <- data.frame(gene   = as.character(gm$gene),
                     m      = as.numeric(gm$gmean),
                     side   = "diff1", stringsAsFactors = FALSE)
 
-## ---- tiles that cannot be measured ----------------------------------------
+## ---- flanks that cannot be measured ----------------------------------------
 ## Keyed on (gene, unit_id) and applied as the FIRST branch of u_dead, ahead of
-## the gene-edge and zero-count branches, because such a tile is zero BY
+## the gene-edge and zero-count branches, because such a flank is zero BY
 ## CONSTRUCTION -- which is exactly what those branches read as a boundary.
 unmeas <- NULL
 if (!is.null(a$unmeasurable)) {
@@ -172,17 +172,20 @@ if (!is.null(a$unmeasurable)) {
   if (!all(c("gene", "bin_id") %in% names(unmeas)))
     stop("--unmeasurable needs columns gene and bin_id", call. = FALSE)
   unmeas <- unique(unmeas[, .(gene, bin_id)])
-  cat(sprintf("unmeasurable tiles: %d\n", nrow(unmeas)))
+  cat(sprintf("unmeasurable flanks: %d\n", nrow(unmeas)))
 }
 
 ## ---- units, ordered outermost first ---------------------------------------
 ## anchor/unit_id/ref_ex_part are ids, not numbers -- see the note in
 ## build_outward_counts.R. Ranking here goes through as.integer(anchor) so it
 ## never cared, but typing them keeps the padding intact for anything that
-## joins on a part number.
+## joins on a part number. NOT `side`: it is 1 or 2, not a padded part id, and
+## typing it character broke the merge below against cl, whose side is 1L/2L
+## from the comparison column -- "Incompatible join types". Only part numbers
+## belong in this list.
 st <- fread(a$side_table, sep = "\t", showProgress = FALSE,
             colClasses = list(character = c("gene", "event", "synth_event",
-                                            "side", "anchor", "unit_id",
+                                            "anchor", "unit_id",
                                             "ref_ex_part")))
 if (!"gene_edge" %in% names(st))
   stop("--side_table has no gene_edge column. It is emitted by\n",
@@ -194,15 +197,15 @@ u <- unique(st[anchor_kind %in% c("terminus", "terminus_self"),
                .(gene, event, side, kind, strand, anchor, anchor_kind, synth_event,
                  gene_edge, unit_id)])
 ## unit_id must be a FUNCTION of the rest, not a second dimension: if one anchor
-## row carried two units, adding it here would duplicate rows and renumber trank.
+## row carried two units, adding it here would duplicate rows and renumber rank.
 if (nrow(u) != nrow(unique(u[, .(gene, event, side, anchor, anchor_kind)])))
   stop("an anchor row maps to more than one unit_id; adding unit_id to the ",
-       "unit table would duplicate rows and corrupt trank", call. = FALSE)
+       "unit table would duplicate rows and corrupt rank", call. = FALSE)
 u[, anchor_n := as.integer(anchor)]
 ## out_dec: outward is the direction of DECREASING coordinate, so rank 1 is the
 ## lowest part number there and the highest otherwise.
 u[, out_dec := outward_decreasing(kind, strand)]
-u[, trank := frank(fifelse(out_dec, anchor_n, -anchor_n), ties.method = "dense"),
+u[, rank := frank(fifelse(out_dec, anchor_n, -anchor_n), ties.method = "dense"),
   by = .(gene, event, side)]
 u <- u[, .(contrast = names(CTR)), by = names(u)]
 
@@ -291,31 +294,31 @@ cat(sprintf("called sides (side x contrast): %d\n", nrow(cl)))
 u <- merge(u, unique(cl[, .(gene, event, side, contrast)]),
            by = c("gene", "event", "side", "contrast"))
 
-## ---- assemble t_i beside U_i on trank -------------------------------------
+## ---- assemble t_i beside U_i on rank -------------------------------------
 ts <- u[anchor_kind == "terminus_self"]
-w <- merge(ts[, .(gene, event, side, contrast, trank, gene_edge,
+w <- merge(ts[, .(gene, event, side, contrast, rank, anchor, gene_edge,
                   part_called = called, part_min_read_support = min_read_support,
                   part_tested = tested, part_zero = zero_count)],
            u[anchor_kind == "terminus",
-             .(gene, event, side, contrast, trank, tile_called = called,
-               tile_min_read_support = min_read_support, tile_present = TRUE,
-               tile_tested = tested, tile_zero = zero_count, tile_ds = d_support,
-               tile_unit = unit_id)],
-           by = c("gene", "event", "side", "contrast", "trank"), all = TRUE)
-setorder(w, contrast, gene, event, side, trank)
+             .(gene, event, side, contrast, rank, flank_called = called,
+               flank_min_read_support = min_read_support, flank_present = TRUE,
+               flank_tested = tested, flank_zero = zero_count, flank_ds = d_support,
+               flank_unit = unit_id)],
+           by = c("gene", "event", "side", "contrast", "rank"), all = TRUE)
+setorder(w, contrast, gene, event, side, rank)
 
-w[, tile_unmeasurable := FALSE]
+w[, flank_unmeasurable := FALSE]
 if (!is.null(unmeas)) {
-  w[unmeas, on = .(gene, tile_unit = bin_id), tile_unmeasurable := TRUE]
-  cat(sprintf("terminus rows whose outward tile is unmeasurable: %d of %d\n",
-              sum(w$tile_unmeasurable), nrow(w)))
+  w[unmeas, on = .(gene, flank_unit = bin_id), flank_unmeasurable := TRUE]
+  cat(sprintf("terminus rows whose outward flank is unmeasurable: %d of %d\n",
+              sum(w$flank_unmeasurable), nrow(w)))
 }
 
 ## ---- the verdict, PER TERMINUS --------------------------------------------
 ## There is no single anchor. Every terminus is its own test:
 ##
 ##   t_ok   <- part_min_read_support & part_called      signal at this terminus
-##   u_dead <- !tile_min_read_support | !tile_called    none immediately outward
+##   u_dead <- !flank_min_read_support | !flank_called    none immediately outward
 ##   positive for the side <- any(t_ok & u_dead)
 ##
 ## An earlier version took k <- which(part_min_read_support & part_called)[1]
@@ -323,7 +326,7 @@ if (!is.null(unmeas)) {
 ## sides with up to nine termini, let a below-floor OUTER terminus silently
 ## shift the anchor inward on 34.3% of sides, and needed a separate rule
 ## ("only U_k can contradict") whose whole job was to excuse ignoring the other
-## tiles. With every terminus judged on its own there is nothing to excuse: two
+## flanks. With every terminus judged on its own there is nothing to excuse: two
 ## starts of one side can both be real, and a drop at either is a drop.
 ##
 ## Whether the terminus overlaps D does not enter. The test at a terminus is
@@ -334,8 +337,8 @@ if (!is.null(unmeas)) {
 ##
 ## THE THREE SOURCES OF NA MUST NOT COLLAPSE. `!NA | !NA` is NA, not TRUE, and
 ## each NA means something different:
-##   no tile row at all + gene_edge   nothing outward exists  -> POSITIVE
-##   tile row, never tested           the join lost it        -> NOT judgeable
+##   no flank row at all + gene_edge   nothing outward exists  -> POSITIVE
+##   flank row, never tested           the join lost it        -> NOT judgeable
 ##   terminus itself not tested       same                    -> NOT judgeable
 ## Letting the second become TRUE is the failure this script already warns
 ## about further down: a lost join reading as a real absence.
@@ -347,40 +350,40 @@ if (!is.null(unmeas)) {
 w[, t_ok := isTRUE_v(part_min_read_support) & isTRUE_v(part_called) &
             !isTRUE_v(part_zero)]
 w[, u_dead := fcase(
-    ## CANNOT BE MEASURED. A tile completely covered by a neighbouring gene's bin
+    ## CANNOT BE MEASURED. A flank completely covered by a neighbouring gene's bin
     ## reads 0 whatever is transcribed there, because every read touching it
     ## touches two genes and is discarded as _ambiguous. That is not the same
-    ## observation as a measured-and-empty tile, and it must not borrow its
+    ## observation as a measured-and-empty flank, and it must not borrow its
     ## verdict: this branch precedes both the gene-edge and the zero branches,
     ## each of which would otherwise turn annotation geometry into a positive.
-    tile_unmeasurable,                                       NA,
+    flank_unmeasurable,                                       NA,
     ## nothing outward exists: the terminus is the gene's outermost part
-    !isTRUE_v(tile_present) & isTRUE_v(gene_edge),           TRUE,
+    !isTRUE_v(flank_present) & isTRUE_v(gene_edge),           TRUE,
     ## measured and EMPTY. exontest emits no row for a unit with no reads, so
     ## this arrives untested -- but a zero mean IS a measurement, and an empty
-    ## tile outward of a used start is the strongest boundary evidence there is.
-    isTRUE_v(tile_zero),                                     TRUE,
+    ## flank outward of a used start is the strongest boundary evidence there is.
+    isTRUE_v(flank_zero),                                     TRUE,
     ## MEASURED AND THIN. d_support comes from the group means for EVERY
     ## enumerated unit, so it is known whether or not exontest wrote a row. A
-    ## tile below the floor is dead on that measurement alone, and must not
+    ## flank below the floor is dead on that measurement alone, and must not
     ## depend on whether a row happens to exist: exontest drops a unit with few
-    ## reads, so requiring `tested` here sent thin tiles to NA while an EMPTY
-    ## tile two branches up counted as the strongest evidence. That was
+    ## reads, so requiring `tested` here sent thin flanks to NA while an EMPTY
+    ## flank two branches up counted as the strongest evidence. That was
     ## inconsistent -- 0.3 reads is nearly the same observation as 0 -- and it
     ## discarded exactly the intergenic flanks the gene-edge work exists to
     ## measure, ~70-75% of which land thin rather than empty. Changed
     ## 2026-10-21; this branch MUST precede the `tested` test.
-    !is.na(tile_ds) & !isTRUE_v(tile_min_read_support),      TRUE,
+    !is.na(flank_ds) & !isTRUE_v(flank_min_read_support),      TRUE,
     ## no support value AT ALL says nothing: a bad join, not a drop. With the
     ## branch above, this now means what its name says.
-    !isTRUE_v(tile_tested),                                  NA,
+    !isTRUE_v(flank_tested),                                  NA,
     ## above the floor: dead only if tested and uncalled
-    default = !isTRUE_v(tile_called))]
+    default = !isTRUE_v(flank_called))]
 
 ## The terminus-level label, kept beside the boolean so a reader can see WHICH
 ## kind of drop each positive is. All five are positives; the label records how
-## much was known about the tile, which is fixed by its d_support:
-##   gene edge                 no tile exists outward
+## much was known about the flank, which is fixed by its d_support:
+##   gene edge                 no flank exists outward
 ##   outward empty             d_support exactly 0
 ##   outward near-empty        0 < d_support < 1
 ##   outward untestable        1 <= d_support < floor; coverage, but untestable
@@ -390,14 +393,14 @@ w[, term_verdict := fcase(
     !t_ok & !isTRUE_v(part_tested),            "terminus not tested",
     !t_ok & !isTRUE_v(part_min_read_support),  "terminus below floor",
     !t_ok,                                     "terminus above floor, not called",
-    tile_unmeasurable,                         "outward tile unmeasurable",
-    is.na(u_dead),                             "outward tile not tested",
+    flank_unmeasurable,                         "outward flank unmeasurable",
+    is.na(u_dead),                             "outward flank not tested",
     !u_dead,                                   "signal continues outward",
-    !isTRUE_v(tile_present),                   "drop: gene edge",
-    isTRUE_v(tile_zero),                       "drop: outward empty",
-    !isTRUE_v(tile_min_read_support) & !is.na(tile_ds) & tile_ds < 1,
+    !isTRUE_v(flank_present),                   "drop: gene edge",
+    isTRUE_v(flank_zero),                       "drop: outward empty",
+    !isTRUE_v(flank_min_read_support) & !is.na(flank_ds) & flank_ds < 1,
                                                "drop: outward near-empty",
-    !isTRUE_v(tile_min_read_support),          "drop: outward untestable",
+    !isTRUE_v(flank_min_read_support),          "drop: outward untestable",
     default =                                  "drop: outward tested, uncalled")]
 w[, term_positive := t_ok & !is.na(u_dead) & u_dead]
 
@@ -413,8 +416,8 @@ v <- w[, .(n_term      = .N,
            ## untested by design -- exontest emits no row for it -- but it IS
            ## measured, so it is not lost.
            n_lost      = sum((!isTRUE_v(part_tested) & !isTRUE_v(part_zero)) |
-                             (isTRUE_v(tile_present) & !isTRUE_v(tile_tested) &
-                              !isTRUE_v(tile_zero))),
+                             (isTRUE_v(flank_present) & !isTRUE_v(flank_tested) &
+                              !isTRUE_v(flank_zero))),
            positive    = any(term_positive),
            ## the strongest kind of evidence the side has, since a side with
            ## several termini can carry several kinds at once. Ordered by how
@@ -427,7 +430,7 @@ v <- w[, .(n_term      = .N,
            n_continues       = sum(term_verdict == "signal continues outward"),
            ## counted separately so it is never read as a negative OR as a
            ## positive: the question could not be asked of these termini.
-           n_unmeasurable    = sum(term_verdict == "outward tile unmeasurable")),
+           n_unmeasurable    = sum(term_verdict == "outward flank unmeasurable")),
        by = .(contrast, gene, event, side)]
 
 ## ---- side-level verdict ---------------------------------------------------
@@ -551,8 +554,8 @@ for (cn in names(CTR)) {
 
 cat("\n=== termini lost to a failed join, by contrast (NOT drops)\n")
 print(w[, .(lost = sum((!isTRUE_v(part_tested) & !isTRUE_v(part_zero)) |
-                           (isTRUE_v(tile_present) & !isTRUE_v(tile_tested) &
-                            !isTRUE_v(tile_zero)))),
+                           (isTRUE_v(flank_present) & !isTRUE_v(flank_tested) &
+                            !isTRUE_v(flank_zero)))),
         by = contrast])
 
 cat("\n=== NOTE no pooled figure is reported on purpose: contrasts are",

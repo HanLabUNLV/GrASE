@@ -3,8 +3,8 @@
 
 UNIT is (terminus, contrast). The walk partitions called termini three ways:
 
-  walk_stops      part_called AND NOT tile_called
-  walk_continues  part_called AND tile_called
+  walk_stops      part_called AND NOT flank_called
+  walk_continues  part_called AND flank_called
   no_claim        NOT part_called
 
 and each is scored against three long-read references, all evaluated as "an
@@ -23,16 +23,16 @@ of two obs/exp values, which is invalid because obs/exp is a rate ratio whose
 headroom is 1/background and the groups do not share a rank distribution.
 
 THE DEPTH CRITERION (C1) WAS REMOVED 2026-10-23. It was
-  density(outward tile)/density(terminus) < RATIO
+  density(outward flank)/density(terminus) < RATIO
 a boundary-EXISTENCE claim, and it is no longer computed anywhere: it fired on
-only 37.0% of IsoQuant-confirmed 5' boundaries and 15.3% at 3' exonic tiles,
+only 37.0% of IsoQuant-confirmed 5' boundaries and 15.3% at 3' exonic flanks,
 it was a threshold rather than a test, and GrASE claims differential usage of
 an annotated terminus, not that the terminus is real. The retired analyses are
 under dead_scripts/ with the figures they produced. What remains here is the
 walk's own discrimination, which is a differential criterion throughout.
 
 Gene edge: with the intergenic flanks built (IG=1) a gene-edge terminus HAS an
-outward tile, so those termini are INCLUDED. Without them the tile is absent
+outward flank, so those termini are INCLUDED. Without them the flank is absent
 and the walk cannot judge the side.
 
 Usage: IG=1 python3 -I outward_walk_longread.py [window] [dshare] [minpres] [mingene]
@@ -130,22 +130,17 @@ def near(d, c, st, pos):
 
 rows = list(csv.DictReader(open(f"{PAN}/outward_side_table.tsv"), delimiter="\t"))
 pair = collections.defaultdict(dict); meta = {}; strand_of = {}
-order = collections.defaultdict(list)
 for r in rows:
     ak = r["anchor_kind"]
     if ak not in ("terminus","terminus_self"): continue
     ## ONE CANONICAL ANCHOR FORM, `%03d`, matching the GFF's exonic_part_number
-    ## and enumerate_outward_units.R's pid(). This used to work by accident:
-    ## build_outward_counts.R typed `anchor` as integer, so the side table
-    ## carried `46`, and rank_anchor's str(int(...)) produced `46` too. Once the
-    ## side table was repadded to `046` (2026-10-23) the two disagreed and every
-    ## terminus silently failed the `k in have` guard, cutting walk_stops from
-    ## ~7,000 to 34. Normalise on read so neither form can matter again.
+    ## and enumerate_outward_units.R's pid(). Normalise on read: `046` and `46`
+    ## have both been on disk, and a mismatch makes every terminus fail the
+    ## `k in have` guard silently rather than loudly.
     anc0 = "%03d" % int(r["anchor"])
     k = (r["gene"], r["event"], r["side"], anc0)
     pair[k][ak] = (r["unit_type"], r["unit_id"], float(r["unit_mean"]))
     meta[k] = (r["kind"], r["strand"]); strand_of.setdefault(r["gene"], r["strand"])
-    order[(r["gene"], r["event"], r["side"])].append((int(anc0), r["kind"], r["strand"]))
 plen = {}; npart = {}; chrom_of = {}
 for g in sorted(strand_of):
     gf = f"{D}/dexseq.gff/{g}.dexseq.gff"
@@ -158,7 +153,7 @@ for g in sorted(strand_of):
         chrom_of[g] = f[0]
     if d: plen[g] = d; npart[g] = len(d)
 ## THE UNIVERSE. A terminus is judgeable here when BOTH of its anchor rows
-## resolved -- the terminus part itself and the tile immediately outward --
+## resolved -- the terminus part itself and the flank immediately outward --
 ## because the walk's verdict needs both. This replaces the old `c1`
 ## membership test, which required those same two rows AND a positive
 ## terminus density, so the universe is now slightly larger: a terminus with
@@ -170,13 +165,6 @@ have = {k for k, d in pair.items()
         if "terminus" in d and "terminus_self" in d and k[0] in npart}
 print("  judgeable termini (both anchor rows resolved): %d of %d" %
       (len(have), len(pair)))
-rank_anchor = {}
-for key, lst in order.items():
-    lst = sorted(set(lst)); kind, strand = lst[0][1], lst[0][2]
-    dec = (kind == "5prime") == (strand == "+")
-    for i,(anc,_,_) in enumerate(sorted(lst, key=lambda t: t[0] if dec else -t[0]), 1):
-        rank_anchor[(key, i)] = "%03d" % anc
-
 def rbin(r): return str(r) if r < 5 else ("5-9" if r < 10 else "10+")
 RB = ["0","1","2","3","4","5-9","10+"]
 verd = collections.defaultdict(list)
@@ -198,8 +186,9 @@ for trt, ref in PAIRS:
     ds = build(trt, ref)
     for r in verd.get(f"{trt}_vs_{ref}", []):
         key = (r["gene"], r["event"], r["side"])
-        anc = rank_anchor.get((key, int(r["trank"])))
-        if anc is None: continue
+        ## score_outward_walk.R carries `anchor` itself, so the part number
+        ## needs no reconstruction from `rank`.
+        anc = "%03d" % int(r["anchor"])
         k = (r["gene"], r["event"], r["side"], anc)
         if k not in have or k not in meta: continue
         g = r["gene"]
@@ -210,14 +199,14 @@ for trt, ref in PAIRS:
         low = (kind == "5prime") == (strand == "+")
         pos = co[0] if low else co[1]
         rk = (int(anc)-1) if low else (npart[g]-int(anc))
-        pc = r["part_called"] == "TRUE"; tc = r["tile_called"] == "TRUE"
-        # THREE-WAY, not binary. C2+ is `part_called AND NOT tile_called`, so it
+        pc = r["part_called"] == "TRUE"; tc = r["flank_called"] == "TRUE"
+        # THREE-WAY, not binary. C2+ is `part_called AND NOT flank_called`, so it
         # conditions on the NEIGHBOURHOOD being differentially quiet -- while the
         # Q2 reference asks whether a differentially-used boundary is nearby,
         # which is likelier where differential activity is dense. Splitting C2-
         # into its two halves shows whether the inversion is that conditioning:
-        #   walk_stops      part_called & NOT tile_called   = C2+
-        #   walk_continues  part_called & tile_called       = signal continues outward
+        #   walk_stops      part_called & NOT flank_called   = C2+
+        #   walk_continues  part_called & flank_called       = signal continues outward
         #   no_claim        NOT part_called                 = terminus not differentially used
         grp = "walk_stops" if (pc and not tc) else ("walk_continues" if (pc and tc) else "no_claim")
         e = "5" if kind == "5prime" else "3"
@@ -225,7 +214,7 @@ for trt, ref in PAIRS:
         cells[cell] += 1; rank_n[(cell, rbin(max(rk,0)))] += 1
         n_rk[(kind, grp, max(rk,0))] += 1
         ## LABELS. walk_stops is split by WHICH branch of u_dead fired,
-        ## because `not tile_called` has two very different causes: the tile
+        ## because `not flank_called` has two very different causes: the flank
         ## was quantified and the test said no (differential), or it never
         ## cleared the floor (depth). Only `drop: outward tested, uncalled` is
         ## differential, so the shipped walk_stops is a mixture and has to be
@@ -359,8 +348,8 @@ print("  (n stops=%d, continues=%d at 5prime; %d and %d at 3prime)" % (
 ## ---------------------------------------------------------------------------
 ## ---------------------------------------------------------------------------
 ## WHICH BRANCH OF THE WALK CARRIES THE CONCORDANCE. walk_stops is a mixture
-## of a differential branch (the tile was tested and not called) and a depth
-## branch (the tile never cleared the floor). They are separate claims, so the
+## of a differential branch (the flank was tested and not called) and a depth
+## branch (the flank never cleared the floor). They are separate claims, so the
 ## shipped figure is reported beside both halves and never instead of them.
 ## All three rows use the same comparison group, walk_continues, and the same
 ## estimator, so they are directly comparable.

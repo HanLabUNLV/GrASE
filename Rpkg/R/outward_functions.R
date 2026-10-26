@@ -173,8 +173,8 @@ outward_unit <- function(part, decreasing, geom, intron_bins = NULL) {
   }
 
   ## THE INTERGENIC FLANK at a gene edge, when the manifest carries one.
-  ## A flank abuts a SINGLE part, so the unused side is NA: IG_below has
-  ## abut_part_hi = the gene's lowest part and lo = NA, IG_above has
+  ## A flank abuts a SINGLE part, so the unused side is NA: IG_before has
+  ## abut_part_hi = the gene's lowest part and lo = NA, IG_after has
   ## abut_part_lo = the highest part and hi = NA. Matching on `touches` FIRST
   ## keeps an NA abutting part from colliding with an ordinary bin. Returns NA
   ## when the manifest has no flanks (intergenic_width = 0, the default) or
@@ -182,8 +182,8 @@ outward_unit <- function(part, decreasing, geom, intron_bins = NULL) {
   ## without flanks is byte-identical to before.
   pick_ig <- function(p, dec) {
     if (!has_bins) return(NA_character_)
-    k <- if (dec) which(btc == "intergenic_below" & bhi == p)
-         else      which(btc == "intergenic_above" & blo == p)
+    k <- if (dec) which(btc == "intergenic_before" & bhi == p)
+         else      which(btc == "intergenic_after" & blo == p)
     if (length(k)) bid[k[1L]] else NA_character_
   }
 
@@ -297,9 +297,12 @@ intronic_parts <- function(start, end, part, max_whole = 2000L, end_width = 300L
   ## high-coordinate end and therefore abuts abut_part_hi. An intergenic gap
   ## below the gene occupies its own gap's HIGH end by that rule, which would
   ## make the natural-language reading ("the low one") the exact opposite of
-  ## the encoded one. So these use "intergenic_below"/"intergenic_above",
-  ## naming the side of the GENE they sit on, and no reader has to resolve
-  ## which convention is in play. abut_part_lo/hi are unchanged: they keep
+  ## the encoded one. So these use "intergenic_before"/"intergenic_after",
+  ## naming the side of the GENE they sit on in COORDINATE order -- before is
+  ## the lower coordinate, after the higher, whatever the strand -- so no
+  ## reader has to resolve which convention is in play. They are deliberately
+  ## not 5prime/3prime: that would be strand-dependent, and this function
+  ## receives no strand. abut_part_lo/hi are unchanged: they keep
   ## their coordinate meaning, with the absent side NA.
   ##
   ## These are emitted even for a gene with no introns at all -- a single-exon
@@ -312,9 +315,9 @@ intronic_parts <- function(start, end, part, max_whole = 2000L, end_width = 300L
     lo_p <- p[which.min(s)];      hi_p <- p[which.max(e)]
     keep <- lo_s >= 1
     data.frame(
-      bin_id = c(if (keep) sprintf("IG_below_%s", lo_p), sprintf("IG_above_%s", hi_p)),
-      intron_id = c(if (keep) sprintf("IG_below_%s", lo_p), sprintf("IG_above_%s", hi_p)),
-      touches = c(if (keep) "intergenic_below", "intergenic_above"),
+      bin_id = c(if (keep) sprintf("IG_before_%s", lo_p), sprintf("IG_after_%s", hi_p)),
+      intron_id = c(if (keep) sprintf("IG_before_%s", lo_p), sprintf("IG_after_%s", hi_p)),
+      touches = c(if (keep) "intergenic_before", "intergenic_after"),
       start = c(if (keep) lo_s, hi_s), end = c(if (keep) lo_e, hi_e),
       width = c(if (keep) lo_e - lo_s + 1, hi_e - hi_s + 1),
       intron_start = NA_real_, intron_end = NA_real_, intron_len = NA_real_,
