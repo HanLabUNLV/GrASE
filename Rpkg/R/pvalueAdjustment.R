@@ -112,16 +112,38 @@ pvalueAdjustment <- function(res, independentFiltering, filter,
 
 #' Nested BH procedure for hierarchical FDR control
 #'
-#' Two-stage procedure (Benjamini-Bogomolov 2014):
-#' Stage 1 applies BH across genes on Simes gene-level p-values.
-#' Stage 2 applies BH within each gene that passes stage 1.
-#' Controls global FDR on individual events and removes gene-size detection bias.
+#' Two-stage procedure of Benjamini and Bogomolov (2014).
+#' Stage 1 applies BH across the \eqn{m} tested genes on Simes gene-level
+#' p-values and selects the \eqn{R} genes with \code{padj_gene < alpha}.
+#' Stage 2 applies BH within each selected gene at level
+#' \eqn{\alpha R / m}, not \eqn{\alpha}: stage 1 chose those genes because
+#' their events look significant, so testing the same events again at full
+#' strength spends the evidence twice, and the \eqn{R/m} factor pays for the
+#' selection. It is applied by scaling each within-gene BH-adjusted p-value by
+#' \eqn{m/R} (capped at 1), so \code{padj < alpha} is exactly the stage-2 test.
+#'
+#' What this controls: the expected AVERAGE false discovery proportion over the
+#' selected genes is at most \code{alpha}. Stage 1 alone also controls FDR over
+#' GENES. It does NOT control FDR pooled over all individual events, which is a
+#' different error rate; an earlier version of this documentation claimed it did.
+#' Until 2026-10-26 stage 2 also omitted the \eqn{R/m} factor, testing at
+#' \eqn{\alpha}. On the DICE lineage terminal arm \eqn{R/m} is 0.56 to 0.77
+#' across the ten contrasts and the correction removes 427 of 104,396 calls
+#' (0.41\%).
+#'
+#' \eqn{m} counts only genes with at least one finite p-value, matching the
+#' denominator \code{p.adjust} uses in stage 1. Genes whose events were all
+#' filtered before testing are not families that were tested, and counting
+#' them -- 6,300 to 7,300 per contrast on that arm -- would overstate the
+#' correction by more than a factor of two.
 #'
 #' @param res Data frame with columns \code{gene} and \code{pvalue}.
-#' @param alpha Numeric. FDR level for both stages (default 0.05).
+#' @param alpha Numeric. FDR level (default 0.05): the stage-1 gene screen, and
+#'   the level the selection-adjusted \code{padj} is compared against.
 #' @return \code{res} with two new columns:
-#'   \code{padj_gene} (BH-adjusted Simes p-value, one value per gene, replicated to all rows);
-#'   \code{padj} (within-gene BH adjusted p-value for events in selected genes, NA otherwise).
+#'   \code{padj_gene} (BH-adjusted Simes p-value, one value per gene, replicated
+#'   to all rows); \code{padj} (within-gene BH-adjusted p-value multiplied by
+#'   \eqn{m/R} and capped at 1, for events in selected genes; NA otherwise).
 #' @export
 #' @examples
 #' \dontrun{
@@ -147,6 +169,11 @@ nested_bh <- function(res, alpha = 0.05) {
   names(padj_gene_vec)   <- genes
   res$padj_gene          <- padj_gene_vec[res$gene]
 
+  ## m is the number of genes stage 1 actually tested, which is the denominator
+  ## p.adjust used: genes with no finite p-value are excluded there, so they are
+  ## excluded here too.
+  m_tested <- sum(!is.na(simes_p))
+
   # Stage 2: within-gene BH only for genes passing stage 1.
   #
   # The row indices are precomputed ONCE with split(). The former
@@ -159,11 +186,15 @@ nested_bh <- function(res, alpha = 0.05) {
   res$padj <- NA_real_
   selected <- names(padj_gene_vec)[!is.na(padj_gene_vec) & padj_gene_vec < alpha]
   if (length(selected)) {
+    ## Benjamini-Bogomolov: within-gene BH at alpha * R / m, applied as a
+    ## multiplier m / R on the adjusted p-values so callers keep testing
+    ## padj < alpha. With every gene selected R == m and this is a no-op.
+    bb <- m_tested / length(selected)
     idx_by_gene <- split(seq_len(nrow(res)), as.character(res$gene))
     for (g in selected) {
       idx <- idx_by_gene[[g]]
       if (is.null(idx)) next
-      res$padj[idx] <- p.adjust(res$pvalue[idx], method = "BH")
+      res$padj[idx] <- pmin(1, p.adjust(res$pvalue[idx], method = "BH") * bb)
     }
   }
 
