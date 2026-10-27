@@ -213,25 +213,29 @@ if ( split == 'bipartition') {
   if (length(gene_names) == 1) {
     results <- split_bipartition(gene_names)
   } else {
-    results <- mclapply(gene_names, split_bipartition, mc.cores = mc_cores)
+    ## mc.preschedule = FALSE: genes are handed out one at a time as workers
+    ## free up. The default splits the list into mc.cores fixed chunks up front,
+    ## so one very large gene stalls every gene queued behind it in its chunk --
+    ## on the simulation, 44 of 48 workers finished while ~700 genes waited.
+    results <- mclapply(gene_names, split_bipartition, mc.cores = mc_cores, mc.preschedule = FALSE)
   }
 } else if (split == 'multinomial') {
   if (length(gene_names) == 1) {
     results <- split_multinomial(gene_names)
   } else {
-    results <- mclapply(gene_names, split_multinomial, mc.cores = mc_cores)
+    results <- mclapply(gene_names, split_multinomial, mc.cores = mc_cores, mc.preschedule = FALSE)
   }
 } else if (split == 'n_choose_2') {
   if (length(gene_names) == 1) {
     results <- split_n_choose_2(gene_names)
   } else {
-    results <- mclapply(gene_names, split_n_choose_2, mc.cores = mc_cores)
+    results <- mclapply(gene_names, split_n_choose_2, mc.cores = mc_cores, mc.preschedule = FALSE)
   }
 } else if (split == 'bubble') {
   if (length(gene_names) == 1) {
     results <- print_bubbles(gene_names)
   } else {
-    results <- mclapply(gene_names, print_bubbles, mc.cores = mc_cores)
+    results <- mclapply(gene_names, print_bubbles, mc.cores = mc_cores, mc.preschedule = FALSE)
   }
 } else {
   stop("Split method (--split) must be specified among 'bipartition', 'multinomial' or 'n_choose_2'.", call.=FALSE)

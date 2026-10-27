@@ -198,7 +198,21 @@ Rscript Rpkg/scripts/bubble_path_split.R \
     --split=bipartition
 ```
 
-`--split` also accepts `multinomial` and `n_choose_2`. Those exist only to reproduce the benchmark for the publication; they are not recommendeded for an analysis.
+`--split` also accepts `multinomial` and `n_choose_2`. Those exist only to reproduce the benchmark for the publication; they are not recommendeded for an analysis. `--mc_cores` sets the number of genes processed in parallel.
+
+Each gene gets two files. `<gene>.bipartition.all.txt` lists every bipartition
+enumerated. `<gene>.bipartition.txt`, which later stages read, keeps one
+bipartition per pair of distinct sets (`setdiff1`, `setdiff2`): the one whose
+reference parts are closest to the distinct parts, then the one with the fewest
+reference parts (counting `R` and `L` as reference parts), then an internal
+bipartition over one that starts at `R` or ends at `L`. A skipped exon is
+therefore tested between its flanking exons rather than inside a larger bubble
+anchored at a terminal node.
+
+A gene being processed has a `<gene>.running` file in `--outdir`; a gene with
+either output or a `.running` file is skipped, so an interrupted run can be
+restarted in the same directory (delete the `.running` files of killed workers
+first).
 
 ### Stage 2. Separate internal AS events from alternative TSS/TTS
 
@@ -221,7 +235,7 @@ Rscript Rpkg/scripts/exoncnt.R \
     -o ${WD}/bipartition.ex.internal.counts
 ```
 
-This also writes the combined master file `bipartition.ex.internal.cnt.combined.txt` into the output directory, which Stage 4 reads. For TSS/TTS events use `-a TSS` (output `bipartition.ex.terminal.cnt.combined.txt`). For more than two groups, pass `--conditions=A,B,C` instead of `--cond1/--cond2`.
+This also writes the combined master file `bipartition.ex.internal.cnt.combined.txt` into the output directory, which Stage 4 reads. For TSS/TTS events use `-a terminal` (output `bipartition.ex.terminal.cnt.combined.txt`). For more than two groups, pass `--conditions=A,B,C` instead of `--cond1/--cond2`.
 
 ### Stage 3b. Substitute junction counts where a distinct set is empty (optional)
 
@@ -248,8 +262,24 @@ Rscript Rpkg/scripts/merge_exon_sj_counts.R \
 
 `--sjdir` holds STAR `SJ.out.tab` files. Run the counting once per event type;
 `--type internal` and `--type terminal` write per-gene files with the same name, so
-they need separate `--output` directories. If you use this, point Stage 4 at the
-merged directory instead of the exonic one.
+they need separate `--output` directories. Start each output directory empty:
+`bipartition_sjcnt.R` skips genes that already have output, and
+`merge_exon_sj_counts.R` does not clear old files.
+
+The merge writes only per-gene files. Before Stage 4, combine them and link the
+per-gene bipartition files from the exonic directory, then point Stage 4 at the
+merged directory with `--file=bipartition.exsj.internal.cnt.combined.txt`:
+
+```bash
+python3 Rpkg/scripts/combine_exoncnt.py ${WD}/bipartition.exsj.internal.counts \
+    ${WD}/bipartition.exsj.internal.counts/bipartition.exsj.internal.cnt.combined.txt
+for f in ${WD}/bipartition.ex.internal.counts/*.bipartition.txt; do
+    ln -sf "$(realpath "$f")" ${WD}/bipartition.exsj.internal.counts/
+done
+```
+
+`combine_exoncnt.py` matches columns by name, because the per-gene merged files
+do not all list their columns in the same order.
 
 ### Stage 4. Test for differential exon usage
 
@@ -266,7 +296,7 @@ Rscript Rpkg/scripts/exontest.R \
     --cond1=group1 --cond2=group2
 ```
 
-`--phi` names a file inside `--outdir`. If it does not exist, phi is estimated and written there; if it does, it is reused, so use a fresh name (or outdir) whenever the counts change. `--gff_dir` is optional and adds length-normalized (per-base) pi columns to the annotated output.
+`--phi` names a file inside `--outdir`. If it does not exist, phi is estimated and written there; if it does, it is reused, so use a fresh name (or outdir) whenever the counts or the bipartitions change (`event` is the row number in the per-gene bipartition file, so a new Stage 1 or Stage 2 renumbers events). `--gff_dir` is optional and adds length-normalized (per-base) pi columns to the annotated output.
 
 Recommended models:
 
@@ -280,7 +310,7 @@ null false positives inflate several-fold), `wilcoxon` (most conservative on
 null genes, no effect-size estimate) and `dirmult_EBplugin` (for the
 benchmark-only multinomial split).
 
-Commonly used options (defaults in brackets): `--padj_threshold` [0.01], `--min_dpi` [0.1], `--min_reads` [10], `--padj_method` [nested_BH], `--mc_cores` [min(detectCores(), 8)], `--contrasts=B:A,C:A` for several pairwise contrasts (or `A+B+C` for an omnibus test, betabinom models only). Independent filtering is on by default; `--no_independent_filtering` turns it off. Run `Rscript Rpkg/scripts/exontest.R --help` for the full list.
+Commonly used options (defaults in brackets): `--padj_threshold` [0.01], `--min_dpi` [0.1], `--min_reads` [10], `--padj_method` [nested_BH: genes are selected by BH on each gene's Simes p-value, then tests within each selected gene are BH-adjusted and multiplied by the number of genes tested over the number selected (Benjamini-Bogomolov)], `--mc_cores` [min(detectCores(), 8)], `--contrasts=B:A,C:A` for several pairwise contrasts (or `A+B+C` for an omnibus test, betabinom models only). Independent filtering is on by default; `--no_independent_filtering` turns it off. Run `Rscript Rpkg/scripts/exontest.R --help` for the full list.
 
 ### Reading results
 
@@ -293,7 +323,7 @@ sig <- results[results$significant %in% TRUE, ]
 head(sig[, c("gene", "event", "source", "sink", "p.value", "padj", "delta_pi", "setdiff1", "setdiff2")])
 ```
 
-Output files are named `test_{prefix}_{model}.txt`, with `.annotated.txt`, `.mincomb.annotated.txt` (one row per event, min-p across sides) and `.fisher_combined.annotated.txt` variants; `{prefix}` is the first two dot-fields of `--file` (e.g. `bipartition.internal`).
+Output files are named `test_{prefix}_{model}.txt`, with `.annotated.txt`, `.mincomb.annotated.txt` (one row per event, min-p across sides) and `.fisher_combined.annotated.txt` variants; `{prefix}` is the first three dot-fields of `--file` (e.g. `bipartition.ex.internal`), so name it `<split>.<unit>.<class>.cnt.combined.txt` with unit `ex` or `exsj`, or the output names will not say which counts were tested (`exontest.R` warns).
 
 Key output columns: `gene`, `event` (bubble number within the gene), `source`/`sink` (bubble boundary nodes), `contrast`, `p.value`, `padj`, `delta_pi` (change in path proportion), `significant` (padj below `--padj_threshold`, `|delta_pi|` at least `--min_dpi`, and at least `--min_reads` reads in one group), `setdiff1`/`setdiff2` (exonic parts distinguishing each path), `ref_ex_part` (shared reference parts).
 

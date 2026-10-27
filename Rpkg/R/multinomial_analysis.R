@@ -336,7 +336,10 @@ multinomial_paths <- function(gene, g, sg, outdir, max_path = 20, max_span = Inf
   if (length(multipaths_list) > 0) {
     multipaths_df <- standardize_multinomial_columns(multipaths_list, max_path)
     
-    multipaths_df <- multipaths_df %>% dplyr::rowwise() %>% dplyr::mutate(ref_part_cnt = count_items(ref_ex_part)) %>% dplyr::ungroup()
+    ## R and L count as reference slots -- see bipartition_analysis.R
+    multipaths_df <- multipaths_df %>% dplyr::rowwise() %>% dplyr::mutate(
+      ref_part_cnt = count_items(ref_ex_part) + (source == "R") + (sink == "L"),
+      .terminal    = source == "R" | sink == "L") %>% dplyr::ungroup()
     # remove rows where all setdiff columns are empty
     setdiff_cols <- grep("^setdiff[0-9]+$", names(multipaths_df), value = TRUE)
     path_cols <- grep("^path[0-9]+$", names(multipaths_df), value = TRUE)
@@ -369,15 +372,19 @@ multinomial_paths <- function(gene, g, sg, outdir, max_path = 20, max_span = Inf
       multipaths_filtered <- multipaths_filtered %>%
         dplyr::distinct(dplyr::across(all_of(c("ref_ex_part", setdiff_cols))), .keep_all = TRUE) %>%
         dplyr::group_by(dplyr::across(all_of(setdiff_cols))) %>%
-        dplyr::filter(ref_part_cnt == min(ref_part_cnt)) %>%
+        ## closest first, then fewest ref parts -- see bipartition_analysis.R
         dplyr::mutate(.prox = apply(
           dplyr::pick(dplyr::all_of(c("ref_ex_part", setdiff_cols))), 1,
           function(row) do.call(ref_proximity_to_setdiffs,
                                 as.list(row[c("ref_ex_part", setdiff_cols)])))) %>%
         dplyr::filter(.prox == min(.prox, na.rm = TRUE)) %>%
+        dplyr::filter(ref_part_cnt == min(ref_part_cnt)) %>%
+        ## still tied on both: internal before terminal, so a bubble bounded by two
+        ## real flanks is never discarded for an outer one reaching R or L
+        dplyr::arrange(.terminal, .by_group = TRUE) %>%
         dplyr::slice(1) %>%
         dplyr::ungroup() %>%
-        dplyr::select(-ref_part_cnt, -.prox)
+        dplyr::select(-ref_part_cnt, -.prox, -.terminal)
     } else if (nrow(multipaths_filtered) > 0) {
       multipaths_filtered <- multipaths_filtered %>% dplyr::select(-ref_part_cnt)
     }

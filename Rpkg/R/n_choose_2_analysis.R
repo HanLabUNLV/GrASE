@@ -340,7 +340,10 @@ n_choose_2_paths <- function(gene, g, sg, outdir, max_path = 20, max_span = Inf,
   if (length(pairwise_list) > 0) {
     pairwise_df <- standardize_pairwise_columns(pairwise_list)
     
-    pairwise_df <- pairwise_df %>% dplyr::rowwise() %>% dplyr::mutate(ref_part_cnt = count_items(ref_ex_part)) %>% dplyr::ungroup()
+    ## R and L count as reference slots -- see bipartition_analysis.R
+    pairwise_df <- pairwise_df %>% dplyr::rowwise() %>% dplyr::mutate(
+      ref_part_cnt = count_items(ref_ex_part) + (source == "R") + (sink == "L"),
+      .terminal    = source == "R" | sink == "L") %>% dplyr::ungroup()
     
     # Remove rows where both setdiff1 and setdiff2 are empty
     pairwise_filtered <- pairwise_df[!((pairwise_df$setdiff1=="") & (pairwise_df$setdiff2=="")),]
@@ -350,13 +353,17 @@ n_choose_2_paths <- function(gene, g, sg, outdir, max_path = 20, max_span = Inf,
       pairwise_filtered <- pairwise_filtered %>%
         dplyr::distinct(ref_ex_part, setdiff1, setdiff2, .keep_all = TRUE) %>%
         dplyr::group_by(setdiff1, setdiff2) %>%
-        dplyr::filter(ref_part_cnt == min(ref_part_cnt)) %>%
+        ## closest first, then fewest ref parts -- see bipartition_analysis.R
         dplyr::mutate(.prox = mapply(ref_proximity_to_setdiffs,
                                      ref_ex_part, setdiff1, setdiff2)) %>%
         dplyr::filter(.prox == min(.prox, na.rm = TRUE)) %>%
+        dplyr::filter(ref_part_cnt == min(ref_part_cnt)) %>%
+        ## still tied on both: internal before terminal, so a bubble bounded by two
+        ## real flanks is never discarded for an outer one reaching R or L
+        dplyr::arrange(.terminal, .by_group = TRUE) %>%
         dplyr::slice(1) %>%
         dplyr::ungroup() %>%
-        dplyr::select(-ref_part_cnt, -.prox)
+        dplyr::select(-ref_part_cnt, -.prox, -.terminal)
     }
   } else {
     # Handle empty list case

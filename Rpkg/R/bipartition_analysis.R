@@ -515,20 +515,34 @@ bipartition_paths <- function(gene, g, outdir, max_path = 15, max_span = Inf, co
                   format(Sys.time(), "%H:%M:%S"), gene, nrow(bipartitions_df)))
 
   if (nrow(bipartitions_df) > 0) {
-    bipartitions_df <- bipartitions_df %>% dplyr::mutate(ref_part_cnt = sapply(ref_ex_part, count_items))
+    ## R and L are reference slots. They carry no exonic part, so ref_ex_part never
+    ## lists them, but a bubble anchored there is bounded at that end. Not counting
+    ## them capped every terminal bubble at one reference part against an internal
+    ## event's two, so "fewest ref parts" was biased toward terminal bubbles.
+    bipartitions_df <- bipartitions_df %>% dplyr::mutate(
+      ref_part_cnt = sapply(ref_ex_part, count_items) + (source == "R") + (sink == "L"),
+      .terminal    = source == "R" | sink == "L")
     # deduplicate exact events (same ref_ex_part + setdiff1 + setdiff2 from different graph paths),
-    # then among remaining rows with same (setdiff1, setdiff2) keep the one with fewest ref parts,
-    # then break remaining ties by choosing the ref_ex_part closest (by exon number) to the setdiff exons
+    # then among remaining rows with same (setdiff1, setdiff2) keep the ref_ex_part closest (by
+    # exon number) to the setdiff exons, then break remaining ties by fewest ref parts.
+    # CLOSEST MUST COME FIRST. With fewest-ref-parts first, a skipped exon -- which has two
+    # flanking reference parts -- always lost to an outer bubble anchored at R or L, which had
+    # only one, so the skip was dropped and the exon was tested as a terminal event instead.
+    # R and L now also count as reference parts (above), and a tie on both filters goes to
+    # the internal row.
     bipartitions_filtered <- bipartitions_df %>%
       dplyr::distinct(ref_ex_part, setdiff1, setdiff2, .keep_all = TRUE) %>%
       dplyr::group_by(setdiff1, setdiff2) %>%
-      dplyr::filter(ref_part_cnt == min(ref_part_cnt)) %>%
       dplyr::mutate(.prox = mapply(ref_proximity_to_setdiffs,
                                    ref_ex_part, setdiff1, setdiff2)) %>%
       dplyr::filter(.prox == min(.prox, na.rm = TRUE)) %>%
+      dplyr::filter(ref_part_cnt == min(ref_part_cnt)) %>%
+      ## still tied on both: internal before terminal, so a bubble bounded by two
+      ## real flanks is never discarded for an outer one reaching R or L
+      dplyr::arrange(.terminal, .by_group = TRUE) %>%
       dplyr::slice(1) %>%
       dplyr::ungroup() %>%
-      dplyr::select(-ref_part_cnt, -.prox)
+      dplyr::select(-ref_part_cnt, -.prox, -.terminal)
   } else {
     bipartitions_filtered <- bipartitions_df
   }
