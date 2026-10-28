@@ -117,9 +117,8 @@ for trt, ref in PAIRS:
         low = (kind == "5prime") == (strand == "+")
         pos = co[0] if low else co[1]
         rk = (int(anc) - 1) if low else (npart[g] - int(anc))
-        pc = r["part_called"] == "TRUE"; fc = r["flank_called"] == "TRUE"
-        grp = "walk_stops" if (pc and not fc) else ("walk_continues" if (pc and fc) else None)
-        if grp is None: continue
+        grp = r["walk"]
+        if grp == "no_claim": continue
         cc = "%s_vs_%s" % (trt, ref)
         c = (rbin(max(rk, 0)), dbin(dnear(g, pos, low)))
         c3 = c + (gband(g, anc, cc),)

@@ -145,12 +145,16 @@ ic <- rbindlist(parallel::mclapply(seq_along(ifiles), function(i)
 if (anyDuplicated(ic, by = c("k","sample")))
   stop("a unit appears in more than one --intron_counts pass -- overlapping bin ids")
 
-ex_path <- function(s) file.path(a$exon_counts, sub("_SRR[0-9]+$", "", s),
-                                 paste0(sub("^.*_(SRR[0-9]+)$", "\\1", s), "_counts.txt"))
-ep <- vapply(samples, ex_path, "")
-if (any(!file.exists(ep)))
-  stop(sprintf("no exonic count file for %d samples, e.g. %s", sum(!file.exists(ep)),
-               paste(head(samples[!file.exists(ep)], 3), collapse = ", ")))
+## exonic count files are <exon_counts>/<condition>/<stem>_counts.txt and the
+## sample is named <condition>_<stem>, as exoncnt.R names it
+ex_index <- unlist(lapply(list.dirs(a$exon_counts, recursive = FALSE), function(d) {
+  f <- list.files(d, pattern = "_counts\\.txt$", full.names = TRUE)
+  setNames(f, paste0(basename(d), "_", sub("_counts\\.txt$", "", basename(f))))
+}))
+ep <- unname(ex_index[samples])
+if (anyNA(ep))
+  stop(sprintf("no exonic count file for %d samples, e.g. %s", sum(is.na(ep)),
+               paste(head(samples[is.na(ep)], 3), collapse = ", ")))
 ec <- rbindlist(parallel::mclapply(seq_along(ep), function(i)
   read_counts(ep[i], want_e)[, sample := samples[i]], mc.cores = ncore))
 cnt <- rbind(ic, ec)

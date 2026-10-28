@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """The outward walk's groups, scored against the IsoQuant long reads.
 
-UNIT is (terminus, contrast). The walk partitions called termini three ways:
+UNIT is (terminus, contrast). The groups are the scorer's `walk` column:
 
-  walk_stops      part_called AND NOT flank_called
-  walk_continues  part_called AND flank_called
-  no_claim        NOT part_called
+  walk_stops      terminus called, nothing called just outward (term_positive)
+  walk_continues  terminus called, and so is the unit outward
+  no_claim        terminus not called, or the outward unit could not be judged
 
 and each is scored against three long-read references, all evaluated as "an
 IsoQuant transcript model whose matching end lies within +/-W bp of the
@@ -239,20 +239,11 @@ for trt, ref in PAIRS:
         low = (kind == "5prime") == (strand == "+")
         pos = co[0] if low else co[1]
         rk = (int(anc)-1) if low else (npart[g]-int(anc))
-        pc = r["part_called"] == "TRUE"; tc = r["flank_called"] == "TRUE"
         ## the call's claimed lineage. NA for an uncalled terminus, which has no
         ## claim, so its references fall back to the non-directional union.
         try: dpi = float(r["part_dpi"])
         except (KeyError, ValueError): dpi = None
-        # THREE-WAY, not binary. C2+ is `part_called AND NOT flank_called`, so it
-        # conditions on the NEIGHBOURHOOD being differentially quiet -- while the
-        # Q2 reference asks whether a differentially-used boundary is nearby,
-        # which is likelier where differential activity is dense. Splitting C2-
-        # into its two halves shows whether the inversion is that conditioning:
-        #   walk_stops      part_called & NOT flank_called   = C2+
-        #   walk_continues  part_called & flank_called       = signal continues outward
-        #   no_claim        NOT part_called                 = terminus not differentially used
-        grp = "walk_stops" if (pc and not tc) else ("walk_continues" if (pc and tc) else "no_claim")
+        grp = r["walk"]
         e = "5" if kind == "5prime" else "3"
         cell = (kind, grp)
         cells[cell] += 1
@@ -266,7 +257,7 @@ for trt, ref in PAIRS:
         ## reported beside its halves rather than instead of them.
         rkx = max(rk, 0); tv = r["term_verdict"]
         labs = [grp]
-        if pc and not tc:
+        if grp == "walk_stops":
             labs.append("walkS:diff" if tv == "drop: outward tested, uncalled"
                         else "walkS:depth")
         for L in labs: lab_n[(kind, L, rkx)] += 1

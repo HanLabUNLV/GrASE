@@ -35,6 +35,7 @@ The complete workflow has six stages, each driven by a command-line Rscript:
 | 2 | `filterTerminal.R` | Separate internal events from terminal events |
 | 3 | `exoncnt.R` | Aggregate DEXSeq read counts onto the split exonic parts |
 | 4 | `exontest.R` | Test for differential exon usage and annotate results |
+| 5 (optional) | `outward_walk.sh` (shell) | Locate which annotated start or end a terminal call belongs to |
 
 ---
 
@@ -515,6 +516,77 @@ Key columns of the annotated output:
 
 With `--gff_dir`, the output also carries `len_D`, `len_S`, `pi_ref_perbase`,
 `pi_trt_perbase` and `delta_pi_perbase`.
+
+## Stage 5 (optional). Locate terminal events
+
+A called terminal bipartition says that one side's distinct set changes usage
+between conditions. It does not say which annotated start or end of that side
+the change belongs to. `outward_walk.sh` asks this for every called terminal
+side, using short-read counts only.
+
+The terminus of each route of the side is its first exonic part after `R`, or
+its last before `L`. The script tests each terminus, and the unit just outward
+of it, in place of the distinct set: against the side's own shared reference,
+with the same test as Stage 4. The unit outward is the next exonic part, the
+intronic part between the two, or, beyond the gene's outermost part, a 300 bp
+flank. When a terminus is called and the unit outward is not, the change stops
+at that terminus.
+
+Intronic parts are counted separately from the exonic parts, so the exonic
+counts do not change. Count them with the same `dexseq_count.py` flags as the
+exonic counts.
+
+```bash
+bash scripts/outward_walk.sh \
+    --workdir         ${WD}/outward \
+    --results         ${WD}/bipartition.terminal.test/test_bipartition.ex.terminal_betabinom_EBmap.annotated.txt \
+    --terminal_counts ${WD}/bipartition.ex.terminal.counts/bipartition.ex.terminal.cnt.combined.txt \
+    --split_dir       ${WD}/bipartition.filtered \
+    --graphml_dir     ${WD}/graphml \
+    --gff_dir         ${WD}/dexseq.gff \
+    --exon_counts     ${WD}/DEXSeq/count_files \
+    --samples         samples.tsv \
+    --contrasts       group2:group1 \
+    --dexseq_flags    "--format bam --paired yes --stranded reverse --order pos -a 10" \
+    --python          <python with HTSeq>
+```
+
+`samples.tsv` has one line per BAM: its path, condition and sample name, where
+`<exon_counts>/<condition>/<sample>_counts.txt` is its exonic count file.
+`--terminal_counts` is the table the terminal results were tested on; its
+directory must also hold the per-gene `<gene>.bipartition.txt` files.
+
+| Step | Script | Output under `--workdir` |
+|------|--------|--------------------------|
+| 1 | `intronparts.R` | `intronparts/`: intronic parts and gene-edge flanks, with a manifest |
+| 2 | `ig_flank_overlap.py` | `intronparts/unmeasurable.tsv`: flanks covered by another gene's parts, which always count 0 |
+| 3 | `dexseq_count.py` | `intronparts/counts/`: intronic part counts per sample |
+| 4 | `enumerate_outward_units.R` | `outward_units.tsv`: the termini and outward units of each called side |
+| 5 | `build_outward_counts.R` | the count table and `outward_side_table.tsv` |
+| 6 | `exontest.R` | `test/`: the test of each unit |
+| 7 | `score_outward_walk.R` | `outward_walk_verdict.tsv` and `outward_walk_verdict.sides.tsv` |
+
+`outward_walk_verdict.tsv` has one row per terminus and contrast. The `walk`
+column is the result:
+
+| `walk` | Meaning |
+|--------|---------|
+| `walk_stops` | The terminus is called and nothing just outward of it is |
+| `walk_continues` | The terminus is called and so is the unit outward |
+| `no_claim` | The terminus is not called, or the unit outward could not be judged |
+
+`term_verdict` says how each `walk_stops` was reached, from strongest to weakest
+evidence: `drop: outward tested, uncalled` (the unit outward was tested and not
+called), `drop: outward empty` (it has no reads), `drop: outward near-empty` and
+`drop: outward untestable` (too few reads to test), and `drop: gene edge`
+(nothing lies outward). Only the first two are a measured absence of change,
+so report them apart from the rest, and report each contrast separately.
+
+`outward_walk_verdict.sides.tsv` has one row per side and contrast. Its `walk`
+is `walk_stops` when any of the side's termini is, `walk_continues` when the
+side has a judged terminus and none stops, and `no_claim` otherwise. The
+side-level result is not adjusted for the number of termini, so quote the
+terminus table first.
 
 ## Visualising results
 

@@ -410,6 +410,11 @@ w[, term_verdict := fcase(
     !isTRUE_v(flank_min_read_support),          "drop: outward untestable",
     default =                                  "drop: outward tested, uncalled")]
 w[, term_positive := t_ok & !is.na(u_dead) & u_dead]
+## the walk at this terminus: the change stops here, continues outward, or the
+## terminus makes no claim (not called, or the flank could not be judged)
+w[, walk := fcase(term_positive,                               "walk_stops",
+                  term_verdict == "signal continues outward",  "walk_continues",
+                  default =                                    "no_claim")]
 
 ## ---- side level: any() over the termini -----------------------------------
 ## An existential, so a side with nine termini has nine chances. The per-unit
@@ -447,6 +452,9 @@ v[, side_verdict := fcase(
     n_judgeable == 0, "not judgeable",
     positive,         "positive: a start with nothing outward",
     default =         "negative: signal continues past every start")]
+v[, walk := fcase(positive,         "walk_stops",
+                  n_judgeable > 0,  "walk_continues",
+                  default =         "no_claim")]
 ## Among positives, the best evidence present. A side counts under the strongest
 ## kind it has, so these partition the positives.
 ## best_evidence is DESCRIPTIVE ONLY. The side verdict is any(term_positive) and

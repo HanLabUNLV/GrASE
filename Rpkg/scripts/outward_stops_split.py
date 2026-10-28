@@ -4,8 +4,8 @@
 TWO things, and the second one supersedes a test that was wrong.
 
 (1) Split `walk_stops` by whether its verdict rests on a MEASURED outward flank
-    or an UNPOWERED one. `walk_stops` is `part_called AND NOT flank_called`, and
-    "not called" has two very different causes: the flank was quantified and the
+    or an UNPOWERED one. `walk_stops` is the scorer's `walk` column, and
+    a stop has two very different causes: the flank was quantified and the
     test said no (a measurement), or it never cleared the read floor / was never
     tested (an absence of measurement scored as a boundary). At 3' the second
     kind dominates, so the pooled figure may be reporting the unpowered half.
@@ -56,9 +56,7 @@ for nm in ("build", "near", "hit", "verd", "meta", "plen", "npart", "have",
 MEASURED  = ("drop: outward tested, uncalled", "drop: outward empty")
 UNPOWERED = ("drop: outward near-empty", "drop: outward untestable")
 def stratum(r):
-    pc = r["part_called"] == "TRUE"; tc = r["flank_called"] == "TRUE"
-    if not pc:  return "no_claim"
-    if tc:      return "walk_continues"
+    if r["walk"] != "walk_stops": return r["walk"]
     tv = r["term_verdict"]
     if tv in MEASURED:  return "stops_measured"
     if tv in UNPOWERED: return "stops_unpowered"

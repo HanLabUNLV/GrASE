@@ -1,59 +1,68 @@
-import collections, os
-D = os.environ.get("DICE", "/mnt/data1/home/mirahan/DICE")
-bins = []
-with open(f"{D}/intronparts_ig/intronparts_manifest.tsv") as fh:
-    hdr = fh.readline().rstrip("\n").split("\t")
-    ix = {k: i for i, k in enumerate(hdr)}
+#!/usr/bin/env python3
+"""List outward flank bins that cannot be measured.
+
+dexseq_count discards a read that overlaps features of two genes as ambiguous,
+so a flank bin covered completely by other genes' bins in the same annotation
+always counts 0. score_outward_walk.R takes this list as --unmeasurable so such
+a flank is not read as an empty flank.
+
+Usage:
+  python3 ig_flank_overlap.py <intronparts_manifest.tsv> <out.tsv> [--stranded yes|no|reverse]
+    --stranded  as given to dexseq_count; when not "no", only bins on the same
+                strand compete for a read (default: reverse)
+    --flanks_only
+                consider only other genes' flank bins as covering, for flanks
+                counted with their own annotation
+Output: TSV with columns gene, bin_id
+"""
+import argparse, bisect, collections
+
+ap = argparse.ArgumentParser()
+ap.add_argument("manifest")
+ap.add_argument("out")
+ap.add_argument("--stranded", default="reverse", choices=["yes", "no", "reverse"])
+ap.add_argument("--flanks_only", action="store_true")
+a = ap.parse_args()
+
+def is_flank(b):
+    return b.startswith("IG_")
+
+rows = []
+with open(a.manifest) as fh:
+    ix = {k: i for i, k in enumerate(fh.readline().rstrip("\n").split("\t"))}
     for line in fh:
         f = line.rstrip("\n").split("\t")
-        b = f[ix["bin_id"]]
-        if "IG_before" not in b and "IG_after" not in b:
+        rows.append((f[ix["chrom"]], f[ix["strand"]], int(f[ix["start"]]), int(f[ix["end"]]),
+                     f[ix["gene"]], f[ix["bin_id"]]))
+
+groups = collections.defaultdict(list)
+for r in rows:
+    if a.flanks_only and not is_flank(r[5]):
+        continue
+    groups[(r[0], r[1] if a.stranded != "no" else "")].append(r)
+
+out = []
+for v in groups.values():
+    v.sort(key=lambda x: x[2])
+    starts = [x[2] for x in v]
+    maxlen = max(x[3] - x[2] for x in v) + 1
+    for a_ in v:
+        if not is_flank(a_[5]):
             continue
-        bins.append((f[ix["chrom"]], int(f[ix["start"]]), int(f[ix["end"]]),
-                     f[ix["gene"]], b))
-print("IG bins: %d" % len(bins))
-
-byc = collections.defaultdict(list)
-for b in bins:
-    byc[b[0]].append(b)
-
-hit = set()           # (gene, bin) overlapped by ANOTHER gene's IG bin
-ov_bp = collections.defaultdict(int)
-for c, v in byc.items():
-    v.sort(key=lambda x: x[1])
-    for i, a in enumerate(v):
-        for b in v[i+1:]:
-            if b[1] > a[2]:
+        lo = bisect.bisect_left(starts, a_[2] - maxlen)
+        hi = bisect.bisect_right(starts, a_[3])
+        iv = sorted((max(b[2], a_[2]), min(b[3], a_[3])) for b in v[lo:hi]
+                    if b[4] != a_[4] and b[3] >= a_[2] and b[2] <= a_[3])
+        pos = a_[2]
+        for s, e in iv:
+            if s > pos:
                 break
-            if a[3] == b[3]:
-                continue          # same gene: not ambiguous
-            n = min(a[2], b[2]) - max(a[1], b[1]) + 1
-            if n <= 0:
-                continue
-            hit.add((a[3], a[4])); hit.add((b[3], b[4]))
-            ov_bp[(a[3], a[4])] += n
-            ov_bp[(b[3], b[4])] += n
+            pos = max(pos, e + 1)
+        if pos > a_[3]:
+            out.append((a_[4], a_[5]))
 
-print("IG bins overlapped by another gene's IG bin: %d (%.1f%%)"
-      % (len(hit), 100.0*len(hit)/len(bins)))
-
-# how much of the overlapped bin's 300 bp is lost
-full = sum(1 for k, n in ov_bp.items() if n >= 300)
-half = sum(1 for k, n in ov_bp.items() if 150 <= n < 300)
-print("  of those, fully covered (>=300bp): %d (%.1f%% of overlapped)" % (full, 100.0*full/len(hit)))
-print("            >=half covered:          %d (%.1f%%)" % (full+half, 100.0*(full+half)/len(hit)))
-
-# per gene: does the gene have at least one clean flank
-g_all = collections.defaultdict(int)
-g_hit = collections.defaultdict(int)
-for c, s, e, g, b in bins:
-    g_all[g] += 1
-    if (g, b) in hit:
-        g_hit[g] += 1
-genes = len(g_all)
-both_clean = sum(1 for g in g_all if g_hit[g] == 0)
-one_clean  = sum(1 for g in g_all if g_hit[g] == 1)
-none_clean = sum(1 for g in g_all if g_hit[g] == g_all[g])
-print("genes: %d   both flanks clean %d (%.1f%%)   one flank hit %d (%.1f%%)   both hit %d (%.1f%%)"
-      % (genes, both_clean, 100.0*both_clean/genes, one_clean, 100.0*one_clean/genes,
-         none_clean, 100.0*none_clean/genes))
+with open(a.out, "w") as fh:
+    fh.write("gene\tbin_id\n")
+    for g, b in sorted(set(out)):
+        fh.write("%s\t%s\n" % (g, b))
+print("flank bins: %d   unmeasurable: %d" % (sum(1 for r in rows if is_flank(r[5])), len(set(out))))
