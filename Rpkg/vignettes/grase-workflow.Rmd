@@ -32,7 +32,7 @@ The complete workflow has six stages, each driven by a command-line Rscript:
 |-------|--------|---------|
 | 0 | `scripts/createfiles.sh` (shell) | Prepare per-gene GTF, DEXSeq GFF, and splicing graphs |
 | 1 | `bubble_path_split.R` | Enumerate alternative path groups per bubble |
-| 2 | `filterTerminal.R` | Separate internal AS events from alternative TSS/TTS events |
+| 2 | `filterTerminal.R` | Separate internal events from terminal events |
 | 3 | `exoncnt.R` | Aggregate DEXSeq read counts onto the split exonic parts |
 | 4 | `exontest.R` | Test for differential exon usage and annotate results |
 
@@ -258,14 +258,14 @@ node. The row number of this file is the `event` id used by every later stage.
 
 ---
 
-## Stage 2. Filter by event type (internal vs. TSS/TTS)
+## Stage 2. Filter by event class (internal vs. terminal)
 
 Each graph carries two terminal nodes, named in transcription order rather than genomic
 order: the root `R`, where transcription starts, and the leaf `L`, where it ends. (They
 are not "left" and "right" on the chromosome -- for a minus-strand gene `R` has the
-higher coordinate.) Bubbles that begin at `R` or end at `L` correspond to alternative
-transcription start/termination sites (TSS/TTS) rather than internal alternative
-splicing. Stage 2 separates each gene's split file into two subsets:
+higher coordinate.) Bubbles that begin at `R` or end at `L` are terminal events: they
+correspond to alternative transcription start or end sites rather than internal
+alternative splicing. Stage 2 separates each gene's split file into two subsets:
 
 - **internal**  -  bubbles entirely within the gene body
 - **terminal**  -  bubbles that touch the start or end of the gene
@@ -300,12 +300,12 @@ Rscript scripts/exoncnt.R \
     -i ${WD}/bipartition.filtered \
     -o ${WD}/bipartition.ex.internal.counts
 
-# bipartition  -  alternative TSS/TTS
+# bipartition  -  terminal
 Rscript scripts/exoncnt.R \
     -c ${WD}/DEXSeq/count_files \
     -t bipartition \
     --cond1=group1 --cond2=group2 \
-    -a TSS \
+    -a terminal \
     -i ${WD}/bipartition.filtered \
     -o ${WD}/bipartition.ex.terminal.counts
 ```
@@ -322,7 +322,7 @@ substituting the appropriate `-t`, `-i`, and `-o` values.
 | `-t` / `--type` | Split type; use `bipartition` |
 | `--cond1`, `--cond2` | Condition labels matching the count subdirectory names |
 | `--conditions` | Comma-separated list of all conditions for a multi-group run, e.g. `CD4,CD8,NK,B`. Overrides `--cond1`/`--cond2`. |
-| `-a` / `--alt` | Event category: `internal` or `TSS` (alias for terminal) |
+| `-a` / `--alt` | Event class: `internal` or `terminal` |
 | `-i` / `--input_path` | Directory of filtered split files from Stage 2 |
 | `-o` / `--output_path` | Directory for per-gene count output files |
 
@@ -705,7 +705,7 @@ Rscript scripts/bubble_path_split.R \
     --outdir=${WD}/bipartition \
     --split=bipartition &> bipartition.log
 
-# Stage 2: separate internal from TSS/TTS events
+# Stage 2: separate internal from terminal events
 Rscript scripts/filterTerminal.R \
     --split_dir=${WD}/bipartition \
     --outdir=${WD}/bipartition.filtered \

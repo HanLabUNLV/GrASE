@@ -15,7 +15,7 @@ transcript paths are divided into two groups chosen so that each side has a
 well-defined distinct set of exonic parts, analogous to PSI-based tests but
 without a fixed event taxonomy. 
 
-**Filtering by event class.** Each graph carries two terminal nodes in transcription order: the root `R`, where transcription starts, and the leaf `L`, where it ends. Bubbles that begin at `R` or end at `L` are classified as alternative TSS/TTS events; all others are internal alternative splicing events. Both categories are tested independently.
+**Filtering by event class.** Each graph carries two terminal nodes in transcription order: the root `R`, where transcription starts, and the leaf `L`, where it ends. Bubbles that begin at `R` or end at `L` are classified as terminal events (alternative transcription start or end sites); all others are internal events. Both categories are tested independently.
 
 **Statistical models.** Differential path usage is tested with a beta-binomial model (via glmmTMB), with the per-test overdispersion (phi) regularised by Empirical Bayes shrinkage. Two variants are recommended and differ only in how the moderated phi is obtained: `betabinom_EBapprox` (closed form) and `betabinom_EBmap` (MAP).
 
@@ -168,7 +168,7 @@ Rscript Rpkg/scripts/exoncnt.R \
     -o ${WD}/bipartition.ex.internal.counts
 ```
 
-This also writes the combined master file `bipartition.ex.internal.cnt.combined.txt` into the output directory, which Stage 3 reads. For TSS/TTS events use `-a terminal` (output `bipartition.ex.terminal.cnt.combined.txt`). For more than two groups, pass `--conditions=A,B,C` instead of `--cond1/--cond2`.
+This also writes the combined master file `bipartition.ex.internal.cnt.combined.txt` into the output directory, which Stage 3 reads. For terminal events use `-a terminal` (output `bipartition.ex.terminal.cnt.combined.txt`). For more than two groups, pass `--conditions=A,B,C` instead of `--cond1/--cond2`.
 
 ### Stage 2b. Substitute junction counts where a distinct set is empty (optional)
 
@@ -367,7 +367,7 @@ mapped onto it at all, and *significant* is a call, so a part that is
 DEXSeq-significant but rMATS-tested-and-not-called is a real disagreement,
 whereas one that is not rMATS-detected is simply outside its reach.
 
-See the vignette for the full option reference, TSS/TTS events, worked figure examples, and comparison with rMATS/Saturn.
+See the vignette for the full option reference, terminal events, worked figure examples, and comparison with rMATS/Saturn.
 
 ## Building the annotation files from scratch (optional)
 
@@ -444,7 +444,7 @@ either output or a `.running` file is skipped, so an interrupted run can be
 restarted in the same directory (delete the `.running` files of killed workers
 first).
 
-### C. Separate internal AS events from alternative TSS/TTS
+### C. Separate internal events from terminal events
 
 ```bash
 Rscript Rpkg/scripts/filterTerminal.R \
