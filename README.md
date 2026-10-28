@@ -42,7 +42,7 @@ Python packages (only for the bundled DEXSeq helpers):
 * htseq   (0.13.5)
 
 Optional:
-* STAR  (2.7.10b)  alignment, and the `SJ.out.tab` files Stage 3b reads
+* STAR  (2.7.10b)  alignment, and the `SJ.out.tab` files Stage 2b reads
 * rMATS (4.1.1)    only for the rMATS comparison scripts
 
 ## Installation
@@ -63,27 +63,15 @@ helpers. The commands below are written to run from the clone root.
 
 The full workflow is documented in the package vignette (`vignette("grase-workflow", package = "grase")`). This section gives a concise end-to-end example using the recommended bipartition split and `betabinom_EBapprox` model.
 
-### Already have graphs and splits?
+### Stage 0. Prepare input files
 
-Stages 0 to 2 depend only on the annotation, not on your samples, so they are
-done once per annotation version. For human GENCODE v28 and v34 you do not need
-to run them at all: the splicing graphs, bipartitions, per-gene GTFs and DEXSeq
-GFFs are deposited at
-[doi:10.5281/zenodo.23141907](https://doi.org/10.5281/zenodo.23141907).
-
-| File | Contents |
-|------|----------|
-| `graphml.v28.tgz`, `graphml.v34.tgz` | per-gene splicing graphs |
-| `bipartitions_gencode_v{28,34}_{internal,terminal}.tsv.gz` | the enumerated bipartitions |
-| `dexseq.gff` | flattened exonic-part annotation, per version |
-| `gtf` | per-gene GTFs, per version |
-
-If you already have `graphml/` and the split files under
-`bipartition.filtered/`, whether you built them or downloaded them, the only
-thing still needed before testing is **exon quantification against the same
-DEXSeq GFF the graphs were built from**. Counts made against a different
-annotation will not join: the exonic part numbers (`E001`, `E002`, ...) are assigned by
-`dexseq_prepare_annotation.py` and are meaningful only relative to that GFF.
+GrASE starts from **coordinate-sorted BAM files**, one per sample, under
+`${WD}/bam/<condition>/`. Align however you prefer; the published results used
+two-pass STAR, and the alignment scripts are in the
+[GrASE_simulation](https://github.com/HanLabUNLV/GrASE_simulation) repository
+(`STAR/`). If you plan to run Stage 2b, keep STAR's `SJ.out.tab` files too.
+Align against the same GENCODE release you will take the annotation files from
+in Stage 1.
 
 Every command below writes `${WD}` for the project directory, so set it once:
 
@@ -91,72 +79,45 @@ Every command below writes `${WD}` for the project directory, so set it once:
 WD=/path/to/project
 ```
 
+### Stage 1. Download the annotation files and count reads
+
+The splicing graphs, per-gene GTFs, per-gene DEXSeq GFFs and filtered
+bipartitions depend only on the annotation, not on your samples. For human
+GENCODE v28 and v34 they are deposited at
+[doi:10.5281/zenodo.23141907](https://doi.org/10.5281/zenodo.23141907). For any
+other annotation, build them as described in
+[Building the annotation files from scratch](#building-the-annotation-files-from-scratch-optional).
+
+| File | Unpacks to | Contents |
+|------|------------|----------|
+| `graphml.v{28,34}.tgz` | `graphml.v{28,34}/` | per-gene splicing graphs |
+| `gtf.gencode.v{28,34}.tgz` | `gtf/` | per-gene GTFs |
+| `dexseq.gff.gencode.v{28,34}.tgz` | `dexseq.gff/` | per-gene DEXSeq GFFs (flattened exonic parts) |
+| `bipartition.v{28,34}.filtered.tgz` | `bipartition.filtered/` | bipartitions, one file per gene and event class (`<gene>.bipartition.internal.txt`, `<gene>.bipartition.terminal.txt`) |
+
+```bash
+V=34    # or 28
+Z=https://zenodo.org/records/23141907/files
+mkdir -p ${WD}/ref
+for f in graphml.v${V}.tgz gtf.gencode.v${V}.tgz dexseq.gff.gencode.v${V}.tgz \
+         bipartition.v${V}.filtered.tgz; do
+    curl -L -o ${WD}/$f "$Z/$f?download=1"
+    tar xzf ${WD}/$f -C ${WD}
+done
+mv ${WD}/graphml.v${V} ${WD}/graphml
+
+# Concatenate the per-gene GFFs into the single GFF the counter reads.
+cat ${WD}/dexseq.gff/*.dexseq.gff > ${WD}/ref/gencode.dexseq.bygene.gff
+```
+
+Count reads **against this GFF**, the one the graphs were built from. Counts
+made against a different annotation will not join: the exonic part numbers
+(`E001`, `E002`, ...) are assigned by `dexseq_prepare_annotation.py` and are
+meaningful only relative to that GFF.
+
 ```bash
 # Resolve the bundled counter.
 DEXSEQ_COUNT=$(Rscript -e 'cat(system.file("python","dexseq_count.py",package="grase"))')
-
-# Count every sample against the SAME GFF used to build the graphs.
-for cond in group1 group2; do
-    mkdir -p ${WD}/DEXSeq/count_files/${cond}
-    for bam in ${WD}/bam/${cond}/*.bam; do
-        s=$(basename "${bam%.bam}")
-        python $DEXSEQ_COUNT --format bam --order pos \
-            --paired yes --stranded reverse -a 10 \
-            ${WD}/ref/gencode.dexseq.bygene.gff "$bam" \
-            ${WD}/DEXSeq/count_files/${cond}/${s}_counts.txt
-    done
-done
-```
-
-Then go straight to Stage 3. Two checks before you do:
-
-- A count file and the GFF should agree on the number of bins for a gene.
-  `grep -c "^ENSG00000000003" <sample>_counts.txt` against the `exonic_part`
-  lines for that gene in the GFF. A mismatch means the annotations differ.
-- Condition subdirectory names must match what you pass to `--cond1`/`--cond2`
-  or `--conditions`; `exoncnt.R` finds samples by those directory names.
-
-Starting instead from BAMs and an annotation, begin at Stage 0.
-
-### Stage 0. Prepare input files
-
-GrASE starts from **coordinate-sorted BAM files**, one per sample, under
-`${WD}/bam/<condition>/`. Align however you prefer; the published results used
-two-pass STAR, and the alignment scripts are in the
-[GrASE_simulation](https://github.com/HanLabUNLV/GrASE_simulation) repository
-(`STAR/`). If you plan to run Stage 3b, keep STAR's `SJ.out.tab` files too.
-
-Split the genome GTF by gene, build per-gene DEXSeq GFF files, count reads, and
-generate the splicing graphs:
-
-```bash
-mkdir -p ${WD}/{ref,gtf,dexseq.gff,graphml}
-
-# Split full GTF into per-gene files
-awk -v outdir="${WD}/gtf" '{
-    if (match($0, /gene_id "[^"]+"/)) {
-        id = substr($0, RSTART+9, RLENGTH-10);
-        print >> outdir "/" id ".gtf"
-    }
-}' ${WD}/ref/gencode.annotation.gtf
-
-# Gene list: one Ensembl ID per line, read by generate_graphs.R
-ls ${WD}/gtf | sed 's/\.gtf$//' > ${WD}/ref/genelist
-
-# Both DEXSeq helper scripts ship with grase; resolve them once.
-DEXSEQ_PREP=$(Rscript -e 'cat(system.file("python","dexseq_prepare_annotation.py",package="grase"))')
-DEXSEQ_COUNT=$(Rscript -e 'cat(system.file("python","dexseq_count.py",package="grase"))')
-
-# Build per-gene DEXSeq GFF files
-cat ${WD}/ref/genelist | \
-    parallel -j 8 -I {} "python $DEXSEQ_PREP \
-        ${WD}/gtf/{}.gtf ${WD}/dexseq.gff/{}.dexseq.gff"
-
-# Concatenate them into the single GFF the counter reads. Build it this way,
-# NOT by running dexseq_prepare_annotation.py on the whole genome GTF: a
-# genome-wide run merges overlapping genes into ENSG1+ENSG2 groups and
-# renumbers their parts, so the counts would no longer join to the graphs.
-cat ${WD}/dexseq.gff/*.dexseq.gff > ${WD}/ref/gencode.dexseq.bygene.gff
 
 # Count reads on exonic parts, one file per sample, grouped by condition.
 # Flags are protocol-specific and fail silently if wrong: --paired no for
@@ -171,59 +132,31 @@ for cond in group1 group2; do
             ${WD}/DEXSeq/count_files/${cond}/${s}_counts.txt
     done
 done
-
-# Build igraph splicing graphs from GTF + DEXSeq GFF
-Rscript Rpkg/scripts/generate_graphs.R --indir ${WD}
 ```
 
-Expected input layout:
+Two checks before Stage 2:
+
+- A count file and the GFF should agree on the number of bins for a gene.
+  `grep -c "^ENSG00000000003" <sample>_counts.txt` against the `exonic_part`
+  lines for that gene in the GFF. A mismatch means the annotations differ.
+- Condition subdirectory names must match what you pass to `--cond1`/`--cond2`
+  or `--conditions`; `exoncnt.R` finds samples by those directory names.
+
+Expected layout after Stage 1:
 
 ```
 <project>/
 |-- ref/genelist  gene IDs to build graphs for (one per line)
 |-- gtf/          ENSG*.gtf          (one per gene)
 |-- dexseq.gff/   ENSG*.dexseq.gff
-|-- graphml/      ENSG*.graphml      (produced by generate_graphs.R)
+|-- graphml/      ENSG*.graphml
+|-- bipartition.filtered/  ENSG*.bipartition.{internal,terminal}.txt
 `-- DEXSeq/count_files/
     |-- group1/   sample*_counts.txt
     `-- group2/   sample*_counts.txt
 ```
 
-### Stage 1. Enumerate alternative path splits
-
-```bash
-Rscript Rpkg/scripts/bubble_path_split.R \
-    --graphdir=${WD}/graphml \
-    --outdir=${WD}/bipartition \
-    --split=bipartition
-```
-
-`--split` also accepts `multinomial` and `n_choose_2`. Those exist only to reproduce the benchmark for the publication; they are not recommendeded for an analysis. `--mc_cores` sets the number of genes processed in parallel.
-
-Each gene gets two files. `<gene>.bipartition.all.txt` lists every bipartition
-enumerated. `<gene>.bipartition.txt`, which later stages read, keeps one
-bipartition per pair of distinct sets (`setdiff1`, `setdiff2`): the one whose
-reference parts are closest to the distinct parts, then the one with the fewest
-reference parts (counting `R` and `L` as reference parts), then an internal
-bipartition over one that starts at `R` or ends at `L`. A skipped exon is
-therefore tested between its flanking exons rather than inside a larger bubble
-anchored at a terminal node.
-
-A gene being processed has a `<gene>.running` file in `--outdir`; a gene with
-either output or a `.running` file is skipped, so an interrupted run can be
-restarted in the same directory (delete the `.running` files of killed workers
-first).
-
-### Stage 2. Separate internal AS events from alternative TSS/TTS
-
-```bash
-Rscript Rpkg/scripts/filterTerminal.R \
-    --split_dir=${WD}/bipartition \
-    --outdir=${WD}/bipartition.filtered \
-    --split_type=bipartition
-```
-
-### Stage 3. Aggregate DEXSeq read counts onto split exonic parts
+### Stage 2. Aggregate DEXSeq read counts onto split exonic parts
 
 ```bash
 Rscript Rpkg/scripts/exoncnt.R \
@@ -235,9 +168,9 @@ Rscript Rpkg/scripts/exoncnt.R \
     -o ${WD}/bipartition.ex.internal.counts
 ```
 
-This also writes the combined master file `bipartition.ex.internal.cnt.combined.txt` into the output directory, which Stage 4 reads. For TSS/TTS events use `-a terminal` (output `bipartition.ex.terminal.cnt.combined.txt`). For more than two groups, pass `--conditions=A,B,C` instead of `--cond1/--cond2`.
+This also writes the combined master file `bipartition.ex.internal.cnt.combined.txt` into the output directory, which Stage 3 reads. For TSS/TTS events use `-a terminal` (output `bipartition.ex.terminal.cnt.combined.txt`). For more than two groups, pass `--conditions=A,B,C` instead of `--cond1/--cond2`.
 
-### Stage 3b. Substitute junction counts where a distinct set is empty (optional)
+### Stage 2b. Substitute junction counts where a distinct set is empty (optional)
 
 Some bipartitions have no exonic part exclusive to one side, so that side cannot
 be tested on exonic coverage. For those sides only, the distinct set becomes the
@@ -266,8 +199,8 @@ they need separate `--output` directories. Start each output directory empty:
 `bipartition_sjcnt.R` skips genes that already have output, and
 `merge_exon_sj_counts.R` does not clear old files.
 
-The merge writes only per-gene files. Before Stage 4, combine them and link the
-per-gene bipartition files from the exonic directory, then point Stage 4 at the
+The merge writes only per-gene files. Before Stage 3, combine them and link the
+per-gene bipartition files from the exonic directory, then point Stage 3 at the
 merged directory with `--file=bipartition.exsj.internal.cnt.combined.txt`:
 
 ```bash
@@ -281,7 +214,7 @@ done
 `combine_exoncnt.py` matches columns by name, because the per-gene merged files
 do not all list their columns in the same order.
 
-### Stage 4. Test for differential exon usage
+### Stage 3. Test for differential exon usage
 
 ```bash
 Rscript Rpkg/scripts/exontest.R \
@@ -296,7 +229,7 @@ Rscript Rpkg/scripts/exontest.R \
     --cond1=group1 --cond2=group2
 ```
 
-`--phi` names a file inside `--outdir`. If it does not exist, phi is estimated and written there; if it does, it is reused, so use a fresh name (or outdir) whenever the counts or the bipartitions change (`event` is the row number in the per-gene bipartition file, so a new Stage 1 or Stage 2 renumbers events). `--gff_dir` is optional and adds length-normalized (per-base) pi columns to the annotated output.
+`--phi` names a file inside `--outdir`. If it does not exist, phi is estimated and written there; if it does, it is reused, so use a fresh name (or outdir) whenever the counts or the bipartitions change (`event` is the row number in the per-gene bipartition file, so rebuilt bipartitions renumber events). `--gff_dir` is optional and adds length-normalized (per-base) pi columns to the annotated output.
 
 Recommended models:
 
@@ -397,15 +330,18 @@ use no ground truth, so they run on any dataset.
 with DEXSeq or satuRn rather than each against GrASE. This is the capability
 introduced in the first GrASE paper ([Aquino et al. 2025](https://doi.org/10.1093/bib/bbaf204)),
 carried forward here: neither tool has a unit the other shares, so the graph
-supplies the correspondence by mapping each rMATS event onto the exonic parts it
-covers.
+supplies the correspondence. Each rMATS event is matched to the bipartition
+whose two sides hold the event's two forms (inclusion and skipping, long and
+short, retained and spliced), and through it to that bipartition's exonic parts.
+rMATS builds an event from junctions that need not lie on one transcript; an
+event whose junctions no bipartition separates is left unmatched.
 
 ```bash
-# Step 1: map rMATS events onto exonic parts through the graph.
-# Also reads ${WD}/graphml/ and ${WD}/dexseq.gff/, which are not options.
-Rscript Rpkg/scripts/map_rmats_splits.R \
-    --indir ${WD} --type bipartition \
-    --splitdir ${WD}/bipartition.ex.internal.counts \
+# Step 1: match each rMATS event to the bipartition holding its two forms,
+# then list each exonic part's matched events.
+Rscript Rpkg/scripts/map_rmats_bipartitions.R \
+    --graphdir ${WD}/graphml \
+    --splitdir ${WD}/bipartition.filtered --class internal \
     --rmatsdir ${WD}/rMATS/rmats_post_group1_group2/ \
     --outdir ${WD}/map_rmats/results.bipartition
 
@@ -432,3 +368,77 @@ DEXSeq-significant but rMATS-tested-and-not-called is a real disagreement,
 whereas one that is not rMATS-detected is simply outside its reach.
 
 See the vignette for the full option reference, TSS/TTS events, worked figure examples, and comparison with rMATS/Saturn.
+
+## Building the annotation files from scratch (optional)
+
+Only needed for an annotation other than the deposited GENCODE v28 and v34.
+These steps replace the downloads in Stage 1; counting is the same. Use one
+annotation GTF throughout, and the one the reads were aligned against.
+
+### A. Per-gene GTFs, DEXSeq GFFs and splicing graphs
+
+```bash
+mkdir -p ${WD}/{ref,gtf,dexseq.gff,graphml}
+
+# Split full GTF into per-gene files
+awk -v outdir="${WD}/gtf" '{
+    if (match($0, /gene_id "[^"]+"/)) {
+        id = substr($0, RSTART+9, RLENGTH-10);
+        print >> outdir "/" id ".gtf"
+    }
+}' ${WD}/ref/gencode.annotation.gtf
+
+# Gene list: one Ensembl ID per line, read by generate_graphs.R
+ls ${WD}/gtf | sed 's/\.gtf$//' > ${WD}/ref/genelist
+
+# The DEXSeq annotation helper ships with grase.
+DEXSEQ_PREP=$(Rscript -e 'cat(system.file("python","dexseq_prepare_annotation.py",package="grase"))')
+
+# Build per-gene DEXSeq GFF files
+cat ${WD}/ref/genelist | \
+    parallel -j 8 -I {} "python $DEXSEQ_PREP \
+        ${WD}/gtf/{}.gtf ${WD}/dexseq.gff/{}.dexseq.gff"
+
+# Concatenate them into the single GFF the counter reads. Build it this way,
+# NOT by running dexseq_prepare_annotation.py on the whole genome GTF: a
+# genome-wide run merges overlapping genes into ENSG1+ENSG2 groups and
+# renumbers their parts, so the counts would no longer join to the graphs.
+cat ${WD}/dexseq.gff/*.dexseq.gff > ${WD}/ref/gencode.dexseq.bygene.gff
+
+# Build igraph splicing graphs from GTF + DEXSeq GFF
+Rscript Rpkg/scripts/generate_graphs.R --indir ${WD}
+```
+
+### B. Enumerate alternative path splits
+
+```bash
+Rscript Rpkg/scripts/bubble_path_split.R \
+    --graphdir=${WD}/graphml \
+    --outdir=${WD}/bipartition \
+    --split=bipartition
+```
+
+`--split` also accepts `multinomial` and `n_choose_2`. Those exist only to reproduce the benchmark for the publication; they are not recommendeded for an analysis. `--mc_cores` sets the number of genes processed in parallel.
+
+Each gene gets two files. `<gene>.bipartition.all.txt` lists every bipartition
+enumerated. `<gene>.bipartition.txt`, which later stages read, keeps one
+bipartition per pair of distinct sets (`setdiff1`, `setdiff2`): the one whose
+reference parts are closest to the distinct parts, then the one with the fewest
+reference parts (counting `R` and `L` as reference parts), then an internal
+bipartition over one that starts at `R` or ends at `L`. A skipped exon is
+therefore tested between its flanking exons rather than inside a larger bubble
+anchored at a terminal node.
+
+A gene being processed has a `<gene>.running` file in `--outdir`; a gene with
+either output or a `.running` file is skipped, so an interrupted run can be
+restarted in the same directory (delete the `.running` files of killed workers
+first).
+
+### C. Separate internal AS events from alternative TSS/TTS
+
+```bash
+Rscript Rpkg/scripts/filterTerminal.R \
+    --split_dir=${WD}/bipartition \
+    --outdir=${WD}/bipartition.filtered \
+    --split_type=bipartition
+```

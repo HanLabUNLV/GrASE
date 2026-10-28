@@ -60,6 +60,7 @@ if (length(args) < 3) {
 graphml_dir <- args[1]
 rmats_dir   <- args[2]
 out_dir     <- args[3]
+if (!dir.exists(graphml_dir)) stop("graphml_dir not found: ", graphml_dir, call. = FALSE)
 if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
 
 # per-gene and per-event mapping 
@@ -104,6 +105,8 @@ for (gene in all_genes) {
 }
 cat(sprintf("  Precomputed %d genes (%.1f%%)\n",
             n_loaded, 100 * n_loaded / length(all_genes)))
+if (n_loaded == 0L)
+  stop("no <gene>.graphml for any rMATS gene under ", graphml_dir, call. = FALSE)
 
 # map each event type 
 

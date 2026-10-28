@@ -622,22 +622,19 @@ Rscript scripts/compare_saturn_grase.R \
 
 ### Compare with rMATS
 
-`map_rmats_splits.R` reads more than its options suggest. Besides `--splitdir`
-and `--rmatsdir` it looks under `--indir` for **both** `graphml/<gene>.graphml`
-and `dexseq.gff/<gene>.dexseq.gff`, one per gene. Neither path is an option, and
-a missing GFF produces a "cannot open file" warning per gene rather than an
-error, so the run appears to finish while mapping nothing. If your graphs live
-in a directory named for the annotation version, point `--indir` at a directory
-that holds `graphml/` and `dexseq.gff/` under exactly those names. `--indir`
-supplies only those inputs; `--outdir` says where the mapping goes, and omitting
-it falls back to `<indir>/map_rmats/results.<type>`.
+`map_rmats_bipartitions.R` matches each rMATS event to the bipartition whose
+two sides hold the event's two forms (inclusion and skipping, long and short,
+retained and spliced), read from the splicing graph. `--splitdir` with
+`--class` names the per-gene bipartition files the tests were run on, so the
+matched `bipartID` is the `event` of the test output. rMATS builds an event
+from junctions that need not lie on one transcript; an event whose junctions
+no bipartition separates is left unmatched (`bipartID` NA).
 
 ```bash
 # Step 1: map rMATS events to GrASE bipartitions
-Rscript scripts/map_rmats_splits.R \
-    --indir ${WD}/ \
-    --type bipartition \
-    --splitdir ${WD}/bipartition.ex.internal.counts \
+Rscript scripts/map_rmats_bipartitions.R \
+    --graphdir ${WD}/graphml \
+    --splitdir ${WD}/bipartition.filtered --class internal \
     --rmatsdir ${WD}/rMATS/rmats_post_group1_group2/ \
     --outdir ${WD}/map_rmats/results.bipartition
 
@@ -657,7 +654,7 @@ against GrASE. This is the capability introduced in the first GrASE paper
 shares, so the splicing graph supplies the correspondence, mapping each rMATS
 event onto the exonic parts it covers.
 
-It reads the same mapping `map_rmats_splits.R` produced for the comparison
+It reads the same mapping `map_rmats_bipartitions.R` produced for the comparison
 above, so run that first and point `--map_dir` at its output.
 
 ```bash

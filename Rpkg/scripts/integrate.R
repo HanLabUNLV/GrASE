@@ -1,7 +1,7 @@
 # Description:
 # It integrates and compares alternative splicing analysis results from rMATS and DEXSeq.
-# Run after scripts/map_rmats_splits.R, which writes the mapping files this
-# reads; point --map_dir at its output, <indir>/map_rmats/results.<type>/.
+# Run after scripts/map_rmats_bipartitions.R, which writes the mapping files
+# this reads; point --map_dir at its --outdir.
 #
 # Vocabulary:
 #   rMATS - (fromGTF)
@@ -60,8 +60,8 @@ get_results_files <- function(map_dir, out_dir, rmats_directory, dexseq_results)
   results$RI_JCEC <- JCEC %>% mutate(ID = paste("RI", ID, sep = "_"))
   
   results$output_dir <- fs::path(out_dir)
-  ## The mapping files are read from where map_rmats_splits.R writes them,
-  ## <indir>/map_rmats/results.<type>/, which is the same directory
+  ## The mapping files are read from map_rmats_bipartitions.R's --outdir,
+  ## which is the same directory
   ## compare_rmats_grase.R takes as --map_dir. There is no tmp/ level.
   grase_results_tmp <- fs::path_abs(map_dir)
   
@@ -390,8 +390,7 @@ if (sys.nframe() == 0L) {
   suppressPackageStartupMessages(library(optparse))
   opt <- parse_args(OptionParser(option_list = list(
     make_option("--map_dir", type = "character",
-                help = paste("mapping directory written by map_rmats_splits.R,",
-                             "e.g. <indir>/map_rmats/results.bipartition")),
+                help = "mapping directory written by map_rmats_bipartitions.R"),
     make_option("--outdir", type = "character",
                 help = "directory for the comparison tables"),
     make_option("--rmats_dir", type = "character",
