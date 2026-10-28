@@ -377,6 +377,16 @@ annotation GTF throughout, and the one the reads were aligned against.
 
 ### A. Per-gene GTFs, DEXSeq GFFs and splicing graphs
 
+`scripts/createfiles.sh` runs every step of this section, and also writes
+`ref/overlapping_genes_to_keep.txt` and `ref/overlapping_genes_to_remove.txt`
+(genes whose exonic parts overlap another gene's; they are still analysed):
+
+```bash
+PY=<python with HTSeq> bash scripts/createfiles.sh ${WD} ${WD}/ref/gencode.annotation.gtf 8
+```
+
+The steps it runs:
+
 ```bash
 mkdir -p ${WD}/{ref,gtf,dexseq.gff,graphml}
 
