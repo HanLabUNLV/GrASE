@@ -36,6 +36,8 @@ R packages:
 * glmmTMB
 * optparse
 * tidyverse
+* MASS and matrixStats (`exontest.R`)
+* data.table (the outward-walk scripts)
 
 Python packages (only for the bundled DEXSeq helpers):
 * python3 (3.11.5)

@@ -1,12 +1,12 @@
 #!/bin/bash
 # Split-read counts on the intronic edges of each bipartition, from the
-# SJ.out.tab files unpacked into sj/ by 16_unpack_star_sj.sh.
-# Usage: bash 50_bipartition_sjcnt.sh [internal|terminal]   (default: both)
+# SJ.out.tab files unpacked into sj/ by 20_unpack_star_sj.sh.
+# Usage: bash 40_bipartition_sjcnt.sh [internal|terminal]   (default: both)
 set -eux
 . "$(dirname "$0")/config.sh"
 for TYPE in ${1:-internal terminal}; do
   case "$TYPE" in
-    internal) OUT=$WD/sjcnt ;;
+    internal) OUT=$WD/sjcnt.internal ;;
     terminal) OUT=$WD/sjcnt.terminal ;;
     *) echo "unknown type: $TYPE" >&2; exit 1 ;;
   esac

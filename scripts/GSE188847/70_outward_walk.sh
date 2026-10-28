@@ -1,6 +1,6 @@
 #!/bin/bash
-# Outward walk on the stage 70 terminal calls (outward_walk.sh).
-# Usage: bash 80_outward_walk.sh [cores]
+# Outward walk on the stage 60 terminal calls (outward_walk.sh).
+# Usage: bash 70_outward_walk.sh [cores]
 # Output: outward_walk/outward_walk_verdict.tsv
 set -eu
 . "$(dirname "$0")/config.sh"
@@ -8,7 +8,7 @@ CORES=${1:-$CORES}
 W=$WD/outward_walk
 RES=$WD/grase_covid_exsj/test_bipartition.exsj.terminal_betabinom_EBmap.annotated.txt
 TCNT=$WD/bipartition.exsj.terminal.counts/bipartition.exsj.terminal.cnt.combined.txt
-[ -s "$RES" ] || { echo "missing $RES -- run 70_exontest.sh" >&2; exit 1; }
+[ -s "$RES" ] || { echo "missing $RES -- run 60_exontest.sh" >&2; exit 1; }
 [ ! -e "$W" ] || { echo "$W already exists; move it aside or delete it first" >&2; exit 1; }
 mkdir -p "$W"
 

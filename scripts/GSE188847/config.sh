@@ -1,6 +1,6 @@
 #!/bin/bash
 # Shared settings for the GSE188847 (COVID-19 brain) drivers. Sourced by every stage.
-# Override any of these from the environment, e.g. PY=/path/to/python bash 15_dexseq_count.sh
+# Override any of these from the environment, e.g. PY=/path/to/python bash 10_dexseq_count.sh
 
 BASE=/home/AD.UNLV.EDU/Shared_Data/AlternativeSplicing/GSE188847_covid19
 STAR_DIR=$BASE/bam_STAR_alignmentsv107          # <GSM>_SJ.out.tab.gz, <GSM>_Aligned...bam.gz

@@ -3,7 +3,7 @@
 # by-gene GFF from stage 00 (the graphs were built from it, so the part numbers
 # join). The BAMs need no index (--order pos reads them sequentially). Writes count_files/<group>/<GSM>_counts.txt; finished samples are skipped.
 # The flags in config.sh are the library's: paired-end, dUTP (--stranded reverse).
-# Usage: bash 15_dexseq_count.sh [n_parallel]
+# Usage: bash 10_dexseq_count.sh [n_parallel]
 set -eu -o pipefail
 . "$(dirname "$0")/config.sh"
 J=${1:-8}

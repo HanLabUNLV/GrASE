@@ -20,15 +20,15 @@ installed and a python that imports HTSeq (`PY=... bash ...`).
 | Script | What it does |
 |---|---|
 | `00_prepare_annotation.sh` | Links the v34 graphs and filtered bipartitions; renames contigs in the per-gene GFFs and builds the counter's GFF |
-| `15_dexseq_count.sh` | DEXSeq exonic-part counts for the 43 samples into `count_files/<group>/` |
-| `16_unpack_star_sj.sh` | STAR junctions into `sj/<group>/` |
+| `10_dexseq_count.sh` | DEXSeq exonic-part counts for the 43 samples into `count_files/<group>/` |
+| `20_unpack_star_sj.sh` | STAR junctions into `sj/<group>/` |
 | `30_exoncnt.sh` | Counts aggregated onto the bipartitions (`exoncnt.R`) |
-| `50_bipartition_sjcnt.sh` | Split-read counts on the intronic edges (`bipartition_sjcnt.R`) |
-| `60_merge_exon_sj.sh` | Junction counts where a distinct set is empty (`merge_exon_sj_counts.R`) |
-| `70_exontest.sh` | Tests the merged counts (`exontest.R`) |
-| `80_outward_walk.sh` | Outward walk on the terminal calls (`outward_walk.sh`) |
+| `40_bipartition_sjcnt.sh` | Split-read counts on the intronic edges (`bipartition_sjcnt.R`) |
+| `50_merge_exon_sj.sh` | Junction counts where a distinct set is empty (`merge_exon_sj_counts.R`) |
+| `60_exontest.sh` | Tests the merged counts (`exontest.R`) |
+| `70_outward_walk.sh` | Outward walk on the terminal calls (`outward_walk.sh`) |
 
-Stages 15 and 16 are independent of each other; both need stage 00.
+Stages 10 and 20 are independent of each other; both need stage 00.
 
 ## Check before running
 
@@ -37,6 +37,6 @@ Stages 15 and 16 are independent of each other; both need stage 00.
   strandedness step (`STAR_script/Step2c_strandedness.sh`) before counting.
 - The BAMs have no `.bai`; none is needed (`--order pos` reads sequentially).
 - `bam_plain/` holds 43 readable BAMs (symlinks or decompressed copies) made by
-  `GrASE/scripts/00_rmats_ctrl_covid_v107.sh prep`; stages 15 and 80 read them.
+  `GrASE/scripts/00_rmats_ctrl_covid_v107.sh prep`; stages 10 and 70 read them.
 - Sample names are `<group>_<GSM>` in both the exonic and junction tables;
   `exoncnt.R` and `bipartition_sjcnt.R` build them from the directory layout.

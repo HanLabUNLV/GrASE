@@ -1,8 +1,8 @@
 #!/bin/bash
 # STAR's SJ.out.tab for every sample into sj/<group>/<GSM>.SJ.out.tab, so junction
 # samples are named <group>_<GSM> like the exonic counts. The STAR files are
-# gzipped here, so they are unpacked rather than linked; read by stage 50.
-# Usage: bash 16_unpack_star_sj.sh
+# gzipped here, so they are unpacked rather than linked; read by stage 40.
+# Usage: bash 20_unpack_star_sj.sh
 set -euo pipefail
 . "$(dirname "$0")/config.sh"
 n=0

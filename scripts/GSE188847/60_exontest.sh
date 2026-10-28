@@ -1,6 +1,6 @@
 #!/bin/bash
 # Test the merged exon+junction counts, COVID19 vs Control.
-# Usage: bash 70_exontest.sh [internal|terminal]   (default: both)
+# Usage: bash 60_exontest.sh [internal|terminal]   (default: both)
 set -eu
 . "$(dirname "$0")/config.sh"
 ARMS=${1:-"internal terminal"}
