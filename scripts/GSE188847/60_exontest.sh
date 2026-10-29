@@ -11,9 +11,9 @@ for A in $ARMS; do
   MDIR=$WD/bipartition.exsj.$A.counts
   ADIR=$WD/bipartition.ex.$A.counts
   COMBINED=bipartition.exsj.${A}.cnt.combined.txt
-  if [ -e "$OUT/phi.merged.${A}.txt" ] || compgen -G "$OUT/test_bipartition.exsj.${A}_*" > /dev/null; then
-    echo "$A results or phi file already in $OUT; move them aside or delete them first" >&2; exit 1
-  fi
+  # existing results are reused: exontest.R skips the fit and only redoes the
+  # annotation. To re-test from scratch, delete $OUT/test_bipartition.exsj.${A}_*
+  # and $OUT/phi.merged.${A}* first.
 
   # combined table, plus the bipartition files linked from the exonic counts
   [ -s "$MDIR/$COMBINED" ] || python3 $R/combine_exoncnt.py "$MDIR" "$MDIR/$COMBINED"
@@ -27,6 +27,7 @@ for A in $ARMS; do
     --outdir="$OUT" \
     --countdir="$MDIR/" \
     --splittype=bipartition \
+    --gff_dir="$WD/dexseq.gff" --dpi_gate=or \
     --phi=phi.merged.${A}.txt \
     --model=betabinom_EBmap --mc_cores="$CORES" \
     --contrasts="$CTR" &> "$OUT/test_${A}.log"
