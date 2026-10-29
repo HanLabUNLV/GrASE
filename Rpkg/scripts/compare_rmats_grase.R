@@ -16,7 +16,9 @@ option_list <- list(
   make_option(c("-m", "--map_dir"), type = "character", 
               help = "Directory containing GrASE-rMATS mapping files [default= %default]", metavar = "character"),
   make_option(c("-o", "--output"), type = "character", 
-              help = "Output file path [default= %default]", metavar = "character")
+              help = "Output file path [default= %default]", metavar = "character"),
+  make_option("--pval", type = "double", default = 0.05,
+              help = "cutoff on the GrASE p.value and the rMATS PValue [default= %default]")
 )
 
 opt_parser <- OptionParser(option_list = option_list)
@@ -174,7 +176,7 @@ if (!eff_col %in% colnames(full_data)) {
 }
 
 # Create classification BEFORE correlations so we can filter
-SIG_CUTOFF <- 0.05
+SIG_CUTOFF <- opt$pval
 full_data <- full_data %>%
   mutate(
     grase_p = get(p_col),

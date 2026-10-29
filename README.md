@@ -328,7 +328,7 @@ plottx(gene, "figs", as.data.frame(SplicingGraphs::sgedges(sg[gene])),
 Two kinds of comparison, both routed through the splicing graph.
 
 **GrASE against one other tool.** `compare_rmats_grase.R` and
-`compare_saturn_grase.R` report concordance and write a discrepancy list. They
+`compare_dexseq_grase.R` report concordance and write a discrepancy list. They
 use no ground truth, so they run on any dataset.
 
 **rMATS against the exon-level tool.** `integrate.R` contrasts rMATS directly

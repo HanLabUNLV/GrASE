@@ -9,14 +9,14 @@
 ##     --rmats_dir <dir with {SE,A3SS,A5SS,RI}.MATS.JCEC.txt> \
 ##     --dexseq <DEXSeq results table> --outdir <dir> [--contrast NAME] [options]
 ##
-## One adjusted-p cutoff (--alpha) for all three tools, and an effect size for each. A part is
-##   DEXSeq  called  padj < alpha and |log2 fold change of exon usage| >= --min_l2fc
+## One adjusted-p cutoff (--pval) for all three tools, and an effect size for each. A part is
+##   DEXSeq  called  padj < pval and |log2 fold change of exon usage| >= --min_l2fc
 ##   GrASE   called  in the distinct sets (setdiff1 and setdiff2) of a bipartition with either side
 ##                   called by grase::is_significant(), the rule behind the `significant` column, with
-##                   alpha as its p-value threshold (--min_dpi, --min_dpi_sj, --min_reads). A
+##                   pval as its p-value threshold (--min_dpi, --min_dpi_sj, --min_reads). A
 ##                   junction-sourced side has no exonic part.
 ##   rMATS   called  in the distinct set of an event matched to a bipartition, with
-##                   FDR < alpha and |IncLevelDifference| >= --min_dpsi
+##                   FDR < pval and |IncLevelDifference| >= --min_dpsi
 ## A part is tested when the tool gave it a p-value: DEXSeq a padj, GrASE a bipartition with a p-value
 ## whose distinct sets hold it, rMATS a matched event whose distinct set holds it.
 ##
@@ -37,7 +37,7 @@ o <- parse_args(OptionParser(option_list = list(
   make_option("--contrast",  type = "character", default = NULL, help = "keep only this contrast of the GrASE results"),
   make_option("--lfc_col",   type = "character", default = NULL, help = "DEXSeq fold change column [first log2fold_*]"),
   make_option("--etypes",    type = "character", default = "SE,A3SS,A5SS,RI", help = "rMATS event types [%default]"),
-  make_option("--alpha",     type = "double", default = 0.05, help = "adjusted p cutoff for all three tools [%default]"),
+  make_option("--pval",      type = "double", default = 0.05, help = "adjusted p cutoff for all three tools [%default]"),
   make_option("--min_dpsi",  type = "double", default = 0.1,  help = "rMATS |IncLevelDifference| [%default]"),
   make_option("--min_l2fc",  type = "double", default = 0.5,  help = "DEXSeq |log2 fold change| [%default]"),
   make_option("--min_dpi",   type = "double", default = 0.1,  help = "GrASE |delta_pi| [%default]"),
@@ -48,7 +48,7 @@ for (r in c("grase", "map_dirs", "rmats_dir", "dexseq", "outdir"))
   if (is.null(o[[r]])) stop("--", r, " is required", call. = FALSE)
 split <- function(x) trimws(strsplit(x, ",")[[1]])
 dir.create(o$outdir, showWarnings = FALSE, recursive = TRUE)
-cat(sprintf("alpha %g | rMATS |dPSI| >= %g | DEXSeq |log2FC| >= %g | GrASE reads >= %g\n", o$alpha, o$min_dpsi, o$min_l2fc, o$min_reads))
+cat(sprintf("pval %g | rMATS |dPSI| >= %g | DEXSeq |log2FC| >= %g | GrASE reads >= %g\n", o$pval, o$min_dpsi, o$min_l2fc, o$min_reads))
 
 ## DEXSeq: the universe of exonic parts
 hd <- names(fread(o$dexseq, nrows = 0))
@@ -58,7 +58,7 @@ d <- fread(o$dexseq, select = c("groupID", "featureID", "padj", lfc), colClasses
 setnames(d, c("groupID", "featureID", lfc), c("gene", "part", "l2fc"))
 d[, gene := gsub('"', "", gene)]
 cat(sprintf("DEXSeq groups merging genes: %d\n", uniqueN(grep("+", d$gene, fixed = TRUE, value = TRUE))))
-d[, `:=`(dex_tested = !is.na(padj), dex_called = !is.na(padj) & padj < o$alpha & !is.na(l2fc) & abs(l2fc) >= o$min_l2fc)]
+d[, `:=`(dex_tested = !is.na(padj), dex_called = !is.na(padj) & padj < o$pval & !is.na(l2fc) & abs(l2fc) >= o$min_l2fc)]
 P <- d[, .(gene, part, dex_tested, dex_called)]
 
 
@@ -76,7 +76,7 @@ for (k in seq_along(gfiles)) {
   g <- fread(gfiles[k], colClasses = list(character = c("gene", "setdiff1", "setdiff2")))
   if (!is.null(o$contrast)) g <- g[contrast == o$contrast]
   if (!nrow(g)) stop("no rows for --contrast ", o$contrast, "; the file has: ", paste(unique(fread(gfiles[k], select = "contrast")$contrast), collapse = " "))
-  g[, call := is_significant(g, o$alpha, 0, o$min_dpi, o$min_dpi_sj, o$min_reads)]
+  g[, call := is_significant(g, o$pval, 0, o$min_dpi, o$min_dpi_sj, o$min_reads)]
   g <- g[!is.na(padj)]
   gp <- rbind(g[, .(gene, event, contrast, call, part = setdiff1)], g[, .(gene, event, contrast, call, part = setdiff2)])
   gp <- gp[!is.na(part) & part != "NA" & nzchar(part)]
@@ -98,7 +98,7 @@ for (k in seq_along(gfiles)) {
     merge(mp, m[, .(tag, FDR, IncLevelDifference)], by = "tag")
   }))
   rt <- rt[!is.na(FDR)]
-  rp <- rt[, .(rmats_called = any(FDR < o$alpha & abs(IncLevelDifference) >= o$min_dpsi)), by = .(gene, part)]
+  rp <- rt[, .(rmats_called = any(FDR < o$pval & abs(IncLevelDifference) >= o$min_dpsi)), by = .(gene, part)]
   cat(sprintf("rMATS: %d parts; %d have no DEXSeq row\n", nrow(rp), nrow(fsetdiff(rp[, .(gene, part)], d[, .(gene, part)]))))
   P <- merge(P, rp, by = c("gene", "part"), all.x = TRUE)
   P[, rmats_tested := !is.na(rmats_called)]; P[is.na(rmats_called), rmats_called := FALSE]

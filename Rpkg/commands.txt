@@ -68,19 +68,19 @@ Rscript scripts/exontest.R --file=multinomial.ex.terminal.cnt.combined.txt --out
 
 
 # compare GrASE results with Saturn results
-Rscript scripts/compare_saturn_grase.R \
+Rscript scripts/compare_dexseq_grase.R \
   --grase ${WD}/bipartition.test/test_bipartition.ex.internal_glmmTMB_MAP_prior.annotated.txt \
   --grase2 ${WD}/bipartition.test/test_bipartition.ex.terminal_glmmTMB_MAP_prior.annotated.txt \
   --saturn ${WD}/saturn/saturn_group1_group2/all.group1_group2.sumExp_filteredbyCountMultiExon.txt \
   --output ${WD}/bipartition.test/saturn_grase_glmmTMB_MAP_prior_comparison.txt > saturn_grase_glmmTMB_MAP_prior.log
 
-Rscript scripts/compare_saturn_grase.R \
+Rscript scripts/compare_dexseq_grase.R \
   --grase ${WD}/bipartition.test/test_bipartition.ex.internal_glmmTMB_fixed_EB.annotated.txt \
   --grase2 ${WD}/bipartition.test/test_bipartition.ex.terminal_glmmTMB_fixed_EB.annotated.txt \
   --saturn ${WD}/saturn/saturn_group1_group2/all.group1_group2.sumExp_filteredbyCountMultiExon.txt \
   --output ${WD}/bipartition.test/saturn_grase_glmmTMB_fixed_EB_comparison.txt > saturn_grase_glmmTMB_fixed_EB.log
 
-Rscript scripts/compare_saturn_grase.R \
+Rscript scripts/compare_dexseq_grase.R \
   --grase ${WD}/bipartition.test/test_bipartition.ex.internal_wilcoxon.annotated.txt \
   --grase2 ${WD}/bipartition.test/test_bipartition.ex.terminal_wilcoxon.annotated.txt \
   --saturn ${WD}/saturn/saturn_group1_group2/all.group1_group2.sumExp_filteredbyCountMultiExon.txt \

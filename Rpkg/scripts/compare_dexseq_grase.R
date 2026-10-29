@@ -18,7 +18,9 @@ option_list <- list(
   make_option(c("-s", "--saturn"), type = "character", default = NULL,
               help = "Path to Saturn results file (required)", metavar = "character"),
   make_option(c("-o", "--output"), type = "character", default = "saturn_grase_glmmTMB_fixed_EB.comparison.txt",
-              help = "Output file path [default= %default]", metavar = "character")
+              help = "Output file path [default= %default]", metavar = "character"),
+  make_option("--pval", type = "double", default = 0.05,
+              help = "cutoff on the GrASE p.value and the Saturn pval [default= %default]")
 )
 
 opt_parser <- OptionParser(option_list = option_list)
@@ -131,10 +133,10 @@ stats_summary <- list(
   pearson_effect_size = cor(merged_df$grase_effect_size, merged_df$saturn_estimate, method = "pearson", use = "complete.obs"),
   spearman_effect_size = cor(merged_df$grase_effect_size, merged_df$saturn_estimate, method = "spearman", use = "complete.obs"),
 
-  # Significant counts (p < 0.05)
-  n_sig_grase = sum(merged_df$grase_p.value < 0.05, na.rm = TRUE),
-  n_sig_saturn = sum(merged_df$saturn_pval < 0.05, na.rm = TRUE),
-  n_sig_both = sum(merged_df$grase_p.value < 0.05 & merged_df$saturn_pval < 0.05, na.rm = TRUE)
+  # Significant counts (p < --pval)
+  n_sig_grase = sum(merged_df$grase_p.value < opt$pval, na.rm = TRUE),
+  n_sig_saturn = sum(merged_df$saturn_pval < opt$pval, na.rm = TRUE),
+  n_sig_both = sum(merged_df$grase_p.value < opt$pval & merged_df$saturn_pval < opt$pval, na.rm = TRUE)
 )
 
 print("--- Summary Statistics ---")
