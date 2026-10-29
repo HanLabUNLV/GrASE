@@ -683,19 +683,36 @@ conditions, length-normalized by default.
 
 ## Comparing GrASE results with other tools
 
-GrASE provides scripts to map its results onto rMATS events or satuRn results, for
-direct comparison. Both read the annotated output of Stage 4, so run them after
-testing. The paths below assume `betabinom_EBapprox`; substitute the model name
-you ran.
+GrASE provides scripts to map its results onto rMATS events and onto DEXSeq or
+satuRn exonic parts, for direct comparison. They read the annotated output of
+Stage 4, so run them after testing. The paths below assume `betabinom_EBapprox`;
+substitute the model name you ran.
 
-### Compare with satuRn
+Every comparison script takes `--pval`, one cutoff applied to each tool's
+adjusted p-value: GrASE `padj`, rMATS `FDR`, DEXSeq `padj`, satuRn empirical
+FDR. Pass the same value to all of them. A GrASE test counts as tested when it
+has a `p.value`; its `padj` is NA when its gene was not selected at the gene
+level, which is not a call. When the GrASE results hold several contrasts,
+`--contrast` names the one to compare.
+
+### Compare with DEXSeq or satuRn
+
+`compare_dexseq_grase.R` compares on exonic parts. Each GrASE test is spread over
+the parts of its distinct set, and a part in several tests keeps the one with the
+smallest `padj`. `--exon_results` takes a DEXSeq results table or a satuRn table
+run on DEXSeq exonic parts (detected by the absence of a `pvalue` column; its
+empirical p-values are used).
 
 ```bash
 Rscript scripts/compare_dexseq_grase.R \
     --grase ${WD}/bipartition.internal.test/test_bipartition.ex.internal_betabinom_EBapprox.annotated.txt,${WD}/bipartition.terminal.test/test_bipartition.ex.terminal_betabinom_EBapprox.annotated.txt \
     --exon_results ${WD}/saturn/saturn_group1_group2/all.group1_group2.sumExp_filteredbyCountMultiExon.txt \
+    --pval 0.01 \
     --output ${WD}/bipartition.internal.test/saturn_grase_betabinom_EBapprox_comparison.txt
 ```
+
+It writes one row per part both tools tested, a `.discrepancies.txt` list of the
+parts only one tool called, and a PDF of the p-value and effect-size agreement.
 
 ### Compare with rMATS
 
@@ -720,12 +737,13 @@ Rscript scripts/compare_rmats_grase.R \
     --grase ${WD}/bipartition.internal.test/test_bipartition.ex.internal_betabinom_EBapprox.annotated.txt \
     --rmats_dir ${WD}/rMATS/rmats_post_group1_group2/ \
     --map_dir ${WD}/map_rmats/results.bipartition/ \
+    --pval 0.01 \
     --output ${WD}/bipartition.internal.test/rmats_grase_betabinom_EBapprox_comparison.txt
 ```
 
 ### Compare rMATS against the exon-level tool, through the graph
 
-`integrate.R` contrasts rMATS directly with DEXSeq or satuRn, rather than each
+`compare_rmats_dexseq.R` contrasts rMATS directly with DEXSeq or satuRn, rather than each
 against GrASE. This is the capability introduced in the first GrASE paper
 (Aquino et al. 2025), carried forward here: neither tool has a unit the other
 shares, so the splicing graph supplies the correspondence, mapping each rMATS
@@ -735,11 +753,11 @@ It reads the same mapping `map_rmats_bipartitions.R` produced for the comparison
 above, so run that first and point `--map_dir` at its output.
 
 ```bash
-Rscript scripts/integrate.R \
+Rscript scripts/compare_rmats_dexseq.R \
     --map_dir ${WD}/map_rmats/results.bipartition \
     --outdir  ${WD}/rmats_vs_exon \
     --rmats_dir ${WD}/rMATS/rmats_post_group1_group2/ \
-    --exon_results ${WD}/dexseq/dexseq_results.txt
+    --exon_results ${WD}/dexseq/dexseq_results.txt --pval 0.01
 ```
 
 `--exon_results` takes a DEXSeq results table, or a satuRn table, which is
@@ -760,6 +778,31 @@ The three-way split matters when reading these: *tested* is the tool's universe,
 is a call. A part that is DEXSeq-significant but rMATS-tested-and-not-called is a
 genuine disagreement; one that is DEXSeq-significant and not rMATS-detected is
 outside rMATS's reach, which is a different statement.
+
+### All three tools on exonic parts
+
+`compare_parts_upset.R` translates GrASE, rMATS and DEXSeq calls to exonic parts
+and draws an UpSet plot of which tools call each part, once over all parts and
+once over the parts all three tested. Each tool keeps its own call rule: GrASE
+the `significant` rule, rMATS `FDR` with `|IncLevelDifference| >= --min_dpsi`,
+DEXSeq `padj` with `|log2 fold change| >= --min_l2fc`, all at `--pval`. A GrASE
+bipartition counts as called when either side is, and contributes the parts of both
+distinct sets; a part shared by several bipartitions or events is called if any
+of them is. `--grase` and `--map_dirs` pair one file with one mapping per class,
+and each class gets its own plot.
+
+rMATS parts come from whichever mapping `--map_dirs` names: the matched
+bipartitions (`map_rmats_bipartitions.R`), or the event's own parts from
+`map_rmats_graph.R`, which needs no bipartition and so maps more events.
+
+```bash
+Rscript scripts/map_rmats_graph.R ${WD}/graphml ${WD}/rMATS/rmats_post_group1_group2/ ${WD}/map_rmats/graph
+Rscript scripts/compare_parts_upset.R \
+    --grase ${WD}/bipartition.internal.test/test_bipartition.ex.internal_betabinom_EBapprox.annotated.txt \
+    --map_dirs ${WD}/map_rmats/graph --class internal \
+    --rmats_dir ${WD}/rMATS/rmats_post_group1_group2/ \
+    --dexseq ${WD}/dexseq/dexseq_results.txt --pval 0.01 --outdir ${WD}/upset
+```
 
 ---
 
@@ -831,23 +874,20 @@ changing them (move `outward_walk/` aside first).
 ### Compare with rMATS and DEXSeq
 
 With rMATS (`*.MATS.JCEC.txt`, `fromGTF.*.txt`, here in `rmats_v34/`) and DEXSeq
-(`dexseq_v34/dexseq_results.txt`) run on the same v34 annotation and counts, rMATS events are matched to the v34 bipartitions
-through the graph, then GrASE is compared with rMATS, and rMATS with DEXSeq:
+(`dexseq_v34/dexseq_results.txt`) run on the same v34 annotation and counts, stage 80
+runs every comparison with one adjusted p cutoff (`PVAL`, default 0.01):
 
 ```bash
-for C in internal terminal; do
-  Rscript Rpkg/scripts/map_rmats_bipartitions.R \
-      --graphdir ${WD}/graphml --splitdir ${WD}/bipartition.filtered --class $C \
-      --rmatsdir ${WD}/rmats_v34 --outdir ${WD}/map_rmats/$C
-  Rscript Rpkg/scripts/compare_rmats_grase.R \
-      --grase ${WD}/grase_covid_exsj/test_bipartition.exsj.${C}_betabinom_EBmap.annotated.txt \
-      --rmats_dir ${WD}/rmats_v34 --map_dir ${WD}/map_rmats/$C \
-      --output ${WD}/grase_covid_exsj/rmats_grase_${C}.txt
-  Rscript Rpkg/scripts/integrate.R \
-      --map_dir ${WD}/map_rmats/$C --outdir ${WD}/rmats_vs_dexseq/$C \
-      --rmats_dir ${WD}/rmats_v34 --exon_results ${WD}/dexseq_v34/dexseq_results.txt
-done
+bash 80_comparison.sh               # PVAL=0.05 bash 80_comparison.sh for another cutoff
 ```
+
+Per class it matches rMATS events to the v34 bipartitions (`map.<class>/`) and
+compares GrASE with rMATS (`grase_vs_rmats.<class>.txt`) and rMATS with DEXSeq
+(`rmats_vs_dexseq.<class>/`). It compares GrASE with DEXSeq on exonic parts
+(`grase_vs_dexseq.txt`), maps rMATS events to their own parts (`map.graph/`), and
+draws the three-way UpSet plots twice: with rMATS parts from the matched
+bipartitions (`upset.bipartition/`) and from the graph mapping (`upset.graph/`).
+All output is under `comparison/`.
 
 rMATS and DEXSeq call exon bins or events, GrASE a bipartition, so the comparison is
 the graph-mapped one described above; read the *tested* / *detected* / *significant*

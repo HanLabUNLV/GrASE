@@ -27,7 +27,7 @@ installed and a python that imports HTSeq (`PY=... bash ...`).
 | `50_merge_exon_sj.sh` | Junction counts where a distinct set is empty (`merge_exon_sj_counts.R`) |
 | `60_exontest.sh` | Tests the merged counts (`exontest.R`) |
 | `70_outward_walk.sh` | Outward walk on the terminal calls (`outward_walk.sh --subset_called`) |
-| `80_comparison.sh` | GrASE, rMATS and DEXSeq pairwise (`compare_rmats_grase.R`, `compare_dexseq_grase.R`, `integrate.R`) and three-way on exonic parts (`compare_parts_upset.R`), with rMATS parts from the matched bipartitions and from `map_rmats_graph.R`; `PVAL=` sets the adjusted p cutoff (default 0.01) |
+| `80_comparison.sh` | GrASE, rMATS and DEXSeq pairwise (`compare_rmats_grase.R`, `compare_dexseq_grase.R`, `compare_rmats_dexseq.R`) and three-way on exonic parts (`compare_parts_upset.R`), with rMATS parts from the matched bipartitions and from `map_rmats_graph.R`; `PVAL=` sets the adjusted p cutoff (default 0.01) |
 
 Stages 10 and 20 are independent of each other; both need stage 00. Stage 60 passes
 `--dpi_gate=or` (a call passes on the raw or the per-base effect size). Stage 70 needs a

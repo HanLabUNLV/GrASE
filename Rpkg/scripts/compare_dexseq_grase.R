@@ -5,7 +5,7 @@
 ## setdiff2 for diff2_vs_ref); a part in several tests keeps the one with the smallest padj.
 ## The exon-level table is read as DEXSeq (groupID, featureID, pvalue, padj, log2fold_*) or,
 ## when it has no pvalue column, as satuRn (ids = gene:part, empirical_pval, empirical_FDR,
-## estimates), the same detection integrate.R uses.
+## estimates), the same detection compare_rmats_dexseq.R uses.
 ##
 ## Calls use adjusted p-values on both sides: GrASE padj and DEXSeq padj / satuRn empirical FDR,
 ## each below --pval. The p-value plots use the unadjusted values.

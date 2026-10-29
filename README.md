@@ -327,11 +327,24 @@ plottx(gene, "figs", as.data.frame(SplicingGraphs::sgedges(sg[gene])),
 
 Two kinds of comparison, both routed through the splicing graph.
 
-**GrASE against one other tool.** `compare_rmats_grase.R` and
-`compare_dexseq_grase.R` report concordance and write a discrepancy list. They
-use no ground truth, so they run on any dataset.
+**GrASE against one other tool.** `compare_rmats_grase.R` (per bipartition) and
+`compare_dexseq_grase.R` (per exonic part, reading a DEXSeq or a satuRn table)
+report concordance and write a discrepancy list. They use no ground truth, so
+they run on any dataset.
 
-**rMATS against the exon-level tool.** `integrate.R` contrasts rMATS directly
+Every comparison script takes `--pval`, one cutoff applied to each tool's
+adjusted p-value (GrASE `padj`, rMATS `FDR`, DEXSeq `padj`, satuRn empirical
+FDR); pass the same value to all of them. When the GrASE results hold several
+contrasts, `--contrast` names the one to compare.
+
+**All three tools.** `compare_parts_upset.R` puts GrASE, rMATS and DEXSeq on
+exonic parts and draws an UpSet plot of which tools call each part, per class,
+also restricted to the parts all three tested. Each tool keeps its own call
+rule. rMATS parts come from the matched bipartitions (`map_rmats_bipartitions.R`)
+or from the event's own parts (`map_rmats_graph.R`, which needs no bipartition
+and so maps more events).
+
+**rMATS against the exon-level tool.** `compare_rmats_dexseq.R` contrasts rMATS directly
 with DEXSeq or satuRn rather than each against GrASE. This is the capability
 introduced in the first GrASE paper ([Aquino et al. 2025](https://doi.org/10.1093/bib/bbaf204)),
 carried forward here: neither tool has a unit the other shares, so the graph
@@ -355,14 +368,28 @@ Rscript Rpkg/scripts/compare_rmats_grase.R \
     --grase ${WD}/bipartition.internal.test/test_bipartition.ex.internal_betabinom_EBapprox.annotated.txt \
     --rmats_dir ${WD}/rMATS/rmats_post_group1_group2/ \
     --map_dir ${WD}/map_rmats/results.bipartition/ \
+    --pval 0.01 \
     --output ${WD}/bipartition.internal.test/rmats_grase_comparison.txt
 
 # Step 2b: rMATS against DEXSeq or satuRn
-Rscript Rpkg/scripts/integrate.R \
+Rscript Rpkg/scripts/compare_rmats_dexseq.R \
     --map_dir ${WD}/map_rmats/results.bipartition \
     --outdir ${WD}/rmats_vs_exon \
     --rmats_dir ${WD}/rMATS/rmats_post_group1_group2/ \
-    --exon_results ${WD}/dexseq/dexseq_results.txt
+    --exon_results ${WD}/dexseq/dexseq_results.txt --pval 0.01
+
+# Step 2c: GrASE against DEXSeq or satuRn
+Rscript Rpkg/scripts/compare_dexseq_grase.R \
+    --grase ${WD}/bipartition.internal.test/test_bipartition.ex.internal_betabinom_EBapprox.annotated.txt \
+    --exon_results ${WD}/dexseq/dexseq_results.txt --pval 0.01 \
+    --output ${WD}/bipartition.internal.test/dexseq_grase_comparison.txt
+
+# Step 3: all three on exonic parts, UpSet plot
+Rscript Rpkg/scripts/compare_parts_upset.R \
+    --grase ${WD}/bipartition.internal.test/test_bipartition.ex.internal_betabinom_EBapprox.annotated.txt \
+    --map_dirs ${WD}/map_rmats/results.bipartition --class internal \
+    --rmats_dir ${WD}/rMATS/rmats_post_group1_group2/ \
+    --dexseq ${WD}/dexseq/dexseq_results.txt --pval 0.01 --outdir ${WD}/upset
 ```
 
 Step 2b writes `ExonParts/` and `SplicingEvents/` cross-tabulations such as
@@ -392,11 +419,12 @@ in `config.sh`; output goes to `GSE188847_bipartition/` next to the clone.
 | 50 | `50_merge_exon_sj.sh` | junction counts where a distinct set is empty (Stage 2b) |
 | 60 | `60_exontest.sh` | test, internal and terminal (Stage 3) |
 | 70 | `70_outward_walk.sh` | locate the terminal calls (vignette Stage 5) |
+| 80 | `80_comparison.sh` | GrASE, rMATS and DEXSeq, pairwise and three-way (needs rMATS and DEXSeq run on the same annotation) |
 
 ```bash
 cd scripts/GSE188847
 export PY=/path/to/python-with-HTSeq SAMTOOLS=/path/to/samtools CORES=16
-for s in 00 10 20 30 40 50 60 70; do bash ${s}_*.sh; done
+for s in 00 10 20 30 40 50 60 70 80; do bash ${s}_*.sh; done
 ```
 
 Stages 10 and 20 only need stage 00 and can run in parallel with each other. The

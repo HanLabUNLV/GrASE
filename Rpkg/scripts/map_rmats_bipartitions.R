@@ -14,7 +14,7 @@
 ##       the events whose matched bipartition has the part in a distinct set
 ##       (rMATS_ID_<type>) or in its reference (rMATS_ID_<type>_ref)
 ## compare_rmats_grase.R joins the first on (GeneID, bipartID) = (gene, event);
-## integrate.R reads both.
+## compare_rmats_dexseq.R reads both.
 ##
 ## Usage:
 ##   Rscript map_rmats_bipartitions.R --graphdir=<graphml dir> \

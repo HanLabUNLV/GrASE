@@ -3,7 +3,7 @@
 # Needs 60 (GrASE calls), rMATS (rmats_v34/) and DEXSeq (dexseq_v34/dexseq_results.txt).
 # Per class (internal, terminal): rMATS events matched to the bipartitions through the
 # graph (map_rmats_bipartitions.R), GrASE against rMATS (compare_rmats_grase.R) and
-# rMATS against DEXSeq (integrate.R). GrASE against DEXSeq (compare_dexseq_grase.R).
+# rMATS against DEXSeq (compare_rmats_dexseq.R). GrASE against DEXSeq (compare_dexseq_grase.R).
 # rMATS events also mapped to their own exonic parts (map_rmats_graph.R). Then
 # compare_parts_upset.R translates all three to exonic parts and draws the UpSet plots,
 # once with rMATS parts from the matched bipartitions and once from map_rmats_graph.R.
@@ -30,7 +30,7 @@ for C in ${1:-internal terminal}; do
     --class "$C" --rmatsdir "$RM" --outdir "$OUT/map.$C" --mc_cores "$CORES" &> "$OUT/map.$C.log"
   Rscript $R/compare_rmats_grase.R --grase "$GF" --rmats_dir "$RM" --map_dir "$OUT/map.$C/" \
     --contrast "${CTR/:/_vs_}" --pval "$PVAL" --output "$OUT/grase_vs_rmats.$C.txt" &> "$OUT/grase_vs_rmats.$C.log"
-  Rscript $R/integrate.R --map_dir "$OUT/map.$C" --outdir "$OUT/rmats_vs_dexseq.$C" \
+  Rscript $R/compare_rmats_dexseq.R --map_dir "$OUT/map.$C" --outdir "$OUT/rmats_vs_dexseq.$C" \
     --rmats_dir "$RM" --exon_results "$DX" --pval "$PVAL" &> "$OUT/rmats_vs_dexseq.$C.log"
   echo "=== $C done"
 done

@@ -111,7 +111,7 @@ Rscript scripts/compare_rmats_grase.R \
 
 # comparison between rMATS and DEXSeq
 # map rMATS to DEXSeq
-Rscript scripts/integrate.R
+Rscript scripts/compare_rmats_dexseq.R
 
 
 # The localization (boundary) test for the TSS/TTS arm was REMOVED on
