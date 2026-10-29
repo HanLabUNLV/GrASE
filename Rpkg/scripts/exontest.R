@@ -71,6 +71,11 @@ make_option(c("--use_prec_loess"), action="store_true", default=FALSE,
                          "[default: 0.05]"), metavar="double"),
   make_option(c("--min_dpi"), type="double", default=0.1,
               help="minimum |delta_pi| (path proportion effect size) for the significant column; events with |delta_pi| < min_dpi are not significant [default: 0.1]", metavar="double"),
+  make_option(c("--dpi_gate"), type="character", default="or",
+              help=paste("effect-size gate of the final significant column: raw (|delta_pi|),",
+                         "perbase (|delta_pi_perbase|, raw where undefined) or or (a row passes",
+                         "if either reaches the cutoff). perbase and or need --gff_dir [default: or]"),
+              metavar="character"),
   make_option(c("--mc_cores"), type="integer", default=NULL,
               help="number of parallel worker processes for mclapply [default: %default]", metavar="integer"),
   make_option(c("--retest"), action="store_true", default=FALSE,
@@ -177,6 +182,8 @@ delta            <- as.double(opt$delta)
 padj_method      <- as.character(opt$padj_method)
 min_dpi          <- as.double(opt$min_dpi)
 min_dpi_sj       <- as.double(opt$min_dpi_sj)
+dpi_gate         <- match.arg(opt$dpi_gate, c("raw", "perbase", "or"))
+use_perbase      <- switch(dpi_gate, raw = FALSE, perbase = TRUE, or = "or")
 min_reads        <- as.double(opt$min_reads)
 
 # Expand tilde in paths
@@ -999,7 +1006,23 @@ if (!is.null(opt$gff_dir)) {
 # attached them, recompute so junction-sourced sides use min_dpi_sj.
 if (nrow(merged_data) > 0 && all(c("setdiff1", "setdiff2") %in% names(merged_data))) {
   merged_data <- add_significant(add_support(merged_data), padj_thr, delta, min_dpi, min_dpi_sj, min_reads,
-                               omnibus_pairs = omnibus_pairs)
+                               omnibus_pairs = omnibus_pairs, use_perbase = use_perbase)
+}
+
+# Effect-size gates reported separately, for reading the table: `significant`
+# above gates as --dpi_gate says (or, by default). NA where there is no
+# delta_pi, or no per-base value (junction-sourced sides, or --gff_dir not given).
+# The cutoff per row is the one is_significant() uses: min_dpi, or min_dpi_sj where
+# the tested distinct set is empty (a junction-sourced side).
+if ("delta_pi" %in% names(merged_data)) {
+  dpi_thr <- rep(min_dpi, nrow(merged_data))
+  if (all(c("comparison", "setdiff1", "setdiff2") %in% names(merged_data))) {
+    sd <- ifelse(grepl("diff1", merged_data$comparison), merged_data$setdiff1, merged_data$setdiff2)
+    dpi_thr[is.na(sd) | sd %in% c("NA", "")] <- min_dpi_sj
+  }
+  merged_data$dpi_raw_pass <- abs(merged_data$delta_pi) >= dpi_thr
+  merged_data$dpi_perbase_pass <- if ("delta_pi_perbase" %in% names(merged_data))
+    abs(merged_data$delta_pi_perbase) >= dpi_thr else NA
 }
 
 # Write output

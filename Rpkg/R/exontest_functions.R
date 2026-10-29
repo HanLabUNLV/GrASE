@@ -1053,12 +1053,20 @@ posthoc_lfc_summary <- function(results, lfc_summary) {
 #'   deliberate: \code{lfc_diff_net = abs(lfc_diff) - abs(lfc_ref)}, so the
 #'   magnitudes are already inside the quantity and it is positive when the
 #'   distinct set moved more than the shared reference. Do not wrap in abs().
-#' @param use_perbase Gate on \code{delta_pi_perbase} wherever it is defined,
-#'   falling back to the raw \code{delta_pi} elsewhere. pi is a raw count
-#'   ratio, so one absolute threshold is not scale-fair across sides whose
-#'   distinct set and reference differ in length. The fallback is required, not
-#'   optional: a junction-substituted side has a point feature as its distinct
-#'   set, so it has no length and no per-base pi.
+#' @param use_perbase effect-size gate on \code{delta_pi}: \code{"or"}
+#'   (default), TRUE or FALSE.
+#'   \itemize{
+#'     \item \code{"or"}: a row passes when EITHER the raw or the per-base
+#'       \code{abs(delta_pi)} reaches the threshold; a missing per-base value
+#'       leaves only the raw test.
+#'     \item \code{TRUE}: gate on \code{delta_pi_perbase} wherever it is
+#'       defined, falling back to the raw \code{delta_pi} elsewhere.
+#'     \item \code{FALSE}: gate on the raw \code{delta_pi} alone.
+#'   }
+#'   pi is a raw count ratio, so one absolute threshold is not scale-fair across
+#'   sides whose distinct set and reference differ in length. The fallback is
+#'   required, not optional: a junction-substituted side has a point feature as
+#'   its distinct set, so it has no length and no per-base pi.
 #' @param min_dpi minimum \code{abs(delta_pi)} for exon-sourced sides.
 #' @param min_dpi_sj minimum \code{abs(delta_pi)} for sides whose distinct set
 #'   came from split reads. DEFAULTS TO \code{min_dpi} (a uniform gate). Set it
@@ -1090,7 +1098,7 @@ posthoc_lfc_summary <- function(results, lfc_summary) {
 #' @export
 is_significant <- function(res, padj_thr, delta = 0, min_dpi = 0.1,
                            min_dpi_sj = min_dpi, min_reads = 0, padj = NULL,
-                           omnibus_pairs = NULL, use_perbase = FALSE) {
+                           omnibus_pairs = NULL, use_perbase = "or") {
   ## use_perbase is last in the signature on purpose: existing positional calls
   ## must keep working.
   pv <- if (is.null(padj)) res$padj else padj
@@ -1120,11 +1128,18 @@ is_significant <- function(res, padj_thr, delta = 0, min_dpi = 0.1,
     ## everywhere would fail those sides on NA rather than on effect size.
     ## Note min_dpi_sj already carries a partial scale correction for them.
     dpi <- abs(res$delta_pi)
-    if (use_perbase && "delta_pi_perbase" %in% names(res)) {
+    if (identical(use_perbase, "or") && "delta_pi_perbase" %in% names(res)) {
       pb <- abs(res$delta_pi_perbase)
-      dpi <- ifelse(is.na(pb), dpi, pb)
+      or_pass <- (dpi >= thr) | (!is.na(pb) & pb >= thr)
+      dpi_pass <- or_pass | is.na(res$delta_pi)
+    } else {
+      if (isTRUE(use_perbase) && "delta_pi_perbase" %in% names(res)) {
+        pb <- abs(res$delta_pi_perbase)
+        dpi <- ifelse(is.na(pb), dpi, pb)
+      }
+      dpi_pass <- (dpi >= thr) | is.na(res$delta_pi)
     }
-    (dpi >= thr) | is.na(res$delta_pi)
+    dpi_pass
   } else TRUE
 
   ## read support for the tested distinct set, in EITHER contrasted group.
@@ -1185,7 +1200,7 @@ is_significant <- function(res, padj_thr, delta = 0, min_dpi = 0.1,
 #' @export
 add_significant <- function(res, padj_thr, delta, min_dpi = 0.1, min_dpi_sj = 0.05,
                             min_reads = 10, omnibus_pairs = NULL,
-                            use_perbase = FALSE) {
+                            use_perbase = "or") {
   res$significant <- is_significant(res, padj_thr, delta, min_dpi, min_dpi_sj,
                                     min_reads, omnibus_pairs = omnibus_pairs,
                                     use_perbase = use_perbase)
