@@ -368,7 +368,7 @@ Rscript Rpkg/scripts/compare_rmats_grase.R \
     --grase ${WD}/bipartition.internal.test/test_bipartition.ex.internal_betabinom_EBapprox.annotated.txt \
     --rmats_dir ${WD}/rMATS/rmats_post_group1_group2/ \
     --map_dir ${WD}/map_rmats/results.bipartition/ \
-    --pval 0.01 \
+    --pval 0.05 \
     --output ${WD}/bipartition.internal.test/rmats_grase_comparison.txt
 
 # Step 2b: rMATS against DEXSeq or satuRn
@@ -376,12 +376,12 @@ Rscript Rpkg/scripts/compare_rmats_dexseq.R \
     --map_dir ${WD}/map_rmats/results.bipartition \
     --outdir ${WD}/rmats_vs_exon \
     --rmats_dir ${WD}/rMATS/rmats_post_group1_group2/ \
-    --exon_results ${WD}/dexseq/dexseq_results.txt --pval 0.01
+    --exon_results ${WD}/dexseq/dexseq_results.txt --pval 0.05
 
 # Step 2c: GrASE against DEXSeq or satuRn
 Rscript Rpkg/scripts/compare_dexseq_grase.R \
     --grase ${WD}/bipartition.internal.test/test_bipartition.ex.internal_betabinom_EBapprox.annotated.txt \
-    --exon_results ${WD}/dexseq/dexseq_results.txt --pval 0.01 \
+    --exon_results ${WD}/dexseq/dexseq_results.txt --pval 0.05 \
     --output ${WD}/bipartition.internal.test/dexseq_grase_comparison.txt
 
 # Step 3: all three on exonic parts, UpSet plot
@@ -389,7 +389,7 @@ Rscript Rpkg/scripts/compare_parts_upset.R \
     --grase ${WD}/bipartition.internal.test/test_bipartition.ex.internal_betabinom_EBapprox.annotated.txt \
     --map_dirs ${WD}/map_rmats/results.bipartition --class internal \
     --rmats_dir ${WD}/rMATS/rmats_post_group1_group2/ \
-    --dexseq ${WD}/dexseq/dexseq_results.txt --pval 0.01 --outdir ${WD}/upset
+    --dexseq ${WD}/dexseq/dexseq_results.txt --pval 0.05 --outdir ${WD}/upset
 ```
 
 Step 2b writes `ExonParts/` and `SplicingEvents/` cross-tabulations such as

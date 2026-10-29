@@ -8,13 +8,13 @@
 # compare_parts_upset.R translates all three to exonic parts and draws the UpSet plots,
 # once with rMATS parts from the matched bipartitions and once from map_rmats_graph.R.
 # Usage: bash 80_comparison.sh [internal|terminal]   (default: both)
-# PVAL sets the adjusted p cutoff of every comparison (default 0.01).
+# PVAL sets the adjusted p cutoff of every comparison (default 0.05).
 # Output: comparison/
 set -eu -o pipefail
 . "$(dirname "$0")/config.sh"
 RM=${RM:-$WD/rmats_v34}
 DX=${DX:-$WD/dexseq_v34/dexseq_results.txt}
-PVAL=${PVAL:-0.01}
+PVAL=${PVAL:-0.05}
 RES=$WD/grase_covid_exsj
 OUT=$WD/comparison
 G=$RES/test_bipartition.exsj
