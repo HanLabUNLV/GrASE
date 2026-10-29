@@ -14,7 +14,7 @@ gzipped, so they are unpacked rather than linked.
 
 ## Stages, in order
 
-Each stage stops if its output already exists. Needs the `grase` package
+Each stage stops if its output already exists (stage 60 reuses its fits and only redoes the annotation). Needs the `grase` package
 installed and a python that imports HTSeq (`PY=... bash ...`).
 
 | Script | What it does |
@@ -26,9 +26,11 @@ installed and a python that imports HTSeq (`PY=... bash ...`).
 | `40_bipartition_sjcnt.sh` | Split-read counts on the intronic edges (`bipartition_sjcnt.R`) |
 | `50_merge_exon_sj.sh` | Junction counts where a distinct set is empty (`merge_exon_sj_counts.R`) |
 | `60_exontest.sh` | Tests the merged counts (`exontest.R`) |
-| `70_outward_walk.sh` | Outward walk on the terminal calls (`outward_walk.sh`) |
+| `70_outward_walk.sh` | Outward walk on the terminal calls (`outward_walk.sh --subset_called`) |
 
-Stages 10 and 20 are independent of each other; both need stage 00.
+Stages 10 and 20 are independent of each other; both need stage 00. Stage 60 passes
+`--dpi_gate=or` (a call passes on the raw or the per-base effect size). Stage 70 needs a
+samtools (`SAMTOOLS=`).
 
 ## Check before running
 

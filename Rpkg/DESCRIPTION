@@ -1,6 +1,6 @@
 Package: grase
 Title: Graph of Alternative Splice Junctions and Exonic Parts
-Version: 0.99.0
+Version: 2.0.0
 Authors@R:
     person("Mira", "Han", , "mira.han@unlv.edu", role = c("aut", "cre"),
            comment = c(ORCID = "0000-0002-0488-1170"))

@@ -482,40 +482,29 @@ The `significant` column is TRUE when all of the following hold, which is the ru
 every reported result uses:
 
 - `padj < --padj_threshold` (0.01 by default, under nested BH)
-- `|delta_pi| >= --min_dpi`, or `>= --min_dpi_sj` where the side is junction-sourced
+- the effect size passes `--dpi_gate` (below), at `--min_dpi`, or at `--min_dpi_sj` where the side is junction-sourced
 - `lfc_diff_net > --delta`, i.e. the distinct set moved more than the shared reference
 - at least `--min_reads` on the distinct set, on average, in one group
 
 `delta_pi` is a ratio of raw counts. It is comparable across samples, but not across
-partitions or genes whose distinct and shared sets differ in length; use the per-base
-columns from `--gff_dir` for that.
+partitions or genes whose distinct and shared sets differ in length. With `--gff_dir`
+the output also carries the length-normalized (per-base) columns `len_D`, `len_S`,
+`pi_ref_perbase`, `pi_trt_perbase` and `delta_pi_perbase`. A junction-sourced side has
+no length, so its per-base values are NA.
 
-### Output files
+`--dpi_gate` chooses which effect size the `significant` column uses:
 
-| File | Description |
-|------|-------------|
-| `test_{prefix}_{model}.txt` | Per-event test results |
-| `test_{prefix}_{model}.annotated.txt` | Joined to the split table, adding the exonic-part annotation |
-| `test_{prefix}_{model}.mincomb.annotated.txt` | *(bipartition / n_choose_2)* collapsed per bubble on the minimum p-value, re-adjusted |
-| `test_{prefix}_{model}.fisher_combined.annotated.txt` | *(bipartition / n_choose_2)* collapsed by Fisher's method |
-| `{--phi}` | Raw per-test dispersion estimates, with the identifiability flag |
+| `--dpi_gate` | `significant` requires |
+|---|---|
+| `or` (default) | raw or per-base \|delta_pi\| at the cutoff; a missing per-base value leaves the raw test |
+| `raw` | raw \|delta_pi\| at the cutoff |
+| `perbase` | per-base \|delta_pi\| at the cutoff, raw where per-base is NA |
 
-Key columns of the annotated output:
-
-| Column | Description |
-|--------|-------------|
-| `gene`, `event` | `event` is the ROW INDEX of that gene's split file, not a coordinate |
-| `comparison` | `diff1_vs_ref` or `diff2_vs_ref`: which side of the bipartition was tested |
-| `contrast` | `trt_vs_ref`; `delta_pi` is trt minus ref |
-| `pi_ref`, `pi_trt`, `delta_pi` | Path proportion D/(D+S) per group, and its change |
-| `lfc_diff`, `lfc_ref`, `lfc_diff_net` | Fold change of the distinct set, of the shared set, and `abs(lfc_diff) - abs(lfc_ref)` |
-| `padj_gene`, `padj` | Stage 1 gene screen and stage 2 within-gene adjustment |
-| `significant` | The call, under the rule above |
-| `setdiff1`, `setdiff2`, `ref_ex_part` | The two distinct sets and the shared reference |
-| `d_support` | Mean reads on the tested distinct set, against `--min_reads` |
-
-With `--gff_dir`, the output also carries `len_D`, `len_S`, `pi_ref_perbase`,
-`pi_trt_perbase` and `delta_pi_perbase`.
+`or` and `perbase` need `--gff_dir`; without it the gate is raw. The output also has
+`dpi_raw_pass` and `dpi_perbase_pass`, which report each gate at the same per-row
+cutoff whatever `--dpi_gate` was, so a call can be read as raw-only, per-base-only
+or both. Re-running with a different gate does not refit: when the results already
+exist, `exontest.R` reuses them and only redoes the annotation (`--retest` refits).
 
 ## Stage 5 (optional). Locate terminal events
 
@@ -551,6 +540,12 @@ bash scripts/outward_walk.sh \
     --python          <python with HTSeq>
 ```
 
+Add `--subset_called --samtools <samtools>` to build the intronic parts only for genes
+with a called side and to count each BAM reduced to the read pairs that touch them
+(both mates kept; no BAM index needed). The counts match the full run for those genes
+and take minutes instead of hours per BAM. Do not use it when the parts of other genes
+are needed.
+
 `samples.tsv` has one line per BAM: its path, condition and sample name, where
 `<exon_counts>/<condition>/<sample>_counts.txt` is its exonic count file.
 `--terminal_counts` is the table the terminal results were tested on; its
@@ -564,7 +559,7 @@ directory must also hold the per-gene `<gene>.bipartition.txt` files.
 | 4 | `enumerate_outward_units.R` | `outward_units.tsv`: the termini and outward units of each called side |
 | 5 | `build_outward_counts.R` | the count table and `outward_side_table.tsv` |
 | 6 | `exontest.R` | `test/`: the test of each unit |
-| 7 | `score_outward_walk.R` | `outward_walk_verdict.tsv` and `outward_walk_verdict.sides.tsv` |
+| 7 | `score_outward_walk.R` | `outward_walk_verdict.tsv` and `outward_walk_verdict.partitions.tsv` |
 
 `outward_walk_verdict.tsv` has one row per terminus and contrast. The `walk`
 column is the result:
@@ -582,7 +577,10 @@ called), `drop: outward empty` (it has no reads), `drop: outward near-empty` and
 (nothing lies outward). Only the first two are a measured absence of change,
 so report them apart from the rest, and report each contrast separately.
 
-`outward_walk_verdict.sides.tsv` has one row per side and contrast. Its `walk`
+`outward_walk_verdict.partitions.tsv` has one row per called side and contrast, with
+the side's own test result (`comparison`, `source`, `sink`, `padj`, `delta_pi`,
+`delta_pi_perbase`, the `dpi_*_pass` flags, `d_support`) beside the rollup over its
+termini (`n_term`, `n_judgeable`, `n_positive`, `side_verdict`, `best_evidence`). Its `walk`
 is `walk_stops` when any of the side's termini is, `walk_continues` when the
 side has a judged terminus and none stops, and `no_claim` otherwise. The
 side-level result is not adjusted for the number of termini, so quote the
@@ -601,14 +599,14 @@ blocks above the same coordinates. Both are exported, and both write a PDF into
 ```r
 library(grase); library(igraph); library(SplicingGraphs)
 
-gene   <- "ENSG00000204472.13"
+gene   <- "ENSG00000198218.11"
 outdir <- "${WD}/figs"
 
-g <- igraph::read_graph(file.path("~/DICE/graphml.v34", paste0(gene, ".graphml")),
+g <- igraph::read_graph(file.path("${WD}/graphml", paste0(gene, ".graphml")),
                         format = "graphml")
 style_and_plot(g, gene, outdir)
 
-gr   <- rtracklayer::import(file.path("~/DICE/gtf", paste0(gene, ".gtf")))
+gr   <- rtracklayer::import(file.path("${ANNOT}/gtf", paste0(gene, ".gtf")))
 gr   <- gr[!(rtracklayer::mcols(gr)$type %in% c("start_codon", "stop_codon"))]
 txdb <- txdbmaker::makeTxDbFromGRanges(gr)
 sg   <- SplicingGraphs::SplicingGraphs(txdb, min.ntx = 1)
@@ -618,16 +616,14 @@ plottx(gene, outdir, as.data.frame(SplicingGraphs::sgedges(sg[gene])),
 
 Both take `node_range = c(n_min, n_max)` to crop to a window of `sg_id` values,
 which is how you show one region of a large gene rather than the whole locus.
-`scripts/plot_aif1_fig1.R` is a worked example; `scripts/plot_subset_133706.R`
-shows the cropped form.
 
-Run on AIF1, `style_and_plot()` gives the splicing graph:
+Run on QRICH1 (ENSG00000198218), `style_and_plot()` gives the splicing graph:
 
-![AIF1 splicing graph](figures/aif1_graph.png){width=100%}
+![QRICH1 splicing graph](figures/qrich1_graph.png){width=100%}
 
 and `plottx()` the transcript structure above the same node coordinates:
 
-![AIF1 transcript structure](figures/aif1_tx.png){width=100%}
+![QRICH1 transcript structure](figures/qrich1_tx.png){width=100%}
 
 `scripts/plotgraphml.R` and `scripts/splicegraph_tx_plot.R` do the same thing in
 batch over a vector of gene ids edited at the top of the file. They take no
@@ -642,12 +638,14 @@ across conditions.
 
 ```bash
 Rscript scripts/plot_test_results.R \
-    --gene ENSG00000204472 --event 11 --kind terminal \
-    --analysis ~/DICE/grase_lineage_exsj \
-    --sjcounts ~/DICE/counts_lineage/bipartition.exsj.terminal.counts \
-    --conditions B,CD4,CD8,NK,MONO.CLASSIC \
-    --symbol "AIF1 (Iba1)" \
-    --out figs/AIF1_ev11.pdf
+    --gene ENSG00000198218 --event 4 --kind terminal --unit exsj \
+    --analysis ${WD}/grase_covid_exsj \
+    --sjcounts ${WD}/bipartition.exsj.terminal.counts \
+    --gffdir ${WD}/dexseq.gff --bipdir ${WD}/bipartition.filtered \
+    --graphmldir ${WD}/graphml \
+    --conditions Control,COVID19 \
+    --symbol QRICH1 \
+    --out figs/QRICH1_ev4.png
 ```
 
 | Option | Description |
@@ -668,7 +666,7 @@ It applies no thresholds of its own. It reads the `significant` column that
 
 The command above produces:
 
-![AIF1 bipartition 11](figures/aif1_bipartition.png){width=100%}
+![QRICH1 terminal event 4](figures/qrich1_bipartition.png){width=100%}
 
 Reading it: **A** is the gene model, each exonic part coloured by its role in the
 tested bipartition -- blue for the shared reference S, yellow and red for the two
@@ -766,56 +764,108 @@ outside rMATS's reach, which is a different statement.
 
 ---
 
-## Complete example (bipartition, internal events, betabinom_EBapprox)
+## Worked example: COVID-19 brain (GSE188847)
+
+This is the whole pipeline on a public dataset: post-mortem brain RNA-seq, 21
+COVID19 and 22 Control samples (GEO GSE188847), paired-end 2x150, dUTP
+(`--stranded reverse`). The drivers are in `scripts/GSE188847/`; each is a thin
+wrapper around the scripts above and takes its settings from `config.sh`
+(`BASE`, `WD`, `ANNOT`, `PY`, `SAMTOOLS`, `CORES`). Output goes to `$WD`
+(`GSE188847_bipartition/`, next to the clone). The contrast is `COVID19:Control`.
+
+Two choices differ from a from-scratch run. The annotation is GENCODE v34, used as
+deposited (graphs, filtered bipartitions and per-gene GFFs, doi:10.5281/zenodo.23141907,
+unpacked in `ANNOT`), so Stages 0 to 2 are not repeated. The reads were aligned to
+Ensembl 107 (contigs `1..22,X,Y,MT`) and no realignment is needed: stage 00 only
+renames `chrN` to `N` in the GFFs.
+
+| Stage | Driver | What it does | Vignette stage |
+|---|---|---|---|
+| 00 | `00_prepare_annotation.sh` | link the v34 graphs and filtered bipartitions; rename contigs; build the counter's GFF | 0 to 2 |
+| 10 | `10_dexseq_count.sh` | DEXSeq exonic-part counts, one file per sample (`count_files/<group>/`) | 3 |
+| 20 | `20_unpack_star_sj.sh` | STAR `SJ.out.tab` per sample into `sj/<group>/` | 3b |
+| 30 | `30_exoncnt.sh` | aggregate counts onto the bipartitions, internal and terminal (`exoncnt.R`) | 3 |
+| 40 | `40_bipartition_sjcnt.sh` | split-read counts on the intronic edges (`bipartition_sjcnt.R`) | 3b |
+| 50 | `50_merge_exon_sj.sh` | junction counts where a distinct set is empty (`merge_exon_sj_counts.R`) | 3b |
+| 60 | `60_exontest.sh` | test the merged counts, internal and terminal (`exontest.R`) | 4 |
+| 70 | `70_outward_walk.sh` | locate the terminal calls (`outward_walk.sh --subset_called`) | 5 |
+
+Stages 10 and 20 are independent of each other and both need stage 00. Each stage
+stops if its output already exists.
+
+### Before running
+
+- **Readable BAMs.** The counter and rMATS read `<GSM>.bam`; STAR's BAMs here were
+  gzipped, so `bam_plain/` holds one readable BAM per sample.
+- **Strandedness and pairing.** Wrong flags fail silently. `config.sh` sets
+  `--paired yes --stranded reverse --order pos -a 10`, matching rMATS `fr-firststrand`;
+  confirm with a strandedness check (for example, the fraction of reads on the
+  annotated strand) before counting.
+- **No BAM index is needed.** `--order pos` reads each BAM sequentially.
+- **A python that imports HTSeq**, and for the walk a samtools:
+  `PY=/path/to/python SAMTOOLS=/path/to/samtools`.
+- **R packages**: `grase`.
+
+### Run
 
 ```bash
-WD=/path/to/project
+cd scripts/GSE188847
+export PY=/path/to/python-with-HTSeq SAMTOOLS=/path/to/samtools CORES=16
 
-# Stage 1: enumerate bipartitions
-Rscript scripts/bubble_path_split.R \
-    --graphdir=${WD}/graphml \
-    --outdir=${WD}/bipartition \
-    --split=bipartition &> bipartition.log
-
-# Stage 2: separate internal from terminal events
-Rscript scripts/filterTerminal.R \
-    --split_dir=${WD}/bipartition \
-    --outdir=${WD}/bipartition.filtered \
-    --split_type=bipartition
-
-# Stage 3: aggregate counts (internal events)
-Rscript scripts/exoncnt.R \
-    -c ${WD}/DEXSeq/count_files \
-    -t bipartition \
-    --cond1=group1 --cond2=group2 \
-    -a internal \
-    -i ${WD}/bipartition.filtered \
-    -o ${WD}/bipartition.ex.internal.counts
-
-# Stage 4: test with betabinom_EBapprox
-Rscript scripts/exontest.R \
-    --file=bipartition.ex.internal.cnt.combined.txt \
-    --outdir=${WD}/bipartition.internal.test \
-    --countdir=${WD}/bipartition.ex.internal.counts/ \
-    --gff_dir=${WD}/dexseq.gff \
-    --splittype=bipartition \
-    --phi=phi.internal.EBapprox.txt \
-    --model=betabinom_EBapprox \
-    --cond1=group1 --cond2=group2
+bash 00_prepare_annotation.sh
+bash 10_dexseq_count.sh 8           # 8 samples at a time
+bash 20_unpack_star_sj.sh
+bash 30_exoncnt.sh
+bash 40_bipartition_sjcnt.sh
+bash 50_merge_exon_sj.sh
+bash 60_exontest.sh                 # betabinom_EBmap, --gff_dir, --dpi_gate=or
+bash 70_outward_walk.sh             # needs 60; stops if outward_walk/ exists
 ```
 
-Called events can be found with the `significant` column, which already encodes
-the full rule (padj, effect size, reference movement and read support):
+Stage 60 writes `grase_covid_exsj/test_bipartition.exsj.{internal,terminal}_betabinom_EBmap.annotated.txt`.
+With the default `or` gate, 146 internal events (108 genes) and 647 terminal events
+(321 genes) are called at padj < 0.01. To change the gate, edit `--dpi_gate` in
+`60_exontest.sh` and rerun it: the fits are reused and only the annotation is
+redone (about 7 minutes). Stage 70 reads the terminal calls, so rerun it after
+changing them (move `outward_walk/` aside first).
 
-```r
-results <- read.table(
-    "${WD}/bipartition.internal.test/test_bipartition.ex.internal_betabinom_EBapprox.annotated.txt",
-    header = TRUE, sep = "\t"
-)
-sig <- results[results$significant %in% TRUE, ]
-head(sig[, c("gene", "event", "comparison", "contrast",
-             "delta_pi", "padj", "setdiff1", "setdiff2", "ref_ex_part")])
+### Compare with rMATS and DEXSeq
+
+With rMATS (`*.MATS.JCEC.txt`, `fromGTF.*.txt`, here in `rmats_v34/`) and DEXSeq
+(`dexseq_v34/dexseq_results.txt`) run on the same v34 annotation and counts, rMATS events are matched to the v34 bipartitions
+through the graph, then GrASE is compared with rMATS, and rMATS with DEXSeq:
+
+```bash
+for C in internal terminal; do
+  Rscript Rpkg/scripts/map_rmats_bipartitions.R \
+      --graphdir ${WD}/graphml --splitdir ${WD}/bipartition.filtered --class $C \
+      --rmatsdir ${WD}/rmats_v34 --outdir ${WD}/map_rmats/$C
+  Rscript Rpkg/scripts/compare_rmats_grase.R \
+      --grase ${WD}/grase_covid_exsj/test_bipartition.exsj.${C}_betabinom_EBmap.annotated.txt \
+      --rmats_dir ${WD}/rmats_v34 --map_dir ${WD}/map_rmats/$C \
+      --output ${WD}/grase_covid_exsj/rmats_grase_${C}.txt
+  Rscript Rpkg/scripts/integrate.R \
+      --map_dir ${WD}/map_rmats/$C --outdir ${WD}/rmats_vs_dexseq/$C \
+      --rmats_dir ${WD}/rmats_v34 --exon_results ${WD}/dexseq_v34/dexseq_results.txt
+done
 ```
+
+rMATS and DEXSeq call exon bins or events, GrASE a bipartition, so the comparison is
+the graph-mapped one described above; read the *tested* / *detected* / *significant*
+split before counting disagreements.
+
+### Look at a call
+
+```bash
+Rscript Rpkg/scripts/plot_test_results.R --gene ENSG00000198218 --event 4 --kind terminal \
+    --analysis ${WD}/grase_covid_exsj \
+    --sjcounts ${WD}/bipartition.exsj.terminal.counts \
+    --conditions Control,COVID19 --symbol QRICH1 --out figs/QRICH1_ev4.png
+```
+
+To ask which called terminal sides stop at an annotated start, read
+`outward_walk/outward_walk_verdict.partitions.tsv` (stage 70), which holds each called side's
+test result and its walk verdict in one row.
 
 ---
 

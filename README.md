@@ -46,6 +46,7 @@ Python packages (only for the bundled DEXSeq helpers):
 Optional:
 * STAR  (2.7.10b)  alignment, and the `SJ.out.tab` files Stage 2b reads
 * rMATS (4.1.1)    only for the rMATS comparison scripts
+* samtools        only for the outward walk with `--subset_called`
 
 ## Installation
 
@@ -245,7 +246,7 @@ null false positives inflate several-fold), `wilcoxon` (most conservative on
 null genes, no effect-size estimate) and `dirmult_EBplugin` (for the
 benchmark-only multinomial split).
 
-Commonly used options (defaults in brackets): `--padj_threshold` [0.01], `--min_dpi` [0.1], `--min_reads` [10], `--padj_method` [nested_BH: genes are selected by BH on each gene's Simes p-value, then tests within each selected gene are BH-adjusted and multiplied by the number of genes tested over the number selected (Benjamini-Bogomolov)], `--mc_cores` [min(detectCores(), 8)], `--contrasts=B:A,C:A` for several pairwise contrasts (or `A+B+C` for an omnibus test, betabinom models only). Independent filtering is on by default; `--no_independent_filtering` turns it off. Run `Rscript Rpkg/scripts/exontest.R --help` for the full list.
+Commonly used options (defaults in brackets): `--padj_threshold` [0.01], `--min_dpi` [0.1], `--dpi_gate` [or: raw, perbase or or; which effect size `significant` uses, see the vignette], `--min_reads` [10], `--padj_method` [nested_BH: genes are selected by BH on each gene's Simes p-value, then tests within each selected gene are BH-adjusted and multiplied by the number of genes tested over the number selected (Benjamini-Bogomolov)], `--mc_cores` [min(detectCores(), 8)], `--contrasts=B:A,C:A` for several pairwise contrasts (or `A+B+C` for an omnibus test, betabinom models only). Independent filtering is on by default; `--no_independent_filtering` turns it off. Run `Rscript Rpkg/scripts/exontest.R --help` for the full list.
 
 ### Reading results
 
@@ -260,7 +261,7 @@ head(sig[, c("gene", "event", "source", "sink", "p.value", "padj", "delta_pi", "
 
 Output files are named `test_{prefix}_{model}.txt`, with `.annotated.txt`, `.mincomb.annotated.txt` (one row per event, min-p across sides) and `.fisher_combined.annotated.txt` variants; `{prefix}` is the first three dot-fields of `--file` (e.g. `bipartition.ex.internal`), so name it `<split>.<unit>.<class>.cnt.combined.txt` with unit `ex` or `exsj`, or the output names will not say which counts were tested (`exontest.R` warns).
 
-Key output columns: `gene`, `event` (bubble number within the gene), `source`/`sink` (bubble boundary nodes), `contrast`, `p.value`, `padj`, `delta_pi` (change in path proportion), `significant` (padj below `--padj_threshold`, `|delta_pi|` at least `--min_dpi`, and at least `--min_reads` reads in one group), `setdiff1`/`setdiff2` (exonic parts distinguishing each path), `ref_ex_part` (shared reference parts).
+Key output columns: `gene`, `event` (bubble number within the gene), `source`/`sink` (bubble boundary nodes), `contrast`, `p.value`, `padj`, `delta_pi` (change in path proportion), `significant` (padj below `--padj_threshold`, `|delta_pi|` at least `--min_dpi` by the `--dpi_gate` rule, `lfc_diff_net` above `--delta`, and at least `--min_reads` reads in one group), `dpi_raw_pass`/`dpi_perbase_pass` (the raw and per-base effect-size gates reported separately), `delta_pi_perbase` (with `--gff_dir`), `setdiff1`/`setdiff2` (exonic parts distinguishing each path), `ref_ex_part` (shared reference parts).
 
 ### Visualising results
 
@@ -273,12 +274,14 @@ the path proportion across conditions.
 
 ```bash
 Rscript Rpkg/scripts/plot_test_results.R \
-    --gene ENSG00000204472 --event 11 --kind terminal \
-    --analysis ${WD}/bipartition.internal.test \
+    --gene ENSG00000198218 --event 4 --kind terminal --unit exsj \
+    --analysis ${WD}/grase_covid_exsj \
+    --sjcounts ${WD}/bipartition.exsj.terminal.counts \
     --gffdir ${WD}/dexseq.gff --bipdir ${WD}/bipartition.filtered \
     --graphmldir ${WD}/graphml \
-    --conditions group1,group2 \
-    --symbol AIF1 --out figs/AIF1_ev11.pdf
+    --conditions Control,COVID19 \
+    --symbol QRICH1 \
+    --out figs/QRICH1_ev4.png
 ```
 
 It applies no thresholds of its own; it reads the `significant` column
@@ -287,7 +290,7 @@ the format from the extension, so `.pdf`, `.png` and `.eps` all work. Add
 `--sjcounts` when a side is junction-sourced, so its junctions are drawn as
 arcs, and `--max_stack N` to cap a dense locus.
 
-![AIF1 bipartition 11](Rpkg/vignettes/figures/aif1_bipartition.png)
+![QRICH1 terminal event 4](Rpkg/vignettes/figures/qrich1_bipartition.png)
 
 **A** is the gene model, each exonic part coloured by its role in the tested
 bipartition: blue for the shared reference S, yellow and red for the two distinct
@@ -303,7 +306,7 @@ length-normalized by default.
 
 ```r
 library(grase); library(igraph); library(SplicingGraphs)
-gene <- "ENSG00000204472.13"
+gene <- "ENSG00000198218.11"
 
 g <- igraph::read_graph(file.path("graphml", paste0(gene, ".graphml")), format = "graphml")
 style_and_plot(g, gene, "figs")                      # writes figs/<gene>.pdf
@@ -315,9 +318,9 @@ plottx(gene, "figs", as.data.frame(SplicingGraphs::sgedges(sg[gene])),
        SplicingGraphs::sgnodes(sg[gene]), g = g)     # writes figs/<gene>.tx.pdf
 ```
 
-![AIF1 splicing graph](Rpkg/vignettes/figures/aif1_graph.png)
+![QRICH1 splicing graph](Rpkg/vignettes/figures/qrich1_graph.png)
 
-![AIF1 transcript structure](Rpkg/vignettes/figures/aif1_tx.png)
+![QRICH1 transcript structure](Rpkg/vignettes/figures/qrich1_tx.png)
 
 
 ### Comparing with other tools
@@ -370,6 +373,35 @@ DEXSeq-significant but rMATS-tested-and-not-called is a real disagreement,
 whereas one that is not rMATS-detected is simply outside its reach.
 
 See the vignette for the full option reference, terminal events, worked figure examples, and comparison with rMATS/Saturn.
+
+## Worked example: COVID-19 brain (GSE188847)
+
+`scripts/GSE188847/` runs every step on a public dataset: post-mortem brain
+RNA-seq, 21 COVID19 and 22 Control samples, paired-end 2x150, dUTP, aligned to
+Ensembl 107, with the GENCODE v34 annotation used as deposited
+([doi:10.5281/zenodo.23141907](https://doi.org/10.5281/zenodo.23141907)). Settings are
+in `config.sh`; output goes to `GSE188847_bipartition/` next to the clone.
+
+| Stage | Driver | What it does |
+|---|---|---|
+| 00 | `00_prepare_annotation.sh` | link the v34 graphs and filtered bipartitions; rename contigs to match the BAMs; build the counter's GFF |
+| 10 | `10_dexseq_count.sh` | exonic-part counts per sample |
+| 20 | `20_unpack_star_sj.sh` | STAR `SJ.out.tab` per sample |
+| 30 | `30_exoncnt.sh` | counts aggregated onto the bipartitions (Stage 2) |
+| 40 | `40_bipartition_sjcnt.sh` | split-read counts on the intronic edges (Stage 2b) |
+| 50 | `50_merge_exon_sj.sh` | junction counts where a distinct set is empty (Stage 2b) |
+| 60 | `60_exontest.sh` | test, internal and terminal (Stage 3) |
+| 70 | `70_outward_walk.sh` | locate the terminal calls (vignette Stage 5) |
+
+```bash
+cd scripts/GSE188847
+export PY=/path/to/python-with-HTSeq SAMTOOLS=/path/to/samtools CORES=16
+for s in 00 10 20 30 40 50 60 70; do bash ${s}_*.sh; done
+```
+
+Stages 10 and 20 only need stage 00 and can run in parallel with each other. The
+vignette has the full commands, the checks to make first (strandedness and pairing
+flags, readable BAMs), and how to compare the calls with rMATS and DEXSeq.
 
 ## Building the annotation files from scratch (optional)
 
