@@ -30,7 +30,11 @@
 #     <rmats_dir>    directory with fromGTF.*.txt (and *.MATS.JCEC.txt)
 #     <out_dir>      output directory for combined.fromGTF.*.txt files
 #
-# Output format identical to map_rmats_coords.R (ID, GeneID, DexseqFragment).
+# Output format identical to map_rmats_coords.R (ID, GeneID, DexseqFragment), as
+# combined.fromGTF.<type>.txt, plus combined.dexseq.<type>.mapped.txt as written by
+# map_rmats_bipartitions.R (GeneID, DexseqFragment, rMATS_ID_<type> = the events
+# whose own specific parts include the part, rMATS_ID_<type>_ref = NA; only parts
+# with an event are listed), which compare_parts_upset.R reads.
 
 suppressPackageStartupMessages({
   library(igraph)
@@ -172,6 +176,17 @@ for (etype in event_types) {
   out_file <- file.path(out_dir, sprintf("combined.fromGTF.%s.txt", etype))
   fwrite(out_dt, out_file, sep = "\t", quote = FALSE, na = "NA")
   cat(sprintf("  Written -> %s\n", out_file))
+
+  by_part <- if (nrow(out_dt) == 0L) {
+    data.table(GeneID = character(), DexseqFragment = character(), a = character(), b = character())
+  } else {
+    bp <- out_dt[, .(part = trimws(unlist(strsplit(DexseqFragment, ",")))),
+                 by = .(GeneID, tag = paste0(etype, "_", ID))]
+    bp[, .(a = paste(tag, collapse = ","), b = NA_character_), by = .(GeneID, DexseqFragment = part)]
+  }
+  setnames(by_part, c("a", "b"), paste0("rMATS_ID_", etype, c("", "_ref")))
+  fwrite(by_part, file.path(out_dir, sprintf("combined.dexseq.%s.mapped.txt", etype)),
+         sep = "\t", quote = FALSE, na = "NA")
 }
 
 cat("\nDone.\n")

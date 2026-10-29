@@ -80,7 +80,7 @@ get_results_files <- function(map_dir, out_dir, rmats_directory, dexseq_results)
   # Load DEXSeq results
   results$dexseqResults <- read.table(dexseq_results, sep="\t", header=TRUE)
   # split column ids to groupID featureID if they don't exist (results from Saturn)
-  if(!"pvalue" %in% colnames(df)) {
+  if(!"pvalue" %in% colnames(results$dexseqResults)) {
     results$dexseqResults <- results$dexseqResults %>%
       separate_wider_delim(
         cols = ids,           # The column you want to split

@@ -271,7 +271,7 @@ mk_res <- function(dpi, pb, sd = "E001") {
 
 test_that("use_perbase=FALSE keeps gating on the raw delta_pi", {
   r <- mk_res(dpi = 0.12, pb = 0.03)
-  expect_true(is_significant(r, 0.01, 0, min_dpi = 0.1))
+  expect_true(is_significant(r, 0.01, 0, min_dpi = 0.1, use_perbase = FALSE))
 })
 
 test_that("use_perbase=TRUE gates on the normalized value instead", {
@@ -283,8 +283,17 @@ test_that("use_perbase=TRUE gates on the normalized value instead", {
 test_that("use_perbase can also promote a side the raw value failed", {
   ## normalization makes effect sizes larger on average
   r <- mk_res(dpi = 0.08, pb = 0.15)
-  expect_false(is_significant(r, 0.01, 0, min_dpi = 0.1))
+  expect_false(is_significant(r, 0.01, 0, min_dpi = 0.1, use_perbase = FALSE))
   expect_true(is_significant(r, 0.01, 0, min_dpi = 0.1, use_perbase = TRUE))
+})
+
+test_that("use_perbase='or' (the default) passes a side if either value clears", {
+  expect_true(is_significant(mk_res(dpi = 0.12, pb = 0.03), 0.01, 0, min_dpi = 0.1))
+  expect_true(is_significant(mk_res(dpi = 0.08, pb = 0.15), 0.01, 0, min_dpi = 0.1))
+  expect_false(is_significant(mk_res(dpi = 0.08, pb = 0.03), 0.01, 0, min_dpi = 0.1))
+  ## no per-base value: only the raw test is left
+  expect_true(is_significant(mk_res(dpi = 0.12, pb = NA_real_), 0.01, 0, min_dpi = 0.1))
+  expect_false(is_significant(mk_res(dpi = 0.08, pb = NA_real_), 0.01, 0, min_dpi = 0.1))
 })
 
 test_that("a junction side with no per-base value falls back to raw, not NA", {
