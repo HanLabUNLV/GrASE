@@ -20,4 +20,5 @@ bash $R/outward_walk.sh --workdir "$W" --results "$RES" --terminal_counts "$TCNT
   --split_dir "$WD/bipartition.filtered" --graphml_dir "$WD/graphml" \
   --gff_dir "$WD/dexseq.gff" --exon_counts "$WD/count_files" \
   --samples "$W/samples.tsv" --contrasts "$CTR" \
-  --dexseq_flags "${DEXSEQ_FLAGS[*]}" --python "$PY" --cores "$CORES"
+  --dexseq_flags "${DEXSEQ_FLAGS[*]}" --python "$PY" --cores "$CORES" \
+  --subset_called --samtools "$SAMTOOLS"

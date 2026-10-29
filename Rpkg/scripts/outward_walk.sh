@@ -29,6 +29,13 @@
 #   --python           python that can import HTSeq [python3]
 #   --cores            parallel samples and R workers [8]
 #   --padj, --min_dpi, --min_reads   call thresholds [0.01, 0.1, 10]
+#   --subset_called    build the intronic parts only for genes with a called side,
+#                      and count each BAM reduced to the read pairs that touch
+#                      them (both mates kept). Same counts as the full run for
+#                      those genes, minutes instead of hours per BAM. The parts of
+#                      every other gene are not built, so do not use it for a run
+#                      that needs them. Needs samtools; no BAM index is required.
+#   --samtools         samtools for --subset_called [samtools]
 #
 # Output, under --workdir:
 #   outward_walk_verdict.tsv        one row per called side and contrast
@@ -36,9 +43,11 @@
 set -euo pipefail
 
 FLAGS="--format bam --paired no --stranded reverse --order pos -a 10"
-PY=python3; CORES=8; PADJ=0.01; MIN_DPI=0.1; MIN_READS=10
+PY=python3; CORES=8; PADJ=0.01; MIN_DPI=0.1; MIN_READS=10; SUBSET=0; SAMTOOLS=samtools
 while [ $# -gt 0 ]; do
   case "$1" in
+    --subset_called) SUBSET=1; shift; continue ;;
+    --samtools) SAMTOOLS=$2 ;;
     --workdir) W=$2 ;; --results) RES=$2 ;; --terminal_counts) TCNT=$2 ;;
     --split_dir) SPLIT=$2 ;; --graphml_dir) GRAPH=$2 ;; --gff_dir) GFF=$2 ;;
     --exon_counts) ECNT=$2 ;; --samples) SAMPLES=$2 ;; --contrasts) CTR=$2 ;;
@@ -62,8 +71,19 @@ IP=$W/intronparts
 T=$W/test
 
 echo "=== 1 intronic parts and gene-edge flanks  $(date '+%F %T')"
+GENES_ARG=()
+if [ "$SUBSET" = 1 ]; then
+  # the genes enumerate_outward_units.R will use: any significant row
+  mkdir -p "$W"
+  awk -F'\t' 'NR == 1 { for (i = 1; i <= NF; i++) { if ($i == "gene") g = i; if ($i == "significant") s = i } next }
+              $s == "TRUE" { print $g }' "$RES" | sort -u > "$W/called_genes.txt"
+  [ -s "$W/called_genes.txt" ] || { echo "no significant sides in $RES" >&2; exit 1; }
+  command -v "$SAMTOOLS" > /dev/null || { echo "$SAMTOOLS not found; use --samtools" >&2; exit 1; }
+  GENES_ARG=(--genes "$W/called_genes.txt")
+fi
 [ -s "$IP/intronparts_manifest.tsv" ] || \
-  Rscript "$S/intronparts.R" --gff_dir "$GFF" --outdir "$IP" --T 2000 --W 300 --intergenic_width 300
+  Rscript "$S/intronparts.R" --gff_dir "$GFF" --outdir "$IP" --T 2000 --W 300 --intergenic_width 300 \
+    ${GENES_ARG[@]+"${GENES_ARG[@]}"}
 python3 -I "$S/ig_flank_overlap.py" "$IP/intronparts_manifest.tsv" "$IP/unmeasurable.tsv" --stranded "$STRANDED"
 
 echo "=== 2 count intronic parts  $(date '+%F %T')"
@@ -73,13 +93,31 @@ need=$(awk -F'\t' -v d="$IP/counts" 'NF { f = d "/" $2 "_" $3 "_counts.txt"; if 
 if [ "$need" -gt 0 ]; then
   "$PY" -c "import HTSeq" 2>/dev/null || { echo "$PY cannot import HTSeq; use --python" >&2; exit 1; }
 fi
+if [ "$SUBSET" = 1 ]; then
+  # merged intervals of the parts to count; reads are cut to these in count_one
+  awk -F'\t' -v OFS='\t' '$3 == "exonic_part" { print $1, $4 - 1, $5 }' "$IP/intronparts.dexseq.gff" \
+    | sort -k1,1 -k2,2n \
+    | awk -F'\t' -v OFS='\t' '$1 == c && $2 <= e { if ($3 > e) e = $3; next }
+                              { if (c != "") print c, s, e; c = $1; s = $2; e = $3 }
+                              END { if (c != "") print c, s, e }' > "$IP/regions.bed"
+fi
 count_one () {
-  local bam=$1 cond=$2 smp=$3 out
+  local bam=$1 cond=$2 smp=$3 out in
   out=$IP/counts/${cond}_${smp}_counts.txt
   [ -s "$out" ] && return 0
-  "$PY" "$DC" $FLAGS "$IP/intronparts.dexseq.gff" "$bam" "$out.part" && mv "$out.part" "$out"
+  in=$bam
+  if [ "$SUBSET" = 1 ]; then
+    # the read names that touch a region, then every record of those names, so a
+    # pair with one mate outside the regions is still counted as a pair
+    in=$IP/subset_${cond}_${smp}
+    "$SAMTOOLS" view -L "$IP/regions.bed" "$bam" | cut -f1 | sort -u -T "$IP" > "$in.names" &&
+      "$SAMTOOLS" view -N "$in.names" -b -o "$in.bam" "$bam" || return 1
+    rm -f "$in.names"; in=$in.bam
+  fi
+  "$PY" "$DC" $FLAGS "$IP/intronparts.dexseq.gff" "$in" "$out.part" && mv "$out.part" "$out"
+  [ "$in" = "$bam" ] || rm -f "$in"
 }
-export -f count_one; export IP PY DC FLAGS
+export -f count_one; export IP PY DC FLAGS SUBSET SAMTOOLS
 grep -v '^\s*$' "$SAMPLES" | xargs -P "$CORES" -L 1 bash -c 'count_one "$@"' _
 
 echo "=== 3 outward units  $(date '+%F %T')"

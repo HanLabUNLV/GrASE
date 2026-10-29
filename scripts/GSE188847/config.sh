@@ -17,6 +17,7 @@ WD=${WD:-$(dirname "$GRASE")/GSE188847_bipartition}
 ANNOT=${ANNOT:-$(dirname "$GRASE")/data}
 R=$GRASE/Rpkg/scripts
 PY=${PY:-python3}                               # must import HTSeq
+SAMTOOLS=${SAMTOOLS:-samtools}                  # 70_outward_walk.sh only
 
 CONDS='Control,COVID19'
 CTR='COVID19:Control'                           # trt:ref
