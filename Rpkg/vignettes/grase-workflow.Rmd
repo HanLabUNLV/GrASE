@@ -692,9 +692,8 @@ you ran.
 
 ```bash
 Rscript scripts/compare_dexseq_grase.R \
-    --grase ${WD}/bipartition.internal.test/test_bipartition.ex.internal_betabinom_EBapprox.annotated.txt \
-    --grase2 ${WD}/bipartition.terminal.test/test_bipartition.ex.terminal_betabinom_EBapprox.annotated.txt \
-    --saturn ${WD}/saturn/saturn_group1_group2/all.group1_group2.sumExp_filteredbyCountMultiExon.txt \
+    --grase ${WD}/bipartition.internal.test/test_bipartition.ex.internal_betabinom_EBapprox.annotated.txt,${WD}/bipartition.terminal.test/test_bipartition.ex.terminal_betabinom_EBapprox.annotated.txt \
+    --exon_results ${WD}/saturn/saturn_group1_group2/all.group1_group2.sumExp_filteredbyCountMultiExon.txt \
     --output ${WD}/bipartition.internal.test/saturn_grase_betabinom_EBapprox_comparison.txt
 ```
 

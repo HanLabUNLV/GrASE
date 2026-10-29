@@ -17,8 +17,10 @@ option_list <- list(
               help = "Directory containing GrASE-rMATS mapping files [default= %default]", metavar = "character"),
   make_option(c("-o", "--output"), type = "character", 
               help = "Output file path [default= %default]", metavar = "character"),
+  make_option("--contrast", type = "character", default = NULL,
+              help = "GrASE contrast to compare; required when the GrASE results hold more than one"),
   make_option("--pval", type = "double", default = 0.05,
-              help = "cutoff on the GrASE p.value and the rMATS PValue [default= %default]")
+              help = "cutoff on GrASE padj and rMATS FDR [default= %default]")
 )
 
 opt_parser <- OptionParser(option_list = option_list)
@@ -53,6 +55,13 @@ grase_dt <- grase_dt %>%
     event = as.character(event)
   )
 
+cts <- unique(grase_dt$contrast)
+if (is.null(opt$contrast)) {
+  if (length(cts) > 1) stop("GrASE results hold ", length(cts), " contrasts; pick one with --contrast: ", paste(cts, collapse = " "))
+} else {
+  grase_dt <- grase_dt[contrast == opt$contrast]
+  if (!nrow(grase_dt)) stop("no rows for --contrast ", opt$contrast, "; the file has: ", paste(cts, collapse = " "))
+}
 message("GrASE rows: ", nrow(grase_dt))
 
 # --- Process Each rMATS Event Type ---
@@ -175,13 +184,14 @@ if (!eff_col %in% colnames(full_data)) {
   eff_col <- "effect_size"
 }
 
-# Create classification BEFORE correlations so we can filter
+# Create classification BEFORE correlations so we can filter.
+# Calls use adjusted p-values (GrASE padj, rMATS FDR); correlations and plots use the unadjusted ones.
 SIG_CUTOFF <- opt$pval
 full_data <- full_data %>%
   mutate(
     grase_p = get(p_col),
-    grase_sig = !is.na(grase_p) & grase_p < SIG_CUTOFF,
-    rmats_sig = !is.na(rmats_pval) & rmats_pval < SIG_CUTOFF,
+    grase_sig = !is.na(padj) & padj < SIG_CUTOFF,
+    rmats_sig = !is.na(rmats_fdr) & rmats_fdr < SIG_CUTOFF,
     category = case_when(
       grase_sig & rmats_sig ~ "Both_Sig",
       grase_sig & !rmats_sig ~ "GrASE_Only",
@@ -221,7 +231,7 @@ print(stats_filtered)
 message("\n--- Discrepancy Analysis ---")
 
 # 1. Summary of categories
-message("Evaluation Categories (p < ", SIG_CUTOFF, "):")
+message("Evaluation Categories (padj / FDR < ", SIG_CUTOFF, "):")
 print(table(full_data$category))
 
 # 2. Check Direction agreement for Significant events (Both Sig)
@@ -239,10 +249,10 @@ print(table(both_sig$dir_agree))
 discrepancies <- full_data %>%
   filter(category %in% c("GrASE_Only", "rMATS_Only")) %>%
   select(gene, event, rMATS_EventType, ID, 
-         grase_p, rmats_pval, 
+         grase_p, grase_padj = padj, rmats_pval, rmats_fdr, 
          grase_eff = !!eff_col, rmats_inc = rmats_inc_diff, 
          category) %>%
-  arrange(grase_p) # Sort by GrASE significance
+  arrange(grase_padj) # Sort by GrASE significance
 
 discrep_file <- sub("\\.[^.]+$", ".discrepancies.txt", output_file)
 write.table(discrepancies, discrep_file, sep = "\t", quote = FALSE, row.names = FALSE)
@@ -267,7 +277,7 @@ p1 <- ggplot(p1_dt, aes(x = log_grase, y = log_rmats, color = category)) +
   geom_point(alpha = 0.5) +
   theme_minimal() +
   labs(title = "P-value Comparison (Colored by Significance)",
-       subtitle = paste("Significance Cutoff p <", SIG_CUTOFF, "- Total Dataset"),
+       subtitle = paste("Colour: padj / FDR <", SIG_CUTOFF, "- Total Dataset"),
        x = "GrASE -log10(p)", y = "rMATS -log10(p)")
 
 # Plot 2: Effect Sizes Total

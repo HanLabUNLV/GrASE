@@ -77,7 +77,8 @@ for (k in seq_along(gfiles)) {
   if (!is.null(o$contrast)) g <- g[contrast == o$contrast]
   if (!nrow(g)) stop("no rows for --contrast ", o$contrast, "; the file has: ", paste(unique(fread(gfiles[k], select = "contrast")$contrast), collapse = " "))
   g[, call := is_significant(g, o$pval, 0, o$min_dpi, o$min_dpi_sj, o$min_reads)]
-  g <- g[!is.na(padj)]
+  ## tested = has a p-value; padj is NA for tests in genes not selected at the gene level
+  g <- g[!is.na(p.value)]
   gp <- rbind(g[, .(gene, event, contrast, call, part = setdiff1)], g[, .(gene, event, contrast, call, part = setdiff2)])
   gp <- gp[!is.na(part) & part != "NA" & nzchar(part)]
   gp <- gp[, .(part = trimws(unlist(strsplit(part, ",")))), by = .(gene, event, contrast, call)]
