@@ -38,8 +38,9 @@
 #   --samtools         samtools for --subset_called [samtools]
 #
 # Output, under --workdir:
-#   outward_walk_verdict.tsv        one row per called side and contrast
-#   outward_walk_verdict.sides.tsv  one row per terminus
+#   outward_walk_verdict.tsv             one row per terminus and contrast
+#   outward_walk_verdict.partitions.tsv  one row per called side (partition) and contrast:
+#                                        its test result and the rollup over its termini
 set -euo pipefail
 
 FLAGS="--format bam --paired no --stranded reverse --order pos -a 10"

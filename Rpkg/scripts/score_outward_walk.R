@@ -488,9 +488,22 @@ cat(sprintf("all %d called sides resolve to terminus units\n", nrow(cl)))
 fwrite(w, a$out, sep = "\t")
 cat("wrote ", a$out, "  (one row per terminus x contrast)\n", sep = "")
 side_out <- sub("\\.tsv$", "", a$out)
-side_out <- paste0(side_out, ".sides.tsv")
+side_out <- paste0(side_out, ".partitions.tsv")
+## The side file also carries the called side's own test result, so one table
+## answers "what was called and what did the walk say". Every called side is in v
+## (the check above stops otherwise), so the merge drops nothing.
+ann_cols <- intersect(c("comparison", "source", "sink", "padj", "delta_pi",
+                        "delta_pi_perbase", "dpi_raw_pass", "dpi_perbase_pass",
+                        "d_support"), names(e2))
+ann <- unique(e2[significant == TRUE & contrast %in% names(CTR),
+                 c("gene", "event", "side", "contrast", ann_cols), with = FALSE],
+              by = c("gene", "event", "side", "contrast"))
+v <- merge(v, ann, by = c("gene", "event", "side", "contrast"), all.x = TRUE, sort = FALSE)
+stopifnot(nrow(v) == nrow(unique(v[, .(gene, event, side, contrast)])))
+setcolorder(v, c("contrast", "gene", "event", "side", ann_cols))
+setorder(v, contrast, gene, event, side)
 fwrite(v, side_out, sep = "\t")
-cat("wrote ", side_out, "  (side rollup, any() over termini)\n", sep = "")
+cat("wrote ", side_out, "  (one row per called side: its test result and the walk rollup over termini)\n", sep = "")
 
 ## ---- summary -------------------------------------------------------------
 ## The TERMINUS is the unit of analysis, so it is the primary table. The
