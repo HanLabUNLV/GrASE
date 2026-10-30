@@ -54,9 +54,9 @@ option_list = list(
               help="pseudocount added to diff (ref reads) and n (total) before testing; enables detection of all-or-nothing switches when ref coverage is zero [default: 0]"),
 make_option(c("--use_prec_loess"), action="store_true", default=FALSE,
               help="use loess prec trend (log(prec) ~ log(baseMean)) as EB shrinkage target instead of global mean (multinomial models)"),
-  make_option(c("--padj_threshold"), type="double", default=0.01,
+  make_option(c("--padj_threshold"), type="double", default=0.05,
               help=paste("padj threshold for the significant column AND the nested_BH gene screen;",
-                         "both stages use this value [default: 0.01]"), metavar="double"),
+                         "both stages use this value [default: 0.05]"), metavar="double"),
   make_option(c("--delta"), type="double", default=0,
               help="lfc_diff_net threshold for the significant column; events with lfc_diff_net <= delta are not significant [default: 0]", metavar="double"),
   make_option(c("--min_reads"), type="double", default=10,
@@ -79,7 +79,9 @@ make_option(c("--use_prec_loess"), action="store_true", default=FALSE,
   make_option(c("--mc_cores"), type="integer", default=NULL,
               help="number of parallel worker processes for mclapply [default: %default]", metavar="integer"),
   make_option(c("--retest"), action="store_true", default=FALSE,
-              help="force a full re-test even when a complete results file and cached support table already exist; without it an existing, not-stale results file is reused and only the annotation stage runs [default: %default]")
+              help="force a full re-test even when a complete results file and cached support table already exist; without it an existing, not-stale results file is reused and only the annotation stage runs [default: %default]"),
+  make_option(c("--readjust"), action="store_true", default=FALSE,
+              help="with a reused results file, recompute padj_gene and padj from the stored p-values with the current --padj_method / --no_independent_filtering, without refitting [default: %default]")
 );
  
 opt_parser = OptionParser(option_list=option_list);
@@ -932,6 +934,23 @@ message(paste("Reading test results from", out_resultfile, "..."))
 tests <- read.table(out_resultfile, header = TRUE, stringsAsFactors = FALSE)
 tests <- as_tibble(tests)
 message(paste("Loaded", nrow(tests), "test results."))
+
+if (isTRUE(opt$readjust)) {
+  if (!annotate_only) message("--readjust has no effect on a fresh fit; the fit path adjusts with the current settings")
+  else {
+    ## the stored p.value is already NA for rows under --min_reads, as filter_unsupported() leaves it
+    message("Readjusting p-values (", padj_method, ", independent filtering ", indep_filter, ") from the stored p-values")
+    tests <- tests %>%
+      select(-any_of(c("padj_gene", "padj"))) %>%
+      group_by(contrast) %>%
+      group_modify(~ {
+        r <- .x; r$pvalue <- r$p.value
+        r <- adjust_pvalues(r, independentFiltering = indep_filter, alpha = padj_thr, method = padj_method)
+        r$pvalue <- NULL; r
+      }) %>%
+      ungroup()
+  }
+}
 
 # Get unique genes
 unique_genes <- unique(tests$gene)

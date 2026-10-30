@@ -90,6 +90,9 @@ get_results_files <- function(map_dir, out_dir, rmats_directory, dexseq_results)
     results$dexseqResults$pvalue <- results$dexseqResults$empirical_pval
     results$dexseqResults$padj <- results$dexseqResults$empirical_FDR
   }
+  # effect size of the exon-level tool: DEXSeq log2 fold change, or the satuRn estimate
+  lfc_col <- grep("^log2fold_", colnames(results$dexseqResults), value = TRUE)[1]
+  results$dexseqResults$l2fc <- as.numeric(results$dexseqResults[[if (is.na(lfc_col)) "estimates" else lfc_col]])
     
   return(results)
 }
@@ -151,7 +154,7 @@ filter_df_rMATS_minpval <- function(input_df, type, level, ...) {
 
 
 
-integrate_rMATS_DEXSeq_results <- function(map_dir, out_dir, rmats_directory, dexseq_results, pval = 0.05) {
+integrate_rMATS_DEXSeq_results <- function(map_dir, out_dir, rmats_directory, dexseq_results, pval = 0.05, min_dpsi = 0.1, min_l2fc = 0.5) {
 
   files <- get_results_files(map_dir, out_dir, rmats_directory, dexseq_results) 
   
@@ -202,7 +205,7 @@ integrate_rMATS_DEXSeq_results <- function(map_dir, out_dir, rmats_directory, de
   exon_rmats_tested <- res$df; num_exons_rmats_tested <- res$num_events                       # rMATS_TestedExons.txt
   
   # rMATS Significant Exons
-  res <- filter_df_rMATS(dex_to_rmats_ex_dexRes_JCEC, "Exon", "Secondary", FDR <= pval)
+  res <- filter_df_rMATS(dex_to_rmats_ex_dexRes_JCEC, "Exon", "Secondary", FDR <= pval & abs(as.numeric(IncLevelDifference)) >= min_dpsi)
   exon_rmats_sig <- res$df; num_exons_rmats_sig <- res$num_events                             # rMATS_SigExons.txt
 
   # DEXSeq Tested Exons
@@ -212,7 +215,7 @@ integrate_rMATS_DEXSeq_results <- function(map_dir, out_dir, rmats_directory, de
   exon_dex_tested_rmats_detected <- res_sec$df; num_exons_dex_tested_rmats_detected <- res_sec$num_events     # DexTested__rMATS_DetectedExons.txt
   res_sec <- filter_df_rMATS(exon_dex_tested_full, "Exon", "Secondary", !is.na(ID))
   exon_dex_tested_rmats_tested <- res_sec$df; num_exons_dex_tested_rmats_tested <- res_sec$num_events         # DexTested__rMATS_TestedExons.txt
-  res_sec <- filter_df_rMATS(exon_dex_tested_full, "Exon", "Secondary", FDR <= pval)
+  res_sec <- filter_df_rMATS(exon_dex_tested_full, "Exon", "Secondary", FDR <= pval & abs(as.numeric(IncLevelDifference)) >= min_dpsi)
   exon_dex_tested_rmats_sig <- res_sec$df; num_exons_dex_tested_rmats_sig <- res_sec$num_events               # DexTested__rMATS_SigExons.txt
   
   exon_dex_tested <- exon_dex_tested_full %>%                                                 # DexTestedExons.txt
@@ -221,13 +224,13 @@ integrate_rMATS_DEXSeq_results <- function(map_dir, out_dir, rmats_directory, de
   num_exons_dex_tested <- nrow(exon_dex_tested)
 
   # DEXSeq Significant Exons
-  res <- filter_df_rMATS(dex_to_rmats_ex_dexRes_JCEC, "Exon", "Primary", padj <= pval)
+  res <- filter_df_rMATS(dex_to_rmats_ex_dexRes_JCEC, "Exon", "Primary", padj <= pval & abs(l2fc) >= min_l2fc)
   exon_dex_sig_full <- res$df
   res_sec <- filter_df_rMATS(exon_dex_sig_full, "Exon", "Secondary", !is.na(rMATS_ID) & rMATS_ID != "")
   exon_dex_sig_rmats_detected <- res_sec$df; num_exons_dex_sig_rmats_detected <- res_sec$num_events         # DexSig__rMATS_DetectedExons.txt
   res_sec <- filter_df_rMATS(exon_dex_sig_full, "Exon", "Secondary", !is.na(ID))
   exon_dex_sig_rmats_tested <- res_sec$df; num_exons_dex_sig_rmats_tested <- res_sec$num_events             # DexSig__rMATS_TestedExons.txt
-  res_sec <- filter_df_rMATS(exon_dex_sig_full, "Exon", "Secondary", FDR <= pval)
+  res_sec <- filter_df_rMATS(exon_dex_sig_full, "Exon", "Secondary", FDR <= pval & abs(as.numeric(IncLevelDifference)) >= min_dpsi)
   exon_dex_sig_rmats_sig <- res_sec$df; num_exons_dex_sig_rmats_sig <- res_sec$num_events                   # DexSig__rMATS_SigExons.txt
   
   exon_dex_sig <- exon_dex_sig_full %>%                                                       # DexSigExons.txt
@@ -239,7 +242,7 @@ integrate_rMATS_DEXSeq_results <- function(map_dir, out_dir, rmats_directory, de
   # Event Counts ##################################################################################
   rmap_mats2dex <- bind_rows(A3SS_to_dex, A5SS_to_dex, SE_to_dex, RI_to_dex) %>%
     arrange(GeneID, ID) %>%
-    select('ID', 'GeneID', 'DexseqFragment', 'DexseqRefFrag', 'bipartID')
+    select(any_of(c('ID', 'GeneID', 'DexseqFragment', 'DexseqRefFrag', 'bipartID')))   # the last two only in bipartition maps
 
   rmap_mats2dex_JCEC <- bind_rows(                                                             # rMATS_to_DEX_Exons.txt
       left_join(rmap_mats2dex, A3SS_JCEC, by = c("GeneID", "ID")),
@@ -267,7 +270,7 @@ integrate_rMATS_DEXSeq_results <- function(map_dir, out_dir, rmats_directory, de
   event_dex_tested <- res$df; num_events_dex_tested <- res$num_events                                     # DexTestedEvents.txt
 
   # DEXSeq Significant Events
-  res <- filter_df_rMATS(rmap_mats2dex_ex_JCEC_dexRes, "Event", "Secondary", padj <= pval)
+  res <- filter_df_rMATS(rmap_mats2dex_ex_JCEC_dexRes, "Event", "Secondary", padj <= pval & abs(l2fc) >= min_l2fc)
   event_dex_sig <- res$df; num_events_dex_sig <- res$num_events                                           # DexSigEvents.txt
 
   # rMATS Tested Events
@@ -275,7 +278,7 @@ integrate_rMATS_DEXSeq_results <- function(map_dir, out_dir, rmats_directory, de
   event_rmats_tested_full <- res$df
   res_sec <- filter_df_rMATS(event_rmats_tested_full, "Event", "Secondary", !is.na(padj))
   event_rmats_tested_dex_tested <- res_sec$df; num_events_rmats_tested_dex_tested <- res_sec$num_events   # rMATS_Tested__DexTestedEvents.txt
-  res_sec <- filter_df_rMATS(event_rmats_tested_full, "Event", "Secondary", padj <= pval)
+  res_sec <- filter_df_rMATS(event_rmats_tested_full, "Event", "Secondary", padj <= pval & abs(l2fc) >= min_l2fc)
   event_rmats_tested_dex_sig <- res_sec$df; num_events_rmats_tested_dex_sig <- res_sec$num_events         # rMATS_Tested__DexSigEvents.txt
 
   event_rmats_tested <- event_rmats_tested_full %>%                                                       # rMATS_TestedEvents.txt
@@ -284,11 +287,11 @@ integrate_rMATS_DEXSeq_results <- function(map_dir, out_dir, rmats_directory, de
   num_events_rmats_tested <- nrow(event_rmats_tested)
 
   # rMATS Significant Events
-  res <- filter_df_rMATS(rmap_mats2dex_ex_JCEC_dexRes, "Event", "Primary", FDR <= pval)
+  res <- filter_df_rMATS(rmap_mats2dex_ex_JCEC_dexRes, "Event", "Primary", FDR <= pval & abs(as.numeric(IncLevelDifference)) >= min_dpsi)
   event_rmats_sig_full <- res$df
   res_sec <- filter_df_rMATS(event_rmats_sig_full, "Event", "Secondary", !is.na(padj))
   event_rmats_sig_dex_tested <- res_sec$df; num_events_rmats_sig_dex_tested <- res_sec$num_events         # rMATS_Sig__DexTestedEvents.txt
-  res_sec <- filter_df_rMATS(event_rmats_sig_full, "Event", "Secondary", padj <= pval)
+  res_sec <- filter_df_rMATS(event_rmats_sig_full, "Event", "Secondary", padj <= pval & abs(l2fc) >= min_l2fc)
   event_rmats_sig_dex_sig <- res_sec$df; num_events_rmats_sig_dex_sig <- res_sec$num_events               # rMATS_Sig__DexSigEvents.txt
 
   event_rmats_sig <- event_rmats_sig_full %>%                                                             # rMATS_SigEvents.txt
@@ -399,10 +402,14 @@ if (sys.nframe() == 0L) {
                 help = paste("exon-level results to compare against rMATS: a DEXSeq",
                              "results table, or a satuRn table, which is detected and",
                              "converted automatically")),
+    make_option("--min_dpsi", type = "double", default = 0.1,
+                help = "rMATS |IncLevelDifference| a call needs [default: %default]"),
+    make_option("--min_l2fc", type = "double", default = 0.5,
+                help = "DEXSeq |log2 fold change| (satuRn |estimate|) a call needs [default: %default]"),
     make_option("--pval", type = "double", default = 0.05,
                 help = "cutoff on the DEXSeq padj and the rMATS FDR [default: %default]"))))
   for (r in c("map_dir", "outdir", "rmats_dir", "exon_results"))
     if (is.null(opt[[r]])) stop("--", r, " is required")
   integrate_rMATS_DEXSeq_results(opt$map_dir, opt$outdir,
-                                 opt$rmats_dir, opt$exon_results, opt$pval)
+                                 opt$rmats_dir, opt$exon_results, opt$pval, opt$min_dpsi, opt$min_l2fc)
 }

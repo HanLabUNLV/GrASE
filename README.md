@@ -246,7 +246,7 @@ null false positives inflate several-fold), `wilcoxon` (most conservative on
 null genes, no effect-size estimate) and `dirmult_EBplugin` (for the
 benchmark-only multinomial split).
 
-Commonly used options (defaults in brackets): `--padj_threshold` [0.01], `--min_dpi` [0.1], `--dpi_gate` [or: raw, perbase or or; which effect size `significant` uses, see the vignette], `--min_reads` [10], `--padj_method` [nested_BH: genes are selected by BH on each gene's Simes p-value, then tests within each selected gene are BH-adjusted and multiplied by the number of genes tested over the number selected (Benjamini-Bogomolov)], `--mc_cores` [min(detectCores(), 8)], `--contrasts=B:A,C:A` for several pairwise contrasts (or `A+B+C` for an omnibus test, betabinom models only). Independent filtering is on by default; `--no_independent_filtering` turns it off. Run `Rscript Rpkg/scripts/exontest.R --help` for the full list.
+Commonly used options (defaults in brackets): `--padj_threshold` [0.05], `--min_dpi` [0.1], `--dpi_gate` [or: raw, perbase or or; which effect size `significant` uses, see the vignette], `--min_reads` [10], `--padj_method` [nested_BH: genes are selected by BH on each gene's Simes p-value, then tests within each selected gene are BH-adjusted and multiplied by the number of genes tested over the number selected (Benjamini-Bogomolov)], `--mc_cores` [min(detectCores(), 8)], `--contrasts=B:A,C:A` for several pairwise contrasts (or `A+B+C` for an omnibus test, betabinom models only). Independent filtering is on by default; `--no_independent_filtering` turns it off. Run `Rscript Rpkg/scripts/exontest.R --help` for the full list.
 
 ### Reading results
 
@@ -334,18 +334,33 @@ they run on any dataset.
 
 Every comparison script takes `--pval`, one cutoff applied to each tool's
 adjusted p-value (GrASE `padj`, rMATS `FDR`, DEXSeq `padj`, satuRn empirical
-FDR); pass the same value to all of them. When the GrASE results hold several
-contrasts, `--contrast` names the one to compare.
+FDR); pass the same value to all of them. Each tool's call also needs an effect
+size: GrASE is called by `grase::is_significant()` at `--pval` (so `lfc_diff_net`,
+the `|delta_pi|` gates `--min_dpi` and `--min_dpi_sj`, and `--min_reads` apply), rMATS
+by `--min_dpsi` (0.1, on `|IncLevelDifference|`) and DEXSeq or satuRn by `--min_l2fc`
+(0.5, on the log2 fold change or estimate). A GrASE bipartition is called if either
+side is, and its exonic parts are those of both distinct sets. A part is tested when
+its tool gave it a p-value, and the exonic-part tables keep every part either tool
+tested, with `*_tested` flags, so a part one tool did not test is not counted
+against the other. When the GrASE results hold several contrasts, `--contrast`
+names the one to compare.
+
+`compare_rmats_grase.R` reports both events and exonic parts: coverage lines for the
+events each tool tested and called, and `<output>.parts.txt`, a table of the parts
+either tool tested.
 
 **All three tools.** `compare_parts_upset.R` puts GrASE, rMATS and DEXSeq on
 exonic parts and draws an UpSet plot of which tools call each part, per class,
 also restricted to the parts all three tested. Each tool keeps its own call
 rule. rMATS parts come from the matched bipartitions (`map_rmats_bipartitions.R`)
 or from the event's own parts (`map_rmats_graph.R`, which needs no bipartition
-and so maps more events).
+and so maps more events). Its counts agree with the pairwise scripts at the same
+cutoffs.
 
 **rMATS against the exon-level tool.** `compare_rmats_dexseq.R` contrasts rMATS directly
-with DEXSeq or satuRn rather than each against GrASE. This is the capability
+with DEXSeq or satuRn rather than each against GrASE. It never reads GrASE results, so
+it runs once, on the mapping from `map_rmats_graph.R`, rather than per bipartition class
+(it also reads a `map_rmats_bipartitions.R` mapping). This is the capability
 introduced in the first GrASE paper ([Aquino et al. 2025](https://doi.org/10.1093/bib/bbaf204)),
 carried forward here: neither tool has a unit the other shares, so the graph
 supplies the correspondence. Each rMATS event is matched to the bipartition
@@ -371,9 +386,13 @@ Rscript Rpkg/scripts/compare_rmats_grase.R \
     --pval 0.05 \
     --output ${WD}/bipartition.internal.test/rmats_grase_comparison.txt
 
+# Step 1b: the event's own exonic parts, with no bipartition
+Rscript Rpkg/scripts/map_rmats_graph.R \
+    ${WD}/graphml ${WD}/rMATS/rmats_post_group1_group2/ ${WD}/map_rmats/graph
+
 # Step 2b: rMATS against DEXSeq or satuRn
 Rscript Rpkg/scripts/compare_rmats_dexseq.R \
-    --map_dir ${WD}/map_rmats/results.bipartition \
+    --map_dir ${WD}/map_rmats/graph \
     --outdir ${WD}/rmats_vs_exon \
     --rmats_dir ${WD}/rMATS/rmats_post_group1_group2/ \
     --exon_results ${WD}/dexseq/dexseq_results.txt --pval 0.05

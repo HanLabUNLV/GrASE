@@ -1,22 +1,24 @@
 #!/usr/bin/env Rscript
 ## GrASE against an exon-level tool (DEXSeq, or satuRn run on DEXSeq exonic parts) on exonic parts.
 ##
-## Each GrASE test is spread over the parts of its distinct set (setdiff1 for diff1_vs_ref,
-## setdiff2 for diff2_vs_ref); a part in several tests keeps the one with the smallest padj.
+## Each GrASE bipartition is spread over the parts of both its distinct sets (setdiff1 and setdiff2) and
+## is called if either side is; a part in several bipartitions is called if any of them is, and keeps the
+## test with the smallest padj.
 ## The exon-level table is read as DEXSeq (groupID, featureID, pvalue, padj, log2fold_*) or,
 ## when it has no pvalue column, as satuRn (ids = gene:part, empirical_pval, empirical_FDR,
 ## estimates), the same detection compare_rmats_dexseq.R uses.
 ##
-## Calls use adjusted p-values on both sides: GrASE padj and DEXSeq padj / satuRn empirical FDR,
-## each below --pval. The p-value plots use the unadjusted values.
+## Calls: GrASE by grase::is_significant() at --pval (padj, lfc_diff_net, delta_pi gates, read support),
+## DEXSeq padj / satuRn empirical FDR below --pval with |effect| >= --min_l2fc. The p-value plots use the unadjusted values.
 ##
-## Writes <output> (one row per part both tools tested), <output>.discrepancies.txt (parts called
-## by one tool only) and <output>.pdf.
+## Writes <output> (one row per part either tool tested, with grase_tested and exon_tested flags), <output>.discrepancies.txt (parts called
+## by one tool only, including parts the other tool did not test) and <output>.pdf.
 
 suppressPackageStartupMessages({
   library(data.table)
   library(ggplot2)
   library(optparse)
+  library(grase)
 })
 
 option_list <- list(
@@ -28,8 +30,16 @@ option_list <- list(
               help = "output table; the PDF and discrepancy list are named after it"),
   make_option("--contrast", type = "character", default = NULL,
               help = "GrASE contrast to compare; required when the GrASE results hold more than one"),
+  make_option("--min_dpi", type = "double", default = 0.1,
+              help = "GrASE |delta_pi| gate of is_significant() [default= %default]"),
+  make_option("--min_dpi_sj", type = "double", default = 0.05,
+              help = "the same for a junction-sourced side [default= %default]"),
+  make_option("--min_l2fc", type = "double", default = 0.5,
+              help = "DEXSeq |log2 fold change| (satuRn |estimate|) a call needs [default= %default]"),
+  make_option("--min_reads", type = "double", default = 10,
+              help = "GrASE reads on the distinct set in a group [default= %default]"),
   make_option("--pval", type = "double", default = 0.05,
-              help = "cutoff on GrASE padj and on DEXSeq padj / satuRn empirical FDR [default= %default]")
+              help = "cutoff on the adjusted p of GrASE (is_significant) and of DEXSeq / satuRn empirical FDR [default= %default]")
 )
 opt_parser <- OptionParser(option_list = option_list)
 opt <- parse_args(opt_parser)
@@ -72,7 +82,7 @@ message(" - exonic parts in the exon-level table: ", nrow(ex),
 
 ## --- GrASE ---
 g <- rbindlist(lapply(grase_files, fread, colClasses = list(character = c("gene", "event", "setdiff1", "setdiff2"))),
-               use.names = TRUE, fill = TRUE)
+               use.names = TRUE, fill = TRUE, idcol = "cls")
 cts <- unique(g$contrast)
 if (is.null(opt$contrast)) {
   if (length(cts) > 1) stop("GrASE results hold ", length(cts), " contrasts; pick one with --contrast: ", paste(cts, collapse = " "))
@@ -81,25 +91,36 @@ if (is.null(opt$contrast)) {
   if (!nrow(g)) stop("no rows for --contrast ", opt$contrast, "; the files have: ", paste(cts, collapse = " "))
 }
 g <- g[!is.na(p.value)]
-g[, part := ifelse(grepl("diff1", comparison), setdiff1, setdiff2)]
+g[, grase_call := is_significant(g, opt$pval, 0, opt$min_dpi, opt$min_dpi_sj, opt$min_reads)]
+## a bipartition is called if either side is; its parts are those of both distinct sets
+g[, grase_call := any(grase_call), by = .(cls, gene, event, contrast)]
+g <- rbind(g[, .(cls, gene, event, comparison, grase_p = p.value, grase_padj = padj, grase_effect = effect_size, grase_call, part = setdiff1)],
+           g[, .(cls, gene, event, comparison, grase_p = p.value, grase_padj = padj, grase_effect = effect_size, grase_call, part = setdiff2)])
 g <- g[!is.na(part) & part != "NA" & nzchar(part)]
 gp <- g[, .(part = trimws(unlist(strsplit(part, ",")))),
-        by = .(gene, event, comparison, grase_p = p.value, grase_padj = padj, grase_effect = effect_size)]
-setorder(gp, gene, part, grase_padj, grase_p, na.last = TRUE)
+        by = .(gene, event, comparison, grase_p, grase_padj, grase_effect, grase_call)]
+## a part in several tests: called if any test calling it is, else the smallest padj
+setorder(gp, gene, part, -grase_call, grase_padj, grase_p, na.last = TRUE)
 gp <- gp[, .SD[1], by = .(gene, part)]
 message(" - GrASE parts: ", nrow(gp), "; without an exon-level row: ", nrow(fsetdiff(gp[, .(gene, part)], ex[, .(gene, part)])))
 
 ## --- Match ---
-m <- merge(gp, ex, by = c("gene", "part"))
-m[, `:=`(grase_sig = !is.na(grase_padj) & grase_padj < opt$pval,
-         exon_sig  = !is.na(exon_padj)  & exon_padj  < opt$pval)]
+## every part either tool tested is kept: restricting to the parts both tested would favour the
+## tool that tests fewer (the more stringent caller), so a part called by one tool and not tested
+## by the other still counts as called by that tool only.
+m <- merge(gp, ex, by = c("gene", "part"), all = TRUE)
+m[, `:=`(grase_tested = !is.na(grase_p), exon_tested = !is.na(exon_p))]
+m[, `:=`(grase_sig = grase_tested & grase_call %in% TRUE,
+         exon_sig  = !is.na(exon_padj) & exon_padj < opt$pval & !is.na(exon_effect) & abs(exon_effect) >= opt$min_l2fc)]
 m[, category := fifelse(grase_sig & exon_sig, "Both_Sig",
                 fifelse(grase_sig, "GrASE_Only", fifelse(exon_sig, "Exon_Only", "Neither_Sig")))]
-message("Parts tested by both: ", nrow(m))
+message("Parts: ", nrow(m), " | tested by both: ", sum(m$grase_tested & m$exon_tested),
+        ", GrASE only: ", sum(m$grase_tested & !m$exon_tested), ", exon-level only: ", sum(!m$grase_tested & m$exon_tested))
 
 cor_log <- function(a, b) cor(-log10(a + 1e-300), -log10(b + 1e-300), use = "complete.obs")
 stats_summary <- list(
-  total_common_parts   = nrow(m),
+  total_parts          = nrow(m),
+  parts_tested_by_both = sum(m$grase_tested & m$exon_tested),
   pearson_log_pval     = cor_log(m$grase_p, m$exon_p),
   spearman_pval        = cor(m$grase_p, m$exon_p, method = "spearman", use = "complete.obs"),
   pearson_effect_size  = cor(m$grase_effect, m$exon_effect, use = "complete.obs"),

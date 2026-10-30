@@ -27,7 +27,7 @@ for A in $ARMS; do
     --outdir="$OUT" \
     --countdir="$MDIR/" \
     --splittype=bipartition \
-    --gff_dir="$WD/dexseq.gff" --dpi_gate=or \
+    --gff_dir="$WD/dexseq.gff" --dpi_gate=or --padj_threshold=0.05 ${READJUST:+--readjust} \
     --phi=phi.merged.${A}.txt \
     --model=betabinom_EBmap --mc_cores="$CORES" \
     --contrasts="$CTR" &> "$OUT/test_${A}.log"

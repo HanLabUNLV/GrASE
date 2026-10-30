@@ -5,6 +5,7 @@ suppressPackageStartupMessages({
   library(dplyr)
   library(ggplot2)
   library(optparse)
+  library(grase)
 })
 
 # --- Command Line Options ---
@@ -19,8 +20,16 @@ option_list <- list(
               help = "Output file path [default= %default]", metavar = "character"),
   make_option("--contrast", type = "character", default = NULL,
               help = "GrASE contrast to compare; required when the GrASE results hold more than one"),
+  make_option("--min_dpi", type = "double", default = 0.1,
+              help = "GrASE |delta_pi| gate of is_significant() [default= %default]"),
+  make_option("--min_dpi_sj", type = "double", default = 0.05,
+              help = "the same for a junction-sourced side [default= %default]"),
+  make_option("--min_dpsi", type = "double", default = 0.1,
+              help = "rMATS |IncLevelDifference| a call needs [default= %default]"),
+  make_option("--min_reads", type = "double", default = 10,
+              help = "GrASE reads on the distinct set in a group [default= %default]"),
   make_option("--pval", type = "double", default = 0.05,
-              help = "cutoff on GrASE padj and rMATS FDR [default= %default]")
+              help = "cutoff on the adjusted p of GrASE (is_significant) and rMATS FDR [default= %default]")
 )
 
 opt_parser <- OptionParser(option_list = option_list)
@@ -62,7 +71,9 @@ if (is.null(opt$contrast)) {
   grase_dt <- grase_dt[contrast == opt$contrast]
   if (!nrow(grase_dt)) stop("no rows for --contrast ", opt$contrast, "; the file has: ", paste(cts, collapse = " "))
 }
-message("GrASE rows: ", nrow(grase_dt))
+# a GrASE side is called by grase::is_significant() at --pval: padj, lfc_diff_net, delta_pi gates, read support
+grase_dt[, grase_call := is_significant(grase_dt, opt$pval, 0, opt$min_dpi, opt$min_dpi_sj, opt$min_reads)]
+message("GrASE rows: ", nrow(grase_dt), " | called: ", sum(grase_dt$grase_call))
 
 # --- Process Each rMATS Event Type ---
 event_types <- c("SE", "MXE", "A3SS", "A5SS", "RI")
@@ -185,13 +196,13 @@ if (!eff_col %in% colnames(full_data)) {
 }
 
 # Create classification BEFORE correlations so we can filter.
-# Calls use adjusted p-values (GrASE padj, rMATS FDR); correlations and plots use the unadjusted ones.
+# Calls: GrASE is_significant() at --pval, rMATS FDR < --pval with |IncLevelDifference| >= --min_dpsi; correlations and plots use the unadjusted ones.
 SIG_CUTOFF <- opt$pval
 full_data <- full_data %>%
   mutate(
     grase_p = get(p_col),
-    grase_sig = !is.na(padj) & padj < SIG_CUTOFF,
-    rmats_sig = !is.na(rmats_fdr) & rmats_fdr < SIG_CUTOFF,
+    grase_sig = grase_call,
+    rmats_sig = !is.na(rmats_fdr) & rmats_fdr < SIG_CUTOFF & !is.na(rmats_inc_diff) & abs(rmats_inc_diff) >= opt$min_dpsi,
     category = case_when(
       grase_sig & rmats_sig ~ "Both_Sig",
       grase_sig & !rmats_sig ~ "GrASE_Only",
@@ -228,6 +239,23 @@ print("--- Summary Stats (Filtered: No Discrepancies) ---")
 print(stats_filtered)
 
 # --- Discrepancy Analysis ---
+# Coverage: the table above holds only events present on both sides (a bipartition matched to an
+# rMATS event); count what each tool called outside it.
+rm_all <- rbindlist(lapply(event_types, function(et) {
+  f <- file.path(rmats_dir, paste0(et, ".MATS.JCEC.txt"))
+  if (!file.exists(f)) return(NULL)
+  x <- fread(f, select = c("ID", "FDR", "IncLevelDifference")); x[, tag := paste0(et, "_", ID)]
+  x[, call := !is.na(FDR) & FDR < opt$pval & abs(IncLevelDifference) >= opt$min_dpsi]; x
+}))
+matched_tag <- unique(paste0(full_data$rMATS_EventType, "_", full_data$ID))
+gb <- unique(grase_dt[!is.na(p.value), .(gene, event, call = grase_call)])[, .(call = any(call)), by = .(gene, event)]
+mb <- unique(full_data[, .(gene, event)])
+message(sprintf("Events | GrASE bipartitions tested %d, called %d; matched to an rMATS event %d (called %d)",
+                nrow(gb), sum(gb$call), nrow(merge(gb, mb)), sum(merge(gb, mb)$call)))
+message(sprintf("Events | rMATS events tested %d, called %d; matched to a bipartition %d (called %d)",
+                sum(!is.na(rm_all$FDR)), sum(rm_all$call, na.rm = TRUE),
+                sum(rm_all$tag %in% matched_tag), sum(rm_all$tag %in% matched_tag & rm_all$call, na.rm = TRUE)))
+
 message("\n--- Discrepancy Analysis ---")
 
 # 1. Summary of categories
@@ -325,3 +353,37 @@ dev.off()
 write.table(full_data, output_file, sep = "\t", quote = FALSE, row.names = FALSE)
 message("Results saved to: ", output_file)
 
+
+
+# --- Exonic parts ---------------------------------------------------------------------------
+# The same comparison on exonic parts, with no restriction to events both tools matched. GrASE
+# parts: both distinct sets (setdiff1 and setdiff2) of each bipartition, called if either side is
+
+# called if any event holding the part has FDR < --pval. A part is tested when its tool gave it a p-value.
+message("\n--- Exonic parts ---")
+gp <- rbind(grase_dt[!is.na(p.value), .(gene, event, call = grase_call, part = setdiff1)],
+            grase_dt[!is.na(p.value), .(gene, event, call = grase_call, part = setdiff2)])
+gp <- gp[!is.na(part) & part != "NA" & nzchar(part)]
+gp <- gp[, .(part = trimws(unlist(strsplit(part, ",")))), by = .(gene, event, call)]
+gp <- gp[, .(grase_called = any(call)), by = .(gene, part)]
+rp <- rbindlist(lapply(event_types, function(et) {
+  f <- file.path(map_dir, sprintf("combined.dexseq.%s.mapped.txt", et))
+  if (!file.exists(f)) return(NULL)
+  x <- fread(f, colClasses = "character"); setnames(x, 1:3, c("gene", "part", "ids"))
+  x <- x[!is.na(ids) & ids != "NA", .(tag = unlist(strsplit(ids, ","))), by = .(gene = gsub('"', "", gene), part)]
+  merge(x, rm_all[, .(tag, FDR, call)], by = "tag")[!is.na(FDR)]
+}))
+rp <- rp[, .(rmats_called = any(call)), by = .(gene, part)]
+parts <- merge(gp, rp, by = c("gene", "part"), all = TRUE)
+parts[, `:=`(grase_tested = !is.na(grase_called), rmats_tested = !is.na(rmats_called))]
+parts[is.na(grase_called), grase_called := FALSE]; parts[is.na(rmats_called), rmats_called := FALSE]
+parts[, category := fifelse(grase_called & rmats_called, "Both_Sig", fifelse(grase_called, "GrASE_Only",
+                    fifelse(rmats_called, "rMATS_Only", "Neither_Sig")))]
+message(sprintf("Parts | GrASE tested %d, called %d | rMATS tested %d, called %d | tested by both %d",
+                sum(parts$grase_tested), sum(parts$grase_called), sum(parts$rmats_tested), sum(parts$rmats_called),
+                sum(parts$grase_tested & parts$rmats_tested)))
+print(table(parts$category))
+parts_file <- sub("\\.[^.]+$", ".parts.txt", output_file)
+if (parts_file == output_file) parts_file <- paste0(output_file, ".parts.txt")
+fwrite(parts, parts_file, sep = "\t")
+message("Part-level table saved to: ", parts_file)

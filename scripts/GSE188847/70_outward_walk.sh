@@ -21,4 +21,4 @@ bash $R/outward_walk.sh --workdir "$W" --results "$RES" --terminal_counts "$TCNT
   --gff_dir "$WD/dexseq.gff" --exon_counts "$WD/count_files" \
   --samples "$W/samples.tsv" --contrasts "$CTR" \
   --dexseq_flags "${DEXSEQ_FLAGS[*]}" --python "$PY" --cores "$CORES" \
-  --subset_called --samtools "$SAMTOOLS"
+  --subset_called --samtools "$SAMTOOLS" --padj 0.05

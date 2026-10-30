@@ -466,13 +466,14 @@ For more than two groups, replace `--cond1`/`--cond2` with `--contrasts` in
 | `--cond1`, `--cond2` | | Two-group contrast; the coefficient is cond1 - cond2 |
 | `--contrasts` | NULL | Multi-group contrasts as `trt:ref`, comma separated; overrides `--cond1`/`--cond2` |
 | `--padj_method` | `nested_BH` | Genes are selected by BH on each gene's Simes p-value; tests within each selected gene are then BH-adjusted and multiplied by the number of genes tested over the number selected (Benjamini-Bogomolov). Any `p.adjust` method (e.g. `BH`) applies plain correction instead. |
-| `--padj_threshold` | 0.01 | Threshold for the `significant` column, and the gene screen in `nested_BH` |
+| `--padj_threshold` | 0.05 | Threshold for the `significant` column, and the gene screen in `nested_BH` |
 | `--min_dpi` | 0.1 | Minimum \|delta_pi\| for an exon-sourced side to be called |
 | `--min_dpi_sj` | 0.05 | The same for a junction-sourced side, where the distinct set is junction counts |
 | `--min_reads` | 10 | Mean reads on the distinct set, in at least one group, required to call a side |
 | `--delta` | 0 | `lfc_diff_net` must exceed this; the post-hoc filter on reference movement |
 | `--use_phi_loess` | FALSE | Loess trend log(phi) ~ log(baseMean) as the shrinkage target instead of the global mean |
-| `--no_independent_filtering` | FALSE | Switch off DESeq2-style filtering on baseMean before correction |
+| `--no_independent_filtering` | FALSE | Switch off DESeq2-style filtering on baseMean before correction. The filter runs on the event rows before the nested stages, choosing its cutoff by a plain BH |
+| `--readjust` | FALSE | With a reused results file, recompute `padj_gene` and `padj` from the stored p-values under the current `--padj_threshold`, `--padj_method` and filtering setting, without refitting |
 | `--pseudocount` | | Added to ref reads when ref == 0, for all-or-nothing switches |
 | `--mc_cores` | | Cores for the per-event fits |
 
@@ -481,7 +482,7 @@ For more than two groups, replace `--cond1`/`--cond2` with `--contrasts` in
 The `significant` column is TRUE when all of the following hold, which is the rule
 every reported result uses:
 
-- `padj < --padj_threshold` (0.01 by default, under nested BH)
+- `padj < --padj_threshold` (0.05 by default, under nested BH)
 - the effect size passes `--dpi_gate` (below), at `--min_dpi`, or at `--min_dpi_sj` where the side is junction-sourced
 - `lfc_diff_net > --delta`, i.e. the distinct set moved more than the shared reference
 - at least `--min_reads` on the distinct set, on average, in one group
@@ -690,15 +691,22 @@ substitute the model name you ran.
 
 Every comparison script takes `--pval`, one cutoff applied to each tool's
 adjusted p-value: GrASE `padj`, rMATS `FDR`, DEXSeq `padj`, satuRn empirical
-FDR. Pass the same value to all of them. A GrASE test counts as tested when it
+FDR. Pass the same value to all of them. Each tool's call also needs an effect size.
+GrASE is called by `grase::is_significant()` at `--pval`, so `lfc_diff_net`, the
+`|delta_pi|` gates (`--min_dpi`, `--min_dpi_sj`) and `--min_reads` apply; rMATS needs
+`|IncLevelDifference| >= --min_dpsi` (0.1) and DEXSeq or satuRn
+`|log2 fold change| >= --min_l2fc` (0.5). A GrASE test counts as tested when it
 has a `p.value`; its `padj` is NA when its gene was not selected at the gene
-level, which is not a call. When the GrASE results hold several contrasts,
+level, which is not a call. The exonic-part tables keep every part either tool
+tested, with `*_tested` flags, so a part one tool did not test is not counted
+against the other. When the GrASE results hold several contrasts,
 `--contrast` names the one to compare.
 
 ### Compare with DEXSeq or satuRn
 
-`compare_dexseq_grase.R` compares on exonic parts. Each GrASE test is spread over
-the parts of its distinct set, and a part in several tests keeps the one with the
+`compare_dexseq_grase.R` compares on exonic parts. Each GrASE bipartition is spread
+over the parts of both its distinct sets and is called if either side is; a part in
+several bipartitions is called if any of them is, and keeps the test with the
 smallest `padj`. `--exon_results` takes a DEXSeq results table or a satuRn table
 run on DEXSeq exonic parts (detected by the absence of a `pvalue` column; its
 empirical p-values are used).
@@ -711,7 +719,7 @@ Rscript scripts/compare_dexseq_grase.R \
     --output ${WD}/bipartition.internal.test/saturn_grase_betabinom_EBapprox_comparison.txt
 ```
 
-It writes one row per part both tools tested, a `.discrepancies.txt` list of the
+It writes one row per part either tool tested (with `grase_tested` and `exon_tested` flags), a `.discrepancies.txt` list of the
 parts only one tool called, and a PDF of the p-value and effect-size agreement.
 
 ### Compare with rMATS
@@ -749,12 +757,15 @@ against GrASE. This is the capability introduced in the first GrASE paper
 shares, so the splicing graph supplies the correspondence, mapping each rMATS
 event onto the exonic parts it covers.
 
-It reads the same mapping `map_rmats_bipartitions.R` produced for the comparison
-above, so run that first and point `--map_dir` at its output.
+It never reads GrASE results, so it runs once. Point `--map_dir` at the event's own
+exonic parts from `map_rmats_graph.R`, which needs no bipartition and so maps more
+events; a `map_rmats_bipartitions.R` mapping also works but covers only the events
+matched to a bipartition of one class.
 
 ```bash
+Rscript scripts/map_rmats_graph.R ${WD}/graphml ${WD}/rMATS/rmats_post_group1_group2/ ${WD}/map_rmats/graph
 Rscript scripts/compare_rmats_dexseq.R \
-    --map_dir ${WD}/map_rmats/results.bipartition \
+    --map_dir ${WD}/map_rmats/graph \
     --outdir  ${WD}/rmats_vs_exon \
     --rmats_dir ${WD}/rMATS/rmats_post_group1_group2/ \
     --exon_results ${WD}/dexseq/dexseq_results.txt --pval 0.05
@@ -784,7 +795,7 @@ outside rMATS's reach, which is a different statement.
 `compare_parts_upset.R` translates GrASE, rMATS and DEXSeq calls to exonic parts
 and draws an UpSet plot of which tools call each part, once over all parts and
 once over the parts all three tested. Each tool keeps its own call rule: GrASE
-the `significant` rule, rMATS `FDR` with `|IncLevelDifference| >= --min_dpsi`,
+`grase::is_significant()` at `--pval`, rMATS `FDR` with `|IncLevelDifference| >= --min_dpsi`,
 DEXSeq `padj` with `|log2 fold change| >= --min_l2fc`, all at `--pval`. A GrASE
 bipartition counts as called when either side is, and contributes the parts of both
 distinct sets; a part shared by several bipartitions or events is called if any
@@ -860,15 +871,16 @@ bash 20_unpack_star_sj.sh
 bash 30_exoncnt.sh
 bash 40_bipartition_sjcnt.sh
 bash 50_merge_exon_sj.sh
-bash 60_exontest.sh                 # betabinom_EBmap, --gff_dir, --dpi_gate=or
+bash 60_exontest.sh                 # betabinom_EBmap, --gff_dir, --dpi_gate=or, --padj_threshold=0.05
 bash 70_outward_walk.sh             # needs 60; stops if outward_walk/ exists
 ```
 
 Stage 60 writes `grase_covid_exsj/test_bipartition.exsj.{internal,terminal}_betabinom_EBmap.annotated.txt`.
-With the default `or` gate, 146 internal events (108 genes) and 647 terminal events
-(321 genes) are called at padj < 0.01. To change the gate, edit `--dpi_gate` in
+With the default `or` gate, 277 internal events (188 genes) and 1,722 terminal events
+(767 genes) are called at padj < 0.05. To change the gate, edit `--dpi_gate` in
 `60_exontest.sh` and rerun it: the fits are reused and only the annotation is
-redone (about 7 minutes). Stage 70 reads the terminal calls, so rerun it after
+redone (about 7 minutes). To change `--padj_threshold` or the filtering, rerun it
+with `READJUST=1`, which also recomputes `padj` from the stored p-values. Stage 70 reads the terminal calls, so rerun it after
 changing them (move `outward_walk/` aside first).
 
 ### Compare with rMATS and DEXSeq
@@ -878,7 +890,7 @@ With rMATS (`*.MATS.JCEC.txt`, `fromGTF.*.txt`, here in `rmats_v34/`) and DEXSeq
 runs every comparison with one adjusted p cutoff (`PVAL`, default 0.05):
 
 ```bash
-bash 80_comparison.sh               # PVAL=0.01 bash 80_comparison.sh for another cutoff
+bash 80_comparison.sh               # PVAL=0.01 bash 80_comparison.sh for another cutoff in the comparisons
 ```
 
 Per class it matches rMATS events to the v34 bipartitions (`map.<class>/`) and

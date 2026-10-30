@@ -109,7 +109,7 @@ opt_list <- list(
               help = "trt:ref pairs, comma separated, e.g. 'CD4_N_STIM:CD4,CD8_N_STIM:CD8'"),
   make_option("--min_reads",   type = "double", default = 10,
               help = "read floor on d_support [default %default]"),
-  make_option("--padj",        type = "double", default = 0.01),
+  make_option("--padj",        type = "double", default = 0.05),
   make_option("--min_dpi",     type = "double", default = 0.1),
   make_option("--out",         type = "character", help = "per-side verdict table")
 )
