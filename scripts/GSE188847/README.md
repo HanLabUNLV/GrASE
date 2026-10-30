@@ -38,7 +38,6 @@ samtools (`SAMTOOLS=`).
 - Strandedness and pairing: `--paired yes --stranded reverse` follows the rMATS
   setting (`fr-firststrand`) used for these BAMs. Confirm with the STAR
   strandedness step (`STAR_script/Step2c_strandedness.sh`) before counting.
-- The BAMs have no `.bai`; none is needed (`--order pos` reads sequentially).
 - `bam_plain/` holds 43 readable BAMs (symlinks or decompressed copies) made by
   `GrASE/scripts/00_rmats_ctrl_covid_v107.sh prep`; stages 10 and 70 read them.
 - Sample names are `<group>_<GSM>` in both the exonic and junction tables;

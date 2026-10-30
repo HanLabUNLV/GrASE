@@ -1,7 +1,7 @@
 #!/bin/bash
 # DEXSeq exonic-part counts for the 43 COVID19/Control samples, against the
 # by-gene GFF from stage 00 (the graphs were built from it, so the part numbers
-# join). The BAMs need no index (--order pos reads them sequentially). Writes count_files/<group>/<GSM>_counts.txt; finished samples are skipped.
+# join). Writes count_files/<group>/<GSM>_counts.txt; finished samples are skipped.
 # The flags in config.sh are the library's: paired-end, dUTP (--stranded reverse).
 # Usage: bash 10_dexseq_count.sh [n_parallel]
 set -eu -o pipefail

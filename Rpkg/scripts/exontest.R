@@ -45,9 +45,9 @@ option_list = list(
                          ".mincomb.annotated.txt and .fisher_combined.annotated.txt. OFF by default. ")),
   make_option(c("--use_phi_loess"), action="store_true", default=FALSE,
               help="use loess phi trend (log(phi) ~ log(baseMean)) as EB shrinkage target instead of global median"),
-  make_option(c("--no_independent_filtering"), action="store_false", default=TRUE,
+  make_option(c("--independent_filtering"), action="store_true", default=FALSE,
               dest="independent_filtering",
-              help="disable DESeq2-style independent filtering (filter on baseMean) before FDR correction (on by default)"),
+              help="enable DESeq2-style independent filtering (filter on baseMean) before FDR correction (off by default)"),
   make_option(c("--padj_method"), type="character", default="nested_BH",
               help="p-value adjustment method: nested_BH (default) or any p.adjust method e.g. BH", metavar="character"),
   make_option(c("--pseudocount"), type="integer", default=0L,
@@ -81,7 +81,7 @@ make_option(c("--use_prec_loess"), action="store_true", default=FALSE,
   make_option(c("--retest"), action="store_true", default=FALSE,
               help="force a full re-test even when a complete results file and cached support table already exist; without it an existing, not-stale results file is reused and only the annotation stage runs [default: %default]"),
   make_option(c("--readjust"), action="store_true", default=FALSE,
-              help="with a reused results file, recompute padj_gene and padj from the stored p-values with the current --padj_method / --no_independent_filtering, without refitting [default: %default]")
+              help="with a reused results file, recompute padj_gene and padj from the stored p-values with the current --padj_method / --independent_filtering, without refitting [default: %default]")
 );
  
 opt_parser = OptionParser(option_list=option_list);

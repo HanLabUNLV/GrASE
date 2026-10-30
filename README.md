@@ -246,7 +246,7 @@ null false positives inflate several-fold), `wilcoxon` (most conservative on
 null genes, no effect-size estimate) and `dirmult_EBplugin` (for the
 benchmark-only multinomial split).
 
-Commonly used options (defaults in brackets): `--padj_threshold` [0.05], `--min_dpi` [0.1], `--dpi_gate` [or: raw, perbase or or; which effect size `significant` uses, see the vignette], `--min_reads` [10], `--padj_method` [nested_BH: genes are selected by BH on each gene's Simes p-value, then tests within each selected gene are BH-adjusted and multiplied by the number of genes tested over the number selected (Benjamini-Bogomolov)], `--mc_cores` [min(detectCores(), 8)], `--contrasts=B:A,C:A` for several pairwise contrasts (or `A+B+C` for an omnibus test, betabinom models only). Independent filtering is on by default; `--no_independent_filtering` turns it off. Run `Rscript Rpkg/scripts/exontest.R --help` for the full list.
+Commonly used options (defaults in brackets): `--padj_threshold` [0.05], `--min_dpi` [0.1], `--dpi_gate` [or: raw, perbase or or; which effect size `significant` uses, see the vignette], `--min_reads` [10], `--padj_method` [nested_BH: genes are selected by BH on each gene's Simes p-value, then tests within each selected gene are BH-adjusted and multiplied by the number of genes tested over the number selected (Benjamini-Bogomolov)], `--mc_cores` [min(detectCores(), 8)], `--contrasts=B:A,C:A` for several pairwise contrasts (or `A+B+C` for an omnibus test, betabinom models only). Independent filtering is off by default; `--independent_filtering` turns on DESeq2-style filtering on `baseMean` before correction. Run `Rscript Rpkg/scripts/exontest.R --help` for the full list.
 
 ### Reading results
 
@@ -533,3 +533,14 @@ Rscript Rpkg/scripts/filterTerminal.R \
     --outdir=${WD}/bipartition.filtered \
     --split_type=bipartition
 ```
+
+## References
+
+Aquino,J., Witoslawski,D., Park,S., et al. (2025) A novel splicing graph allows a
+direct comparison between exon-based and splice junction-based approaches to
+alternative splicing detection. *Briefings in Bioinformatics*, 26, bbaf204.
+<https://doi.org/10.1093/bib/bbaf204>
+
+Witoslawski,D., Aquino,J., He,C. and Han,M.V. (2025) Shared and distinct exonic parts
+in alternative paths of splicing bubbles. *arXiv*, 2511.05992.
+<https://arxiv.org/abs/2511.05992>

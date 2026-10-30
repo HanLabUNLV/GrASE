@@ -152,6 +152,7 @@ hop_parts <- function(u, v) {
 
 ## merged exon+SJ metadata: intron_distinct1/2 and intron_shared per event
 sj_meta <- list()
+cnt_tb <- NULL    # per-sample counts of the gene, for the spread in panel D
 if (nzchar(a$sjcounts)) {
   d <- path.expand(a$sjcounts)
   ## the exsj unit is the one that carries intron_distinct1/2 and intron_shared;
@@ -161,6 +162,7 @@ if (nzchar(a$sjcounts)) {
   for (fp in cand) {
     if (!file.exists(fp)) next
     tb <- read_tsv(fp)
+    cnt_tb <- tb
     if (!"intron_distinct1" %in% names(tb)) break
     keep <- !duplicated(tb$event)
     sj_meta <- setNames(lapply(which(keep), function(i)
@@ -226,6 +228,7 @@ miss <- setdiff(conds, names(pivals))
 if (length(miss)) stop("no pi for conditions: ", paste(miss, collapse = ", "))
 
 perbase <- !isTRUE(a$raw)
+pb_used <- FALSE
 len_D <- set_length(tested_D, coords); len_S <- set_length(S, coords)
 if (perbase && (is.na(len_D) || is.na(len_S))) {
   message("  per-base pi undefined: ",
@@ -239,7 +242,7 @@ if (perbase) {
   if (any(vapply(conv, function(v) is.na(v), logical(1)))) {
     message("  per-base pi undefined for some conditions; plotting raw")
   } else {
-    pivals <- conv
+    pivals <- conv; pb_used <- TRUE
     message(sprintf("  per-base pi: len_D %d bp, len_S %d bp", len_D, len_S))
   }
 }
@@ -555,11 +558,31 @@ if (is.null(matched)) {
 ## ---- D: path proportion across conditions --------------------------------
 par(mai = c(0.45, 0.78, TOP, 0.15))
 vals <- vapply(conds, function(c_) pivals[[c_]], numeric(1))
-span <- max(vals) - min(vals); pad <- max(span, 0.05)
-plot(seq_along(conds) - 1, vals, type = "o", pch = 19, cex = 1.1, lwd = 2,
-     col = CB[["D2"]], axes = FALSE, xlab = "", ylab = "",
+## per-sample pi of the tested distinct set, from the same counts the test used
+ps <- NULL
+if (!is.null(cnt_tb)) {
+  tb_s <- cnt_tb[cnt_tb$event == as.character(a$event), , drop = FALSE]
+  dcol <- if (which_D == "D1") "diff1" else "diff2"
+  if (nrow(tb_s) && all(c("ref", dcol, "groups") %in% names(tb_s))) {
+    dd <- num(tb_s[[dcol]]); rr <- num(tb_s$ref)
+    pi_s <- ifelse(!is.na(dd) & !is.na(rr) & dd + rr > 0, dd / (dd + rr), NA_real_)
+    if (pb_used) pi_s <- pi_perbase(pi_s, len_D, len_S)
+    ps <- data.frame(g = match(tb_s$groups, conds) - 1, pi = pi_s)
+    ps <- ps[!is.na(ps$g) & !is.na(ps$pi), , drop = FALSE]
+    if (!nrow(ps)) ps <- NULL
+  }
+}
+yr <- c(vals, if (!is.null(ps)) ps$pi)
+span <- max(yr) - min(yr); pad <- max(span, 0.05)
+plot(seq_along(conds) - 1, vals, type = "n", axes = FALSE, xlab = "", ylab = "",
      xlim = c(-0.4, length(conds) - 0.6),
-     ylim = c(min(vals) - pad * 0.30, max(vals) + pad * 0.30))
+     ylim = c(min(yr) - pad * 0.30, max(yr) + pad * 0.30))
+if (!is.null(ps)) {
+  set.seed(1)
+  points(ps$g + runif(nrow(ps), -0.04, 0.04), ps$pi, pch = 16, cex = 0.55,
+         col = adjustcolor("#555555", 0.55))
+}
+lines(seq_along(conds) - 1, vals, lwd = 2, col = CB[["D2"]])
 points(seq_along(conds) - 1, vals, pch = 21, bg = CB[["D2"]], col = "white", cex = 1.1, lwd = 1.2)
 text(seq_along(conds) - 1, vals + pad * 0.11, sprintf("%.3f", vals), cex = 0.65)
 axis(1, at = seq_along(conds) - 1, labels = sub("\\.CLASSIC", "", conds),
@@ -571,6 +594,11 @@ yl <- if (!is.null(a$ylab)) a$ylab else
           if (perbase) "per-base" else "raw", which_D)
 mtext(yl, side = 2, line = 2.6, cex = 0.68)
 mtext("D   Path proportion across conditions", side = 3, line = 0.2, adj = 0, cex = 0.78)
+if (!is.null(ps))
+  mtext(sprintf("grey dots: samples (%s); coloured: group pi",
+                paste(sprintf("%s n=%d", sub("\\.CLASSIC", "", conds),
+                              vapply(seq_along(conds) - 1, function(i) sum(ps$g == i), integer(1))), collapse = ", ")),
+        side = 1, line = 1.5, cex = 0.55, col = "#555555")
 
 ## ---- D text block --------------------------------------------------------
 par(mai = c(0.45, 0.10, TOP, 0.10))

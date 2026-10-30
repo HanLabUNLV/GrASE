@@ -28,13 +28,13 @@
 #                      [--format bam --paired no --stranded reverse --order pos -a 10]
 #   --python           python that can import HTSeq [python3]
 #   --cores            parallel samples and R workers [8]
-#   --padj, --min_dpi, --min_reads   call thresholds [0.01, 0.1, 10]
+#   --padj, --min_dpi, --min_reads   call thresholds [0.05, 0.1, 10]
 #   --subset_called    build the intronic parts only for genes with a called side,
 #                      and count each BAM reduced to the read pairs that touch
 #                      them (both mates kept). Same counts as the full run for
 #                      those genes, minutes instead of hours per BAM. The parts of
 #                      every other gene are not built, so do not use it for a run
-#                      that needs them. Needs samtools; no BAM index is required.
+#                      that needs them. Needs samtools.
 #   --samtools         samtools for --subset_called [samtools]
 #
 # Output, under --workdir:
@@ -44,7 +44,7 @@
 set -euo pipefail
 
 FLAGS="--format bam --paired no --stranded reverse --order pos -a 10"
-PY=python3; CORES=8; PADJ=0.01; MIN_DPI=0.1; MIN_READS=10; SUBSET=0; SAMTOOLS=samtools
+PY=python3; CORES=8; PADJ=0.05; MIN_DPI=0.1; MIN_READS=10; SUBSET=0; SAMTOOLS=samtools
 while [ $# -gt 0 ]; do
   case "$1" in
     --subset_called) SUBSET=1; shift; continue ;;

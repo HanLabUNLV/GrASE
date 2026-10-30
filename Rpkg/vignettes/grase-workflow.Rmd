@@ -472,7 +472,7 @@ For more than two groups, replace `--cond1`/`--cond2` with `--contrasts` in
 | `--min_reads` | 10 | Mean reads on the distinct set, in at least one group, required to call a side |
 | `--delta` | 0 | `lfc_diff_net` must exceed this; the post-hoc filter on reference movement |
 | `--use_phi_loess` | FALSE | Loess trend log(phi) ~ log(baseMean) as the shrinkage target instead of the global mean |
-| `--no_independent_filtering` | FALSE | Switch off DESeq2-style filtering on baseMean before correction. The filter runs on the event rows before the nested stages, choosing its cutoff by a plain BH |
+| `--independent_filtering` | FALSE | Turn on DESeq2-style filtering on baseMean before correction. The filter runs on the event rows before the nested stages, choosing its cutoff by a plain BH, which is not the procedure applied afterwards |
 | `--readjust` | FALSE | With a reused results file, recompute `padj_gene` and `padj` from the stored p-values under the current `--padj_threshold`, `--padj_method` and filtering setting, without refitting |
 | `--pseudocount` | | Added to ref reads when ref == 0, for all-or-nothing switches |
 | `--mc_cores` | | Cores for the per-event fits |
@@ -543,7 +543,7 @@ bash scripts/outward_walk.sh \
 
 Add `--subset_called --samtools <samtools>` to build the intronic parts only for genes
 with a called side and to count each BAM reduced to the read pairs that touch them
-(both mates kept; no BAM index needed). The counts match the full run for those genes
+(both mates kept). The counts match the full run for those genes
 and take minutes instead of hours per BAM. Do not use it when the parts of other genes
 are needed.
 
@@ -815,6 +815,12 @@ Rscript scripts/compare_parts_upset.R \
     --dexseq ${WD}/dexseq/dexseq_results.txt --pval 0.05 --outdir ${WD}/upset
 ```
 
+Each row of the plot is a tool and each bar counts the exonic parts called by exactly the
+tools marked below it. The example is the COVID-19 brain data (GSE188847), internal class,
+with rMATS parts from `map_rmats_graph.R`:
+
+![Exonic parts called by GrASE, rMATS and DEXSeq (COVID-19 brain, internal class)](figures/upset_exonic_parts_internal.png){width=80%}
+
 ---
 
 ## Worked example: COVID-19 brain (GSE188847)
@@ -854,7 +860,6 @@ stops if its output already exists.
   `--paired yes --stranded reverse --order pos -a 10`, matching rMATS `fr-firststrand`;
   confirm with a strandedness check (for example, the fraction of reads on the
   annotated strand) before counting.
-- **No BAM index is needed.** `--order pos` reads each BAM sequentially.
 - **A python that imports HTSeq**, and for the walk a samtools:
   `PY=/path/to/python SAMTOOLS=/path/to/samtools`.
 - **R packages**: `grase`.
@@ -871,7 +876,7 @@ bash 20_unpack_star_sj.sh
 bash 30_exoncnt.sh
 bash 40_bipartition_sjcnt.sh
 bash 50_merge_exon_sj.sh
-bash 60_exontest.sh                 # betabinom_EBmap, --gff_dir, --dpi_gate=or, --padj_threshold=0.05
+bash 60_exontest.sh                 # betabinom_EBmap, --gff_dir, --dpi_gate=or, --padj_threshold=0.05, --independent_filtering
 bash 70_outward_walk.sh             # needs 60; stops if outward_walk/ exists
 ```
 
@@ -890,7 +895,7 @@ With rMATS (`*.MATS.JCEC.txt`, `fromGTF.*.txt`, here in `rmats_v34/`) and DEXSeq
 runs every comparison with one adjusted p cutoff (`PVAL`, default 0.05):
 
 ```bash
-bash 80_comparison.sh               # PVAL=0.01 bash 80_comparison.sh for another cutoff in the comparisons
+bash 80_comparison.sh               # cutoff PVAL=0.05; set PVAL=<value> for another
 ```
 
 Per class it matches rMATS events to the v34 bipartitions (`map.<class>/`) and
@@ -920,12 +925,16 @@ test result and its walk verdict in one row.
 
 ---
 
-## Reference
+## References
 
 Aquino,J., Witoslawski,D., Park,S., et al. (2025) A novel splicing graph allows a
 direct comparison between exon-based and splice junction-based approaches to
 alternative splicing detection. *Briefings in Bioinformatics*, 26, bbaf204.
 <https://doi.org/10.1093/bib/bbaf204>
+
+Witoslawski,D., Aquino,J., He,C. and Han,M.V. (2025) Shared and distinct exonic parts
+in alternative paths of splicing bubbles. *arXiv*, 2511.05992.
+<https://arxiv.org/abs/2511.05992>
 
 ---
 
