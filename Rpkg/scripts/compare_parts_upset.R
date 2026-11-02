@@ -26,17 +26,17 @@
 ## exonic_parts_three_tools.<class>.tsv (one row per part in the DEXSeq table or tested by GrASE or rMATS, with each tool's tested/called
 ## flags, its UpSet category, whether all three tested it, and the evidence behind each call:
 ## DEXSeq padj and fold change; the GrASE events whose distinct sets hold the part, those called,
-## and their smallest padj; the rMATS events likewise, with their smallest FDR) and
-## upset_exonic_parts.<class>{,.tested_by_all}.{pdf,png}. The second restricts to parts
-## all three tested, so a part one tool never examined is not counted against it. The rows of each
-## category called by at least one tool are also written to categories/<class>.<category>.tsv.
+## and their smallest padj; the rMATS events likewise, with their smallest FDR), and two UpSet plots.
+## upset_exonic_parts.<class>.{pdf,png} covers every part called by at least one tool, with each bar
+## split by how many of the three tools tested the part (3, 2 or 1): in a bar of k tools, parts tested
+## by all three were examined by the others and not called, parts tested by k only the calling tools
+## could examine. Its counts are in upset_exonic_parts.<class>.tsv.
+## upset_exonic_parts.<class>.tested_by_all.{pdf,png} restricts to parts all three tested, so a part one
+## tool never examined is not counted against it; its bars are the "3" segments of the first plot, on
+## their own scale. The rows of each category called by at least one tool are also written to
+## categories/<class>.<category>.tsv.
 ## GrASE and rMATS parts that find no DEXSeq row (e.g. removed by a count filter before DEXSeq or satuRn)
 ## are kept with dex_tested FALSE; their number is printed.
-## upset_exonic_parts.<class>.tested_split.{pdf,png} redraws the first UpSet plot with each bar split
-## by how many of the three tools tested the part (3, 2 or 1). In a bar of k tools, parts tested by all
-## three were examined by the others and not called; parts tested by k only the calling tools could
-## examine. The counts
-## are in upset_exonic_parts.<class>.tested_split.tsv.
 suppressPackageStartupMessages({library(optparse); library(data.table); library(UpSetR); library(ggplot2); library(patchwork); library(grase)})
 o <- parse_args(OptionParser(option_list = list(
   make_option("--grase",     type = "character", help = "annotated exontest.R results, comma separated"),
@@ -160,11 +160,10 @@ for (k in seq_along(gfiles)) {
     cairo_pdf(file, width = 7, height = 5, family = o$font); draw(); dev.off()
     png(sub("\\.pdf$", ".png", file), width = 2100, height = 1500, res = 300, type = "cairo", family = o$font); draw(); dev.off()
   }
-  up(P, paste(cl, "called, any tool"), file.path(o$outdir, sprintf("upset_exonic_parts.%s.pdf", cl)))
   up(P[dex_tested & grase_tested & rmats_tested], paste(cl, "called, parts tested by all three"),
      file.path(o$outdir, sprintf("upset_exonic_parts.%s.tested_by_all.pdf", cl)))
 
-  ## the first plot's bars, split by whether the tools that did not call a part tested it
+  ## every part called by any tool, each bar split by how many tools tested the part
   C <- P[category != "none"]
   ## a tool that called a part also tested it, so a bar of k tools holds only parts tested by k to 3
   stopifnot(C[, all((!grase_called | grase_tested) & (!rmats_called | rmats_tested) & (!dex_called | dex_tested))])
@@ -174,7 +173,8 @@ for (k in seq_along(gfiles)) {
   tot <- S[, .(N = sum(N)), by = category][order(-N)]
   fwrite(setnames(dcast(S, category ~ factor(others, levels = lev), value.var = "N", fill = 0L)[match(tot$category, category)],
                   lev, paste0("tested_by_", lev), skip_absent = TRUE),
-         file.path(o$outdir, sprintf("upset_exonic_parts.%s.tested_split.tsv", cl)), sep = "\t", quote = FALSE)
+         file.path(o$outdir, sprintf("upset_exonic_parts.%s.tsv", cl)), sep = "\t", quote = FALSE)
+  cat(cl, " called, any tool: ", sum(tot$N), " parts called by at least one tool\n", sep = "")
   cat(cl, "called, any tool, split by how many tools tested the part:\n"); print(S[order(match(category, tot$category), match(others, lev))])
   S[, category := factor(category, levels = tot$category)][, others := factor(others, levels = lev)]
   ## UpSet layout: stacked intersection bars on top, the tool matrix below, each tool's calls at its left
@@ -210,7 +210,7 @@ for (k in seq_along(gfiles)) {
     labs(x = "parts called", y = NULL) + th +
     theme(axis.text.y = element_blank(), panel.grid.major.y = element_blank())
   g <- patchwork::wrap_plots(patchwork::plot_spacer(), top, left, mat, ncol = 2, widths = c(1, 4), heights = c(3, 1))
-  f <- file.path(o$outdir, sprintf("upset_exonic_parts.%s.tested_split.pdf", cl))
+  f <- file.path(o$outdir, sprintf("upset_exonic_parts.%s.pdf", cl))
   ggsave(f, g, width = 8, height = 5, device = cairo_pdf)
   ggsave(sub("\\.pdf$", ".png", f), g, width = 8, height = 5, dpi = 300)
 }

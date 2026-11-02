@@ -793,8 +793,9 @@ outside rMATS's reach, which is a different statement.
 ### All three tools on exonic parts
 
 `compare_parts_upset.R` translates GrASE, rMATS and DEXSeq calls to exonic parts
-and draws an UpSet plot of which tools call each part, once over all parts and
-once over the parts all three tested. Each tool keeps its own call rule: GrASE
+and draws an UpSet plot of which tools call each part, once over every part
+called by any tool (`upset_exonic_parts.<class>`) and once over the parts all three
+tested (`upset_exonic_parts.<class>.tested_by_all`). Each tool keeps its own call rule: GrASE
 `grase::is_significant()` at `--pval`, rMATS `FDR` with `|IncLevelDifference| >= --min_dpsi`,
 DEXSeq `padj` with `|log2 fold change| >= --min_l2fc`, all at `--pval`. A GrASE
 bipartition counts as called when either side is, and contributes the parts of both
@@ -816,7 +817,9 @@ Rscript scripts/compare_parts_upset.R \
 ```
 
 Each row of the plot is a tool and each bar counts the exonic parts called by exactly the
-tools marked below it. The example is the COVID-19 brain data (GSE188847), internal class,
+tools marked below it. In the first plot each bar is split by how many of the three tools
+tested the part (3, 2 or 1), so a tool's single-tool bar separates parts the others examined
+and did not call from parts only that tool could examine. The example is the COVID-19 brain data (GSE188847), internal class,
 with rMATS parts from `map_rmats_graph.R`:
 
 ![Exonic parts called by GrASE, rMATS and DEXSeq (COVID-19 brain, internal class)](figures/upset_exonic_parts_internal.png){width=80%}
