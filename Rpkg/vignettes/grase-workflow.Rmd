@@ -793,15 +793,18 @@ outside rMATS's reach, which is a different statement.
 ### All three tools on exonic parts
 
 `compare_parts_upset.R` translates GrASE, rMATS and DEXSeq calls to exonic parts
-and draws an UpSet plot of which tools call each part, once over every part
-called by any tool (`upset_exonic_parts.<class>`) and once over the parts all three
-tested (`upset_exonic_parts.<class>.tested_by_all`). Each tool keeps its own call rule: GrASE
+and draws UpSet plots of which tools call each part, once over every part called by
+any tool (`upset_exonic_parts`) and once over the parts all three tested
+(`upset_exonic_parts.tested_by_all`). Each tool keeps its own call rule: GrASE
 `grase::is_significant()` at `--pval`, rMATS `FDR` with `|IncLevelDifference| >= --min_dpsi`,
 DEXSeq `padj` with `|log2 fold change| >= --min_l2fc`, all at `--pval`. A GrASE
 bipartition counts as called when either side is, and contributes the parts of both
 distinct sets; a part shared by several bipartitions or events is called if any
-of them is. `--grase` and `--map_dirs` pair one file with one mapping per class,
-and each class gets its own plot.
+of them is. `--grase` takes one results file per class (named by `--class`) and
+`--map_dirs` the rMATS mappings to use. The class is a property of GrASE's bipartitions
+only, so rMATS and DEXSeq are never split by it: the plots above treat GrASE as one tool,
+and with two classes `upset_exonic_parts.by_class` puts GrASE internal and GrASE
+terminal side by side against the same rMATS and DEXSeq calls.
 
 rMATS parts come from whichever mapping `--map_dirs` names: the matched
 bipartitions (`map_rmats_bipartitions.R`), or the event's own parts from
