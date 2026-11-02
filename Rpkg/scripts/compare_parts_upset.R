@@ -32,7 +32,12 @@
 ## category called by at least one tool are also written to categories/<class>.<category>.tsv.
 ## GrASE and rMATS parts that find no DEXSeq row (e.g. removed by a count filter before DEXSeq or satuRn)
 ## are kept with dex_tested FALSE; their number is printed.
-suppressPackageStartupMessages({library(optparse); library(data.table); library(UpSetR); library(grase)})
+## upset_exonic_parts.<class>.tested_split.{pdf,png} redraws the first UpSet plot with each bar split
+## by how many of the three tools tested the part (3, 2 or 1). In a bar of k tools, parts tested by all
+## three were examined by the others and not called; parts tested by k only the calling tools could
+## examine. The counts
+## are in upset_exonic_parts.<class>.tested_split.tsv.
+suppressPackageStartupMessages({library(optparse); library(data.table); library(UpSetR); library(ggplot2); library(patchwork); library(grase)})
 o <- parse_args(OptionParser(option_list = list(
   make_option("--grase",     type = "character", help = "annotated exontest.R results, comma separated"),
   make_option("--map_dirs",  type = "character", help = "map_rmats_bipartitions.R output directories, comma separated"),
@@ -48,11 +53,16 @@ o <- parse_args(OptionParser(option_list = list(
   make_option("--min_dpi",   type = "double", default = 0.1,  help = "GrASE |delta_pi| [%default]"),
   make_option("--min_dpi_sj", type = "double", default = 0.05, help = "GrASE |delta_pi| for a junction-sourced side [%default]"),
   make_option("--class",    type = "character", default = NULL, help = "class names, comma separated [internal,terminal]"),
+  make_option("--font",     type = "character", default = "Arial", help = "font of every plot, embedded in the PDFs [%default]"),
   make_option("--min_reads", type = "double", default = 10,   help = "GrASE reads on the distinct set in a group [%default]"))))
 for (r in c("grase", "map_dirs", "rmats_dir", "dexseq", "outdir"))
   if (is.null(o[[r]])) stop("--", r, " is required", call. = FALSE)
 split <- function(x) trimws(strsplit(x, ",")[[1]])
 dir.create(o$outdir, showWarnings = FALSE, recursive = TRUE)
+## both devices fall back silently to the system sans font when the requested one is not installed
+font_used <- systemfonts::match_fonts(o$font)$path
+if (!grepl(o$font, basename(font_used), ignore.case = TRUE))
+  warning(sprintf("font %s is not installed; plots use %s", o$font, basename(font_used)), call. = FALSE)
 cat(sprintf("pval %g | rMATS |dPSI| >= %g | DEXSeq |log2FC| >= %g | GrASE reads >= %g\n", o$pval, o$min_dpsi, o$min_l2fc, o$min_reads))
 
 ## DEXSeq: exonic parts with a DEXSeq row. A table without a pvalue column is read as satuRn
@@ -135,6 +145,8 @@ for (k in seq_along(gfiles)) {
   setcolorder(P, c("gene", "part", "category", "tested_by_all"))
   fwrite(P, file.path(o$outdir, sprintf("exonic_parts_three_tools.%s.tsv", cl)), sep = "\t", na = "NA", quote = FALSE)
   dir.create(file.path(o$outdir, "categories"), showWarnings = FALSE)
+  ## a category empty in this run must not keep a file from an earlier one
+  unlink(Sys.glob(file.path(o$outdir, "categories", sprintf("%s.*.tsv", cl))))
   for (cg in setdiff(unique(P$category), "none"))
     fwrite(P[category == cg], file.path(o$outdir, "categories", sprintf("%s.%s.tsv", cl, cg)), sep = "\t", na = "NA", quote = FALSE)
 
@@ -145,10 +157,60 @@ for (k in seq_along(gfiles)) {
     print(as.data.table(B)[, .N, by = .(GrASE, rMATS, DEXSeq)][order(-N)])
     draw <- function() print(upset(B, sets = sets, keep.order = TRUE, order.by = "freq",
                                    mainbar.y.label = paste("exonic parts,", cl), sets.x.label = "parts called", text.scale = 1.3))
-    pdf(file, width = 7, height = 5); draw(); dev.off()
-    png(sub("\\.pdf$", ".png", file), width = 2100, height = 1500, res = 300); draw(); dev.off()
+    cairo_pdf(file, width = 7, height = 5, family = o$font); draw(); dev.off()
+    png(sub("\\.pdf$", ".png", file), width = 2100, height = 1500, res = 300, type = "cairo", family = o$font); draw(); dev.off()
   }
   up(P, paste(cl, "called, any tool"), file.path(o$outdir, sprintf("upset_exonic_parts.%s.pdf", cl)))
   up(P[dex_tested & grase_tested & rmats_tested], paste(cl, "called, parts tested by all three"),
      file.path(o$outdir, sprintf("upset_exonic_parts.%s.tested_by_all.pdf", cl)))
+
+  ## the first plot's bars, split by whether the tools that did not call a part tested it
+  C <- P[category != "none"]
+  ## a tool that called a part also tested it, so a bar of k tools holds only parts tested by k to 3
+  stopifnot(C[, all((!grase_called | grase_tested) & (!rmats_called | rmats_tested) & (!dex_called | dex_tested))])
+  lev <- c("3", "2", "1")
+  C[, others := as.character(grase_tested + rmats_tested + dex_tested)]
+  S <- C[, .N, by = .(category, others)]
+  tot <- S[, .(N = sum(N)), by = category][order(-N)]
+  fwrite(setnames(dcast(S, category ~ factor(others, levels = lev), value.var = "N", fill = 0L)[match(tot$category, category)],
+                  lev, paste0("tested_by_", lev), skip_absent = TRUE),
+         file.path(o$outdir, sprintf("upset_exonic_parts.%s.tested_split.tsv", cl)), sep = "\t", quote = FALSE)
+  cat(cl, "called, any tool, split by how many tools tested the part:\n"); print(S[order(match(category, tot$category), match(others, lev))])
+  S[, category := factor(category, levels = tot$category)][, others := factor(others, levels = lev)]
+  ## UpSet layout: stacked intersection bars on top, the tool matrix below, each tool's calls at its left
+  tools <- rev(sets)                                         # matrix rows top to bottom: DEXSeq, rMATS, GrASE
+  M <- CJ(category = factor(tot$category, levels = tot$category), tool = factor(tools, levels = rev(tools)))
+  M[, on := mapply(function(cg, t) t %in% strsplit(cg, "+", fixed = TRUE)[[1]], as.character(category), as.character(tool))]
+  L <- M[(on), .(lo = min(as.integer(tool)), hi = max(as.integer(tool))), by = category]
+  ss <- data.table(tool = factor(tools, levels = rev(tools)),
+                   N = c(sum(P$dex_called), sum(P$rmats_called), sum(P$grase_called)))
+  th <- theme_minimal(base_size = 11, base_family = o$font) +
+    theme(panel.grid.minor = element_blank(), panel.grid.major.x = element_blank())
+  ## columns fixed to the bar order: a layer missing a category would otherwise move it to the end
+  xs <- scale_x_discrete(limits = tot$category)
+  top <- ggplot(S, aes(category, N, fill = others)) +
+    geom_col(width = 0.55, colour = "white", linewidth = 0.4, position = position_stack(reverse = TRUE)) +
+    geom_text(data = tot[, .(category = factor(category, levels = tot$category), N)], aes(category, N, label = N),
+              inherit.aes = FALSE, vjust = -0.4, size = 3, colour = "grey20", family = o$font) + xs +
+    scale_fill_manual(values = setNames(c("#104281", "#2a78d6", "#86b6ef"), lev), drop = FALSE,
+                      name = "Tools that tested the part") +
+    scale_y_continuous(expand = expansion(mult = c(0, 0.08))) +
+    guides(fill = guide_legend(reverse = TRUE, nrow = 1)) +
+    labs(x = NULL, y = paste("exonic parts,", cl)) + th +
+    theme(axis.text.x = element_blank(), legend.position = "top", legend.justification = "left")
+  mat <- ggplot(M, aes(category, tool)) + xs +
+    geom_point(data = M[(!on)], size = 3, colour = "grey85") +
+    geom_segment(data = L, aes(x = category, xend = category, y = lo, yend = hi), inherit.aes = FALSE,
+                 linewidth = 0.8, colour = "grey20") +
+    geom_point(data = M[(on)], size = 3, colour = "grey20") +
+    labs(x = NULL, y = NULL) + th +
+    theme(axis.text.x = element_blank(), panel.grid.major.y = element_blank(), axis.text.y = element_text(hjust = 0.5))
+  left <- ggplot(ss, aes(N, tool)) + geom_col(width = 0.6, fill = "grey35") +
+    scale_x_reverse(expand = expansion(mult = c(0.02, 0)), labels = function(x) ifelse(x >= 1000, paste0(x / 1000, "K"), x)) +
+    labs(x = "parts called", y = NULL) + th +
+    theme(axis.text.y = element_blank(), panel.grid.major.y = element_blank())
+  g <- patchwork::wrap_plots(patchwork::plot_spacer(), top, left, mat, ncol = 2, widths = c(1, 4), heights = c(3, 1))
+  f <- file.path(o$outdir, sprintf("upset_exonic_parts.%s.tested_split.pdf", cl))
+  ggsave(f, g, width = 8, height = 5, device = cairo_pdf)
+  ggsave(sub("\\.pdf$", ".png", f), g, width = 8, height = 5, dpi = 300)
 }
