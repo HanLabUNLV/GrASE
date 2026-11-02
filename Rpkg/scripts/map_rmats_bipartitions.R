@@ -9,7 +9,8 @@
 ## Writes, per event type, into --outdir:
 ##   combined.fromGTF.<type>.txt        every fromGTF row, plus DexseqFragment
 ##       (the matched bipartition's distinct parts), DexseqRefFrag (its
-##       reference parts) and bipartID (its event number); NA when unmatched
+##       reference parts), bipartID (its event number) and inclSide (1 or 2, the
+##       side whose path holds the inclusion form); NA when unmatched
 ##   combined.dexseq.<type>.mapped.txt  one row per exonic part of each gene:
 ##       the events whose matched bipartition has the part in a distinct set
 ##       (rMATS_ID_<type>) or in its reference (rMATS_ID_<type>_ref)
@@ -74,7 +75,7 @@ one_gene <- function(gene) {
       if (any(w)) paste(tag[w], collapse = ",") else NA_character_ }, "")
     res[[et]] <- list(
       rows = data.table(ID = e$ID, DexseqFragment = unname(dist), DexseqRefFrag = refp,
-                        bipartID = ifelse(k, evno[m], NA)),
+                        bipartID = ifelse(k, evno[m], NA), inclSide = attr(m, "incl_side")),
       mapped = setnames(data.table(GeneID = gene, DexseqFragment = frags,
                                    a = unname(hit(dist)), b = unname(hit(refp))),
                         c("a", "b"), paste0("rMATS_ID_", et, c("", "_ref"))))

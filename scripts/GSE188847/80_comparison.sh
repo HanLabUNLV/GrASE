@@ -10,12 +10,15 @@
 # once with rMATS parts from the matched bipartitions and once from map_rmats_graph.R.
 # Usage: bash 80_comparison.sh [internal|terminal]   (default: both)
 # PVAL sets the adjusted p cutoff of every comparison (default 0.05).
+# Effect signs: rMATS ran Control as sample 1 (RMATS_S1); DEXSeq's log2fold_COVID19_Control already
+# points the way of the GrASE contrast, so it is not flipped.
 # Output: comparison/
 set -eu -o pipefail
 . "$(dirname "$0")/config.sh"
 RM=${RM:-$WD/rmats_v34}
 DX=${DX:-$WD/dexseq_v34/dexseq_results.txt}
 PVAL=${PVAL:-0.05}
+RMATS_S1=${RMATS_S1:-Control}
 RES=$WD/grase_covid_exsj
 OUT=$WD/comparison
 G=$RES/test_bipartition.exsj
@@ -30,7 +33,7 @@ for C in ${1:-internal terminal}; do
   Rscript $R/map_rmats_bipartitions.R --graphdir "$WD/graphml" --splitdir "$WD/bipartition.filtered" \
     --class "$C" --rmatsdir "$RM" --outdir "$OUT/map.$C" --mc_cores "$CORES" &> "$OUT/map.$C.log"
   Rscript $R/compare_rmats_grase.R --grase "$GF" --rmats_dir "$RM" --map_dir "$OUT/map.$C/" \
-    --contrast "${CTR/:/_vs_}" --pval "$PVAL" --output "$OUT/grase_vs_rmats.$C.txt" &> "$OUT/grase_vs_rmats.$C.log"
+    --contrast "${CTR/:/_vs_}" --rmats_sample1 "$RMATS_S1" --pval "$PVAL" --output "$OUT/grase_vs_rmats.$C.txt" &> "$OUT/grase_vs_rmats.$C.log"
   echo "=== $C done"
 done
 

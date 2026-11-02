@@ -29,7 +29,11 @@ option_list <- list(
   make_option("--min_reads", type = "double", default = 10,
               help = "GrASE reads on the distinct set in a group [default= %default]"),
   make_option("--pval", type = "double", default = 0.05,
-              help = "cutoff on the adjusted p of GrASE (is_significant) and rMATS FDR [default= %default]")
+              help = "cutoff on the adjusted p of GrASE (is_significant) and rMATS FDR [default= %default]"),
+  make_option("--rmats_sample1", type = "character", default = NULL,
+              help = paste("group rMATS ran as sample 1 (--b1); one of the two groups of the GrASE contrast.",
+                           "Needed to point IncLevelDifference the way of effect_size; without it the",
+                           "direction checks are skipped"))
 )
 
 opt_parser <- OptionParser(option_list = option_list)
@@ -209,7 +213,32 @@ full_data <- full_data %>%
       !grase_sig & rmats_sig ~ "rMATS_Only",
       TRUE ~ "Neither_Sig"
     ),
-    dir_agree = sign(get(eff_col)) == sign(rmats_inc_diff)
+  )
+
+# Direction. effect_size of a row is the change (first group of the contrast minus the second)
+# of its side's share; IncLevelDifference is sample 1 minus sample 2 of the inclusion form.
+# rmats_dpsi turns the latter into the former: flip when sample 1 is the second group, and
+# again when the row's side is not the one holding the inclusion form (inclSide of the map).
+ctr <- unique(full_data$contrast)
+grp_sign <- NA_real_
+if (is.null(opt$rmats_sample1)) {
+  message("No --rmats_sample1: direction checks skipped")
+} else if (length(ctr) != 1) {
+  message("Direction checks need a single contrast; skipped")
+} else {
+  grps <- strsplit(ctr, "_vs_", fixed = TRUE)[[1]]
+  if (!opt$rmats_sample1 %in% grps) stop("--rmats_sample1 ", opt$rmats_sample1, " is not a group of ", ctr)
+  grp_sign <- if (opt$rmats_sample1 == grps[1]) 1 else -1
+}
+if (!"inclSide" %in% names(full_data)) {
+  message("Map has no inclSide column (rerun map_rmats_bipartitions.R): direction checks skipped")
+  full_data$inclSide <- NA_integer_
+}
+full_data <- full_data %>%
+  mutate(
+    side = ifelse(grepl("diff1", comparison), 1L, 2L),
+    rmats_dpsi = rmats_inc_diff * grp_sign * ifelse(side == inclSide, 1, -1),
+    dir_agree = sign(get(eff_col)) == sign(rmats_dpsi)
   )
 
 # --- Function for Stats ---
@@ -221,7 +250,8 @@ calc_stats <- function(dt, p_col, eff_col, label="Dataset") {
                            -log10(dt$rmats_pval + 1e-300), 
                            method = "pearson", use = "complete.obs"),
     spearman_pval = cor(dt[[p_col]], dt$rmats_pval, method = "spearman", use = "complete.obs"),
-    pearson_effect = cor(dt[[eff_col]], dt$rmats_inc_diff, method = "pearson", use = "complete.obs")
+    pearson_effect = if (sum(complete.cases(dt[[eff_col]], dt$rmats_dpsi)) > 2)
+      cor(dt[[eff_col]], dt$rmats_dpsi, method = "pearson", use = "complete.obs") else NA_real_
   )
 }
 
@@ -278,7 +308,7 @@ discrepancies <- full_data %>%
   filter(category %in% c("GrASE_Only", "rMATS_Only")) %>%
   select(gene, event, rMATS_EventType, ID, 
          grase_p, grase_padj = padj, rmats_pval, rmats_fdr, 
-         grase_eff = !!eff_col, rmats_inc = rmats_inc_diff, 
+         grase_eff = !!eff_col, rmats_inc = rmats_inc_diff, rmats_dpsi, 
          category) %>%
   arrange(grase_padj) # Sort by GrASE significance
 
@@ -309,12 +339,12 @@ p1 <- ggplot(p1_dt, aes(x = log_grase, y = log_rmats, color = category)) +
        x = "GrASE -log10(p)", y = "rMATS -log10(p)")
 
 # Plot 2: Effect Sizes Total
-p2 <- ggplot(plot_dt, aes(x = grase_eff, y = rmats_inc_diff, color = dir_agree)) +
+p2 <- ggplot(plot_dt, aes(x = grase_eff, y = rmats_dpsi, color = dir_agree)) +
   geom_point(alpha = 0.4) +
   scale_color_manual(values = c("FALSE" = "red", "TRUE" = "blue", "NA" = "grey")) +
   geom_abline(intercept = 0, slope = 1, linetype = "dashed") +
   labs(title = "Effect Size Comparison (Total)", 
-       x = "GrASE Effect Size", y = "rMATS IncLevelDiff") +
+       x = "GrASE effect size", y = "rMATS IncLevelDifference, same direction as GrASE") +
   theme_minimal()
 
 print(p1)
@@ -330,12 +360,12 @@ p3 <- ggplot(plot_filt_dt, aes(x = log_grase, y = log_rmats, color = category)) 
        subtitle = "Removing GrASE_Only / rMATS_Only discrepancies",
        x = "GrASE -log10(p)", y = "rMATS -log10(p)")
 
-p4 <- ggplot(plot_filt_dt, aes(x = grase_eff, y = rmats_inc_diff, color = dir_agree)) +
+p4 <- ggplot(plot_filt_dt, aes(x = grase_eff, y = rmats_dpsi, color = dir_agree)) +
   geom_point(alpha = 0.4) +
   scale_color_manual(values = c("FALSE" = "red", "TRUE" = "blue", "NA" = "grey")) +
   geom_abline(intercept = 0, slope = 1, linetype = "dashed") +
   labs(title = "Effect Size Comparison (Consistent Events Only)", 
-       x = "GrASE Effect Size", y = "rMATS IncLevelDiff") +
+       x = "GrASE effect size", y = "rMATS IncLevelDifference, same direction as GrASE") +
   theme_minimal()
 
 print(p3)

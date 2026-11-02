@@ -154,6 +154,7 @@ filter_df_rMATS_minpval <- function(input_df, type, level, ...) {
 
 
 
+## pval, min_dpsi and min_l2fc are read as .env$ in the filters: a satuRn table has its own pval column
 integrate_rMATS_DEXSeq_results <- function(map_dir, out_dir, rmats_directory, dexseq_results, pval = 0.05, min_dpsi = 0.1, min_l2fc = 0.5) {
 
   files <- get_results_files(map_dir, out_dir, rmats_directory, dexseq_results) 
@@ -205,7 +206,7 @@ integrate_rMATS_DEXSeq_results <- function(map_dir, out_dir, rmats_directory, de
   exon_rmats_tested <- res$df; num_exons_rmats_tested <- res$num_events                       # rMATS_TestedExons.txt
   
   # rMATS Significant Exons
-  res <- filter_df_rMATS(dex_to_rmats_ex_dexRes_JCEC, "Exon", "Secondary", FDR <= pval & abs(as.numeric(IncLevelDifference)) >= min_dpsi)
+  res <- filter_df_rMATS(dex_to_rmats_ex_dexRes_JCEC, "Exon", "Secondary", FDR <= .env$pval & abs(as.numeric(IncLevelDifference)) >= .env$min_dpsi)
   exon_rmats_sig <- res$df; num_exons_rmats_sig <- res$num_events                             # rMATS_SigExons.txt
 
   # DEXSeq Tested Exons
@@ -215,7 +216,7 @@ integrate_rMATS_DEXSeq_results <- function(map_dir, out_dir, rmats_directory, de
   exon_dex_tested_rmats_detected <- res_sec$df; num_exons_dex_tested_rmats_detected <- res_sec$num_events     # DexTested__rMATS_DetectedExons.txt
   res_sec <- filter_df_rMATS(exon_dex_tested_full, "Exon", "Secondary", !is.na(ID))
   exon_dex_tested_rmats_tested <- res_sec$df; num_exons_dex_tested_rmats_tested <- res_sec$num_events         # DexTested__rMATS_TestedExons.txt
-  res_sec <- filter_df_rMATS(exon_dex_tested_full, "Exon", "Secondary", FDR <= pval & abs(as.numeric(IncLevelDifference)) >= min_dpsi)
+  res_sec <- filter_df_rMATS(exon_dex_tested_full, "Exon", "Secondary", FDR <= .env$pval & abs(as.numeric(IncLevelDifference)) >= .env$min_dpsi)
   exon_dex_tested_rmats_sig <- res_sec$df; num_exons_dex_tested_rmats_sig <- res_sec$num_events               # DexTested__rMATS_SigExons.txt
   
   exon_dex_tested <- exon_dex_tested_full %>%                                                 # DexTestedExons.txt
@@ -224,13 +225,13 @@ integrate_rMATS_DEXSeq_results <- function(map_dir, out_dir, rmats_directory, de
   num_exons_dex_tested <- nrow(exon_dex_tested)
 
   # DEXSeq Significant Exons
-  res <- filter_df_rMATS(dex_to_rmats_ex_dexRes_JCEC, "Exon", "Primary", padj <= pval & abs(l2fc) >= min_l2fc)
+  res <- filter_df_rMATS(dex_to_rmats_ex_dexRes_JCEC, "Exon", "Primary", padj <= .env$pval & abs(l2fc) >= .env$min_l2fc)
   exon_dex_sig_full <- res$df
   res_sec <- filter_df_rMATS(exon_dex_sig_full, "Exon", "Secondary", !is.na(rMATS_ID) & rMATS_ID != "")
   exon_dex_sig_rmats_detected <- res_sec$df; num_exons_dex_sig_rmats_detected <- res_sec$num_events         # DexSig__rMATS_DetectedExons.txt
   res_sec <- filter_df_rMATS(exon_dex_sig_full, "Exon", "Secondary", !is.na(ID))
   exon_dex_sig_rmats_tested <- res_sec$df; num_exons_dex_sig_rmats_tested <- res_sec$num_events             # DexSig__rMATS_TestedExons.txt
-  res_sec <- filter_df_rMATS(exon_dex_sig_full, "Exon", "Secondary", FDR <= pval & abs(as.numeric(IncLevelDifference)) >= min_dpsi)
+  res_sec <- filter_df_rMATS(exon_dex_sig_full, "Exon", "Secondary", FDR <= .env$pval & abs(as.numeric(IncLevelDifference)) >= .env$min_dpsi)
   exon_dex_sig_rmats_sig <- res_sec$df; num_exons_dex_sig_rmats_sig <- res_sec$num_events                   # DexSig__rMATS_SigExons.txt
   
   exon_dex_sig <- exon_dex_sig_full %>%                                                       # DexSigExons.txt
@@ -270,7 +271,7 @@ integrate_rMATS_DEXSeq_results <- function(map_dir, out_dir, rmats_directory, de
   event_dex_tested <- res$df; num_events_dex_tested <- res$num_events                                     # DexTestedEvents.txt
 
   # DEXSeq Significant Events
-  res <- filter_df_rMATS(rmap_mats2dex_ex_JCEC_dexRes, "Event", "Secondary", padj <= pval & abs(l2fc) >= min_l2fc)
+  res <- filter_df_rMATS(rmap_mats2dex_ex_JCEC_dexRes, "Event", "Secondary", padj <= .env$pval & abs(l2fc) >= .env$min_l2fc)
   event_dex_sig <- res$df; num_events_dex_sig <- res$num_events                                           # DexSigEvents.txt
 
   # rMATS Tested Events
@@ -278,7 +279,7 @@ integrate_rMATS_DEXSeq_results <- function(map_dir, out_dir, rmats_directory, de
   event_rmats_tested_full <- res$df
   res_sec <- filter_df_rMATS(event_rmats_tested_full, "Event", "Secondary", !is.na(padj))
   event_rmats_tested_dex_tested <- res_sec$df; num_events_rmats_tested_dex_tested <- res_sec$num_events   # rMATS_Tested__DexTestedEvents.txt
-  res_sec <- filter_df_rMATS(event_rmats_tested_full, "Event", "Secondary", padj <= pval & abs(l2fc) >= min_l2fc)
+  res_sec <- filter_df_rMATS(event_rmats_tested_full, "Event", "Secondary", padj <= .env$pval & abs(l2fc) >= .env$min_l2fc)
   event_rmats_tested_dex_sig <- res_sec$df; num_events_rmats_tested_dex_sig <- res_sec$num_events         # rMATS_Tested__DexSigEvents.txt
 
   event_rmats_tested <- event_rmats_tested_full %>%                                                       # rMATS_TestedEvents.txt
@@ -287,11 +288,11 @@ integrate_rMATS_DEXSeq_results <- function(map_dir, out_dir, rmats_directory, de
   num_events_rmats_tested <- nrow(event_rmats_tested)
 
   # rMATS Significant Events
-  res <- filter_df_rMATS(rmap_mats2dex_ex_JCEC_dexRes, "Event", "Primary", FDR <= pval & abs(as.numeric(IncLevelDifference)) >= min_dpsi)
+  res <- filter_df_rMATS(rmap_mats2dex_ex_JCEC_dexRes, "Event", "Primary", FDR <= .env$pval & abs(as.numeric(IncLevelDifference)) >= .env$min_dpsi)
   event_rmats_sig_full <- res$df
   res_sec <- filter_df_rMATS(event_rmats_sig_full, "Event", "Secondary", !is.na(padj))
   event_rmats_sig_dex_tested <- res_sec$df; num_events_rmats_sig_dex_tested <- res_sec$num_events         # rMATS_Sig__DexTestedEvents.txt
-  res_sec <- filter_df_rMATS(event_rmats_sig_full, "Event", "Secondary", padj <= pval & abs(l2fc) >= min_l2fc)
+  res_sec <- filter_df_rMATS(event_rmats_sig_full, "Event", "Secondary", padj <= .env$pval & abs(l2fc) >= .env$min_l2fc)
   event_rmats_sig_dex_sig <- res_sec$df; num_events_rmats_sig_dex_sig <- res_sec$num_events               # rMATS_Sig__DexSigEvents.txt
 
   event_rmats_sig <- event_rmats_sig_full %>%                                                             # rMATS_SigEvents.txt

@@ -17,7 +17,8 @@ match_rmats_bipartitions(ge, bip, etype, ev)
 }
 \value{
 Integer vector, the matched row of \code{bip} per event, NA if none;
-attribute \code{ncand} holds the number of candidates per event.
+attribute \code{ncand} holds the number of candidates per event and attribute
+\code{incl_side} the side (1 = path1, 2 = path2) holding the inclusion form.
 }
 \description{
 Both forms of each event (\code{rmats_event_forms()}) are compared with the

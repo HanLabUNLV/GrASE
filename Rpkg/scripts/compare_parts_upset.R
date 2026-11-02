@@ -23,16 +23,21 @@
 ## --grase and --map_dirs are paired by position, one pair per class (internal, terminal), and
 ## each class is compared on its own: rMATS has no TSS/TTS events, so pooling the terminal class
 ## would make the GrASE-only bar large for a structural reason. Per class, it writes
-## exonic_parts_three_tools.<class>.tsv (one row per DEXSeq part with each tool's tested/called
-## flags) and upset_exonic_parts.<class>{,.tested_by_all}.{pdf,png}. The second restricts to parts
-## all three tested, so a part one tool never examined is not counted against it. GrASE and rMATS
-## parts that find no DEXSeq row are counted and printed.
+## exonic_parts_three_tools.<class>.tsv (one row per part in the DEXSeq table or tested by GrASE or rMATS, with each tool's tested/called
+## flags, its UpSet category, whether all three tested it, and the evidence behind each call:
+## DEXSeq padj and fold change; the GrASE events whose distinct sets hold the part, those called,
+## and their smallest padj; the rMATS events likewise, with their smallest FDR) and
+## upset_exonic_parts.<class>{,.tested_by_all}.{pdf,png}. The second restricts to parts
+## all three tested, so a part one tool never examined is not counted against it. The rows of each
+## category called by at least one tool are also written to categories/<class>.<category>.tsv.
+## GrASE and rMATS parts that find no DEXSeq row (e.g. removed by a count filter before DEXSeq or satuRn)
+## are kept with dex_tested FALSE; their number is printed.
 suppressPackageStartupMessages({library(optparse); library(data.table); library(UpSetR); library(grase)})
 o <- parse_args(OptionParser(option_list = list(
   make_option("--grase",     type = "character", help = "annotated exontest.R results, comma separated"),
   make_option("--map_dirs",  type = "character", help = "map_rmats_bipartitions.R output directories, comma separated"),
   make_option("--rmats_dir", type = "character"),
-  make_option("--dexseq",    type = "character"),
+  make_option("--dexseq",    type = "character", help = "DEXSeq results, or a satuRn table on DEXSeq exonic parts"),
   make_option("--outdir",    type = "character"),
   make_option("--contrast",  type = "character", default = NULL, help = "keep only this contrast of the GrASE results"),
   make_option("--lfc_col",   type = "character", default = NULL, help = "DEXSeq fold change column [first log2fold_*]"),
@@ -50,16 +55,27 @@ split <- function(x) trimws(strsplit(x, ",")[[1]])
 dir.create(o$outdir, showWarnings = FALSE, recursive = TRUE)
 cat(sprintf("pval %g | rMATS |dPSI| >= %g | DEXSeq |log2FC| >= %g | GrASE reads >= %g\n", o$pval, o$min_dpsi, o$min_l2fc, o$min_reads))
 
-## DEXSeq: the universe of exonic parts
+## DEXSeq: exonic parts with a DEXSeq row. A table without a pvalue column is read as satuRn
+## (ids = gene:part, empirical_FDR, estimates), as in compare_dexseq_grase.R
 hd <- names(fread(o$dexseq, nrows = 0))
-lfc <- if (!is.null(o$lfc_col)) o$lfc_col else grep("^log2fold_", hd, value = TRUE)[1]
-if (is.na(lfc) || !lfc %in% hd) stop("no DEXSeq fold change column (--lfc_col); columns: ", paste(hd, collapse = " "))
-d <- fread(o$dexseq, select = c("groupID", "featureID", "padj", lfc), colClasses = list(character = c("groupID", "featureID")))
-setnames(d, c("groupID", "featureID", lfc), c("gene", "part", "l2fc"))
-d[, gene := gsub('"', "", gene)]
+if ("pvalue" %in% hd) {
+  lfc <- if (!is.null(o$lfc_col)) o$lfc_col else grep("^log2fold_", hd, value = TRUE)[1]
+  if (is.na(lfc) || !lfc %in% hd) stop("no DEXSeq fold change column (--lfc_col); columns: ", paste(hd, collapse = " "))
+  d <- fread(o$dexseq, select = c("groupID", "featureID", "padj", lfc), colClasses = list(character = c("groupID", "featureID")))
+  setnames(d, c("groupID", "featureID", lfc), c("gene", "part", "l2fc"))
+} else {
+  if (!all(c("ids", "empirical_FDR", "estimates") %in% hd)) stop("--dexseq is neither DEXSeq nor satuRn; columns: ", paste(hd, collapse = " "))
+  cat("--dexseq read as satuRn (empirical FDR, estimates)\n")
+  d <- fread(o$dexseq, select = c("ids", "empirical_FDR", "estimates"))
+  d[, c("gene", "part") := tstrsplit(ids, ":", fixed = TRUE)]
+  d <- d[, .(gene, part, padj = empirical_FDR, l2fc = estimates)]
+}
+d[, gene := gsub('"', "", gene)][, part := gsub('"', "", part)]
 cat(sprintf("DEXSeq groups merging genes: %d\n", uniqueN(grep("+", d$gene, fixed = TRUE, value = TRUE))))
 d[, `:=`(dex_tested = !is.na(padj), dex_called = !is.na(padj) & padj < o$pval & !is.na(l2fc) & abs(l2fc) >= o$min_l2fc)]
 P <- d[, .(gene, part, dex_tested, dex_called)]
+min_na <- function(x) if (all(is.na(x))) NA_real_ else min(x, na.rm = TRUE)
+ids <- function(x) if (length(x)) paste(sort(unique(x)), collapse = ",") else NA_character_
 
 
 gfiles <- split(o$grase); mdirs <- split(o$map_dirs)
@@ -70,7 +86,7 @@ et <- split(o$etypes)
 
 for (k in seq_along(gfiles)) {
   cl <- labels[k]; cat("\n=====", cl, "=====\n")
-  P <- copy(d[, .(gene, part, dex_tested, dex_called)])
+  P <- copy(d[, .(gene, part, dex_tested, dex_called, dex_padj = padj, dex_l2fc = l2fc)])
 
   ## GrASE: parts of the distinct sets of both sides of a bipartition
   g <- fread(gfiles[k], colClasses = list(character = c("gene", "setdiff1", "setdiff2")))
@@ -79,15 +95,16 @@ for (k in seq_along(gfiles)) {
   g[, call := is_significant(g, o$pval, 0, o$min_dpi, o$min_dpi_sj, o$min_reads)]
   ## tested = has a p-value; padj is NA for tests in genes not selected at the gene level
   g <- g[!is.na(p.value)]
-  gp <- rbind(g[, .(gene, event, contrast, call, part = setdiff1)], g[, .(gene, event, contrast, call, part = setdiff2)])
+  ## each row (one side of a bipartition) spreads over both distinct sets of its bipartition
+  gp <- rbind(g[, .(gene, event, padj, call, part = setdiff1)], g[, .(gene, event, padj, call, part = setdiff2)])
   gp <- gp[!is.na(part) & part != "NA" & nzchar(part)]
-  gp <- gp[, .(part = trimws(unlist(strsplit(part, ",")))), by = .(gene, event, contrast, call)]
-  gp <- gp[, .(grase_called = any(call)), by = .(gene, part)]
+  gp <- gp[, .(part = trimws(unlist(strsplit(part, ",")))), by = .(gene, event, padj, call)]
+  gp <- gp[, .(grase_called = any(call), grase_events = ids(event), grase_called_events = ids(event[call]),
+               grase_padj = min_na(padj)), by = .(gene, part)]
   cat(sprintf("GrASE: %d bipartition-contrasts tested, %d called; %d of %d parts have no DEXSeq row\n",
               nrow(unique(g[, .(gene, event, contrast)])), nrow(unique(g[call == TRUE, .(gene, event, contrast)])),
               nrow(fsetdiff(gp[, .(gene, part)], d[, .(gene, part)])), nrow(gp)))
-  P <- merge(P, gp, by = c("gene", "part"), all.x = TRUE)
-  P[, grase_tested := !is.na(grase_called)]; P[is.na(grase_called), grase_called := FALSE]
+  P <- merge(P, gp, by = c("gene", "part"), all = TRUE)
 
   ## rMATS: parts of the matched events' distinct sets
   rt <- rbindlist(lapply(et, function(t) {
@@ -99,15 +116,27 @@ for (k in seq_along(gfiles)) {
     merge(mp, m[, .(tag, FDR, IncLevelDifference)], by = "tag")
   }))
   rt <- rt[!is.na(FDR)]
-  rp <- rt[, .(rmats_called = any(FDR < o$pval & abs(IncLevelDifference) >= o$min_dpsi)), by = .(gene, part)]
+  rt[, call := FDR < o$pval & abs(IncLevelDifference) >= o$min_dpsi]
+  rp <- rt[, .(rmats_called = any(call), rmats_events = ids(tag), rmats_called_events = ids(tag[call]),
+               rmats_fdr = min_na(FDR)), by = .(gene, part)]
   cat(sprintf("rMATS: %d parts; %d have no DEXSeq row\n", nrow(rp), nrow(fsetdiff(rp[, .(gene, part)], d[, .(gene, part)]))))
-  P <- merge(P, rp, by = c("gene", "part"), all.x = TRUE)
-  P[, rmats_tested := !is.na(rmats_called)]; P[is.na(rmats_called), rmats_called := FALSE]
+  P <- merge(P, rp, by = c("gene", "part"), all = TRUE)
+  ## rows are the union of the parts each tool tested: a part missing from a tool's table is untested by it
+  P[, `:=`(grase_tested = !is.na(grase_called), rmats_tested = !is.na(rmats_called))]
+  for (v in c("dex_tested", "dex_called", "grase_called", "rmats_called")) set(P, which(is.na(P[[v]])), v, FALSE)
 
-  cat(sprintf("exonic parts %d | tested: DEXSeq %d, GrASE %d, rMATS %d, all three %d\n", nrow(P),
+  cat(sprintf("exonic parts (union) %d | tested: DEXSeq %d, GrASE %d, rMATS %d, all three %d\n", nrow(P),
               sum(P$dex_tested), sum(P$grase_tested), sum(P$rmats_tested), sum(P$dex_tested & P$grase_tested & P$rmats_tested)))
   cat(sprintf("called: DEXSeq %d, GrASE %d, rMATS %d\n", sum(P$dex_called), sum(P$grase_called), sum(P$rmats_called)))
-  fwrite(P, file.path(o$outdir, sprintf("exonic_parts_three_tools.%s.tsv", cl)), sep = "\t")
+  P[, category := apply(cbind(ifelse(grase_called, "GrASE", NA), ifelse(rmats_called, "rMATS", NA),
+                              ifelse(dex_called, "DEXSeq", NA)), 1, function(x) {
+    x <- x[!is.na(x)]; if (length(x)) paste(x, collapse = "+") else "none" })]
+  P[, tested_by_all := dex_tested & grase_tested & rmats_tested]
+  setcolorder(P, c("gene", "part", "category", "tested_by_all"))
+  fwrite(P, file.path(o$outdir, sprintf("exonic_parts_three_tools.%s.tsv", cl)), sep = "\t", na = "NA", quote = FALSE)
+  dir.create(file.path(o$outdir, "categories"), showWarnings = FALSE)
+  for (cg in setdiff(unique(P$category), "none"))
+    fwrite(P[category == cg], file.path(o$outdir, "categories", sprintf("%s.%s.tsv", cl, cg)), sep = "\t", na = "NA", quote = FALSE)
 
   up <- function(D, title, file) {
     B <- data.frame(GrASE = as.integer(D$grase_called), rMATS = as.integer(D$rmats_called), DEXSeq = as.integer(D$dex_called))

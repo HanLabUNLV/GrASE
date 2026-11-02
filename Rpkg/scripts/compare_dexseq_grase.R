@@ -39,7 +39,11 @@ option_list <- list(
   make_option("--min_reads", type = "double", default = 10,
               help = "GrASE reads on the distinct set in a group [default= %default]"),
   make_option("--pval", type = "double", default = 0.05,
-              help = "cutoff on the adjusted p of GrASE (is_significant) and of DEXSeq / satuRn empirical FDR [default= %default]")
+              help = "cutoff on the adjusted p of GrASE (is_significant) and of DEXSeq / satuRn empirical FDR [default= %default]"),
+  make_option("--exon_sign", type = "double", default = 1,
+              help = paste("1 or -1: multiplies the exon-level effect so it points the way of the GrASE effect_size",
+                           "(first group of the contrast minus the second). A satuRn estimate is group 1 minus group 2",
+                           "of its own table [default= %default]"))
 )
 opt_parser <- OptionParser(option_list = option_list)
 opt <- parse_args(opt_parser)
@@ -77,6 +81,8 @@ read_exon_results <- function(path) {
   out[]
 }
 ex <- read_exon_results(opt$exon_results)
+if (!opt$exon_sign %in% c(1, -1)) stop("--exon_sign must be 1 or -1")
+ex[, exon_effect := opt$exon_sign * exon_effect]
 message(" - exonic parts in the exon-level table: ", nrow(ex),
         "; groups merging genes: ", uniqueN(grep("+", ex$gene, fixed = TRUE, value = TRUE)))
 

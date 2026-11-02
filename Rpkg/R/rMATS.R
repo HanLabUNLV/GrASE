@@ -254,12 +254,14 @@ rmats_event_forms <- function(etype, strand, row) {
 #' @param etype One of "SE", "A3SS", "A5SS", "RI".
 #' @param ev rMATS fromGTF rows of this gene and type.
 #' @return Integer vector, the matched row of `bip` per event, NA if none;
-#'   attribute `ncand` holds the number of candidates per event.
+#'   attribute `ncand` holds the number of candidates per event and attribute
+#'   `incl_side` the side (1 = path1, 2 = path2) holding the inclusion form.
 #' @keywords internal
 match_rmats_bipartitions <- function(ge, bip, etype, ev) {
   out <- rep(NA_integer_, nrow(ev))
   ncand <- integer(nrow(ev))
-  if (!nrow(bip) || !nrow(ev)) return(structure(out, ncand = ncand))
+  incl_side <- rep(NA_integer_, nrow(ev))
+  if (!nrow(bip) || !nrow(ev)) return(structure(out, ncand = ncand, incl_side = incl_side))
   n2p <- stats::setNames(c(ge$vx_from, ge$vx_to), as.character(c(ge$vx_sg_from, ge$vx_sg_to)))
   n2p <- n2p[!duplicated(names(n2p))]
   is_ex <- ge$ex_or_in == "ex" & !is.na(ge$vx_from) & !is.na(ge$vx_to)
@@ -295,12 +297,14 @@ match_rmats_bipartitions <- function(ge, bip, etype, ev) {
       length(a) > 0L && length(b) > 0L && all(on_route(b, fm$skip)) &&
         !any(on_route(a, fm$skip)) && side_incl(a, fm)
     }
-    cand <- which(vapply(seq_along(r1), function(k)
-      ok(r1[[k]], r2[[k]]) || ok(r2[[k]], r1[[k]]), logical(1)))
+    # 1 when path1 holds the inclusion form, 2 when path2 does, 0 when neither
+    side <- vapply(seq_along(r1), function(k)
+      if (ok(r1[[k]], r2[[k]])) 1L else if (ok(r2[[k]], r1[[k]])) 2L else 0L, integer(1))
+    cand <- which(side > 0L)
     ncand[i] <- length(cand)
     if (!length(cand)) next
     best <- cand[w[cand] == min(w[cand])]
-    if (length(best) == 1L) out[i] <- best
+    if (length(best) == 1L) { out[i] <- best; incl_side[i] <- side[best] }
   }
-  structure(out, ncand = ncand)
+  structure(out, ncand = ncand, incl_side = incl_side)
 }
