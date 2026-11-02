@@ -4,7 +4,8 @@
 # Per contrast: rMATS events matched to the bipartitions (map_rmats_bipartitions.R) and to their
 # own exonic parts (map_rmats_graph.R); GrASE against rMATS (compare_rmats_grase.R), GrASE against
 # satuRn (compare_dexseq_grase.R), rMATS against satuRn (compare_rmats_dexseq.R, graph map), and
-# the three on exonic parts (compare_parts_upset.R), with each rMATS mapping.
+# the three on exonic parts (compare_parts_upset.R) with rMATS parts from the graph map.
+# UPSET_BIPARTITION=1 also draws the UpSet plots with rMATS parts from the matched bipartitions.
 # PVAL is the adjusted p cutoff of all three tools (default 0.01, the cutoff of the DICE GrASE runs).
 # Effect signs: GrASE effect_size is <CT>_N_STIM minus <CT>; rMATS ran <CT> as sample 1 (--rmats_sample1)
 # and satuRn's estimate is its group 1 (<CT>) minus group 2, so it is flipped (--exon_sign -1).
@@ -48,9 +49,11 @@ for CT in ${1:-CD4 CD8}; do
 
   A=(--grase "$G.internal_betabinom_EBmap.annotated.txt,$G.terminal_betabinom_EBmap.annotated.txt"
      --rmats_dir "$RM" --dexseq "$SAT" --contrast "$CTR" --pval "$PVAL")
-  Rscript $R/compare_parts_upset.R "${A[@]}" --map_dirs "$OUT/map.internal,$OUT/map.terminal" \
-    --outdir "$OUT/upset.bipartition" &> "$OUT/upset.bipartition.log"
   Rscript $R/compare_parts_upset.R "${A[@]}" --map_dirs "$OUT/map.graph,$OUT/map.graph" \
     --outdir "$OUT/upset.graph" &> "$OUT/upset.graph.log"
+  if [ "${UPSET_BIPARTITION:-0}" = "1" ]; then
+    Rscript $R/compare_parts_upset.R "${A[@]}" --map_dirs "$OUT/map.internal,$OUT/map.terminal" \
+      --outdir "$OUT/upset.bipartition" &> "$OUT/upset.bipartition.log"
+  fi
   echo "=== $CT done: $OUT"
 done

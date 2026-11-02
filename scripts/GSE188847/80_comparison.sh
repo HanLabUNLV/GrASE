@@ -7,7 +7,9 @@
 # rMATS events also mapped to their own exonic parts (map_rmats_graph.R), which
 # compare_rmats_dexseq.R uses to compare rMATS with DEXSeq without GrASE. Then
 # compare_parts_upset.R translates all three to exonic parts and draws the UpSet plots,
-# once with rMATS parts from the matched bipartitions and once from map_rmats_graph.R.
+# with rMATS parts from map_rmats_graph.R (upset.graph/).
+# UPSET_BIPARTITION=1 also draws them with rMATS parts from the matched bipartitions
+# (upset.bipartition/).
 # Usage: bash 80_comparison.sh [internal|terminal]   (default: both)
 # PVAL sets the adjusted p cutoff of every comparison (default 0.05).
 # Effect signs: rMATS ran Control as sample 1 (RMATS_S1); DEXSeq's log2fold_COVID19_Control already
@@ -49,8 +51,10 @@ Rscript $R/compare_rmats_dexseq.R --map_dir "$OUT/map.graph" --outdir "$OUT/rmat
 
 A=(--grase "$G.internal_betabinom_EBmap.annotated.txt,$G.terminal_betabinom_EBmap.annotated.txt"
    --rmats_dir "$RM" --dexseq "$DX" --contrast "${CTR/:/_vs_}" --pval "$PVAL")
-Rscript $R/compare_parts_upset.R "${A[@]}" --map_dirs "$OUT/map.internal,$OUT/map.terminal" \
-  --outdir "$OUT/upset.bipartition" &> "$OUT/upset.bipartition.log"
 Rscript $R/compare_parts_upset.R "${A[@]}" --map_dirs "$OUT/map.graph,$OUT/map.graph" \
   --outdir "$OUT/upset.graph" &> "$OUT/upset.graph.log"
+if [ "${UPSET_BIPARTITION:-0}" = "1" ]; then
+  Rscript $R/compare_parts_upset.R "${A[@]}" --map_dirs "$OUT/map.internal,$OUT/map.terminal" \
+    --outdir "$OUT/upset.bipartition" &> "$OUT/upset.bipartition.log"
+fi
 echo "=== comparison done: $OUT"

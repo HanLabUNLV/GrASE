@@ -902,8 +902,9 @@ Per class it matches rMATS events to the v34 bipartitions (`map.<class>/`) and
 compares GrASE with rMATS (`grase_vs_rmats.<class>.txt`) and rMATS with DEXSeq
 (`rmats_vs_dexseq.<class>/`). It compares GrASE with DEXSeq on exonic parts
 (`grase_vs_dexseq.txt`), maps rMATS events to their own parts (`map.graph/`), and
-draws the three-way UpSet plots twice: with rMATS parts from the matched
-bipartitions (`upset.bipartition/`) and from the graph mapping (`upset.graph/`).
+draws the three-way UpSet plots with rMATS parts from the graph mapping
+(`upset.graph/`). `UPSET_BIPARTITION=1 bash 80_comparison.sh` also draws them with
+rMATS parts from the matched bipartitions (`upset.bipartition/`).
 All output is under `comparison/`.
 
 rMATS and DEXSeq call exon bins or events, GrASE a bipartition, so the comparison is
