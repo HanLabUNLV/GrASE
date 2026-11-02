@@ -3,7 +3,9 @@
 ##
 ## Each GrASE bipartition is spread over the parts of both its distinct sets (setdiff1 and setdiff2) and
 ## is called if either side is; a part in several bipartitions is called if any of them is, and keeps the
-## test with the smallest padj.
+## test with the smallest padj. A side's effect_size is the change in its own distinct set's share, so a
+## part of the other distinct set takes it negated (the two sides are assumed to move in opposite
+## directions, as in compare_rmats_grase.R); grase_other_side marks those parts.
 ## The exon-level table is read as DEXSeq (groupID, featureID, pvalue, padj, log2fold_*) or,
 ## when it has no pvalue column, as satuRn (ids = gene:part, empirical_pval, empirical_FDR,
 ## estimates), the same detection compare_rmats_dexseq.R uses.
@@ -100,11 +102,14 @@ g <- g[!is.na(p.value)]
 g[, grase_call := is_significant(g, opt$pval, 0, opt$min_dpi, opt$min_dpi_sj, opt$min_reads)]
 ## a bipartition is called if either side is; its parts are those of both distinct sets
 g[, grase_call := any(grase_call), by = .(cls, gene, event, contrast)]
-g <- rbind(g[, .(cls, gene, event, comparison, grase_p = p.value, grase_padj = padj, grase_effect = effect_size, grase_call, part = setdiff1)],
-           g[, .(cls, gene, event, comparison, grase_p = p.value, grase_padj = padj, grase_effect = effect_size, grase_call, part = setdiff2)])
+g[, side := fifelse(grepl("diff1", comparison), 1L, 2L)]
+g <- rbind(g[, .(cls, gene, event, comparison, grase_p = p.value, grase_padj = padj, grase_call, part = setdiff1,
+                 grase_other_side = side != 1L, grase_effect = fifelse(side == 1L, effect_size, -effect_size))],
+           g[, .(cls, gene, event, comparison, grase_p = p.value, grase_padj = padj, grase_call, part = setdiff2,
+                 grase_other_side = side != 2L, grase_effect = fifelse(side == 2L, effect_size, -effect_size))])
 g <- g[!is.na(part) & part != "NA" & nzchar(part)]
 gp <- g[, .(part = trimws(unlist(strsplit(part, ",")))),
-        by = .(gene, event, comparison, grase_p, grase_padj, grase_effect, grase_call)]
+        by = .(gene, event, comparison, grase_p, grase_padj, grase_effect, grase_other_side, grase_call)]
 ## a part in several tests: called if any test calling it is, else the smallest padj
 setorder(gp, gene, part, -grase_call, grase_padj, grase_p, na.last = TRUE)
 gp <- gp[, .SD[1], by = .(gene, part)]
@@ -134,7 +139,9 @@ stats_summary <- list(
   n_sig_grase = sum(m$grase_sig),
   n_sig_exon  = sum(m$exon_sig),
   n_sig_both  = sum(m$grase_sig & m$exon_sig),
-  jaccard     = sum(m$grase_sig & m$exon_sig) / max(1, sum(m$grase_sig | m$exon_sig))
+  jaccard     = sum(m$grase_sig & m$exon_sig) / max(1, sum(m$grase_sig | m$exon_sig)),
+  ## parts both call whose effects point the same way (exon effect after --exon_sign)
+  direction_agree_both = m[grase_sig & exon_sig, sprintf("%d/%d", sum(sign(grase_effect) == sign(exon_effect), na.rm = TRUE), .N)]
 )
 message("--- Summary (adjusted p < ", opt$pval, ") ---")
 print(stats_summary)
