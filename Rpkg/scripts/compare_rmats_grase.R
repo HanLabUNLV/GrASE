@@ -241,6 +241,16 @@ full_data <- full_data %>%
     dir_agree = sign(get(eff_col)) == sign(rmats_dpsi)
   )
 
+# One row per bipartition-event pair. Both sides of a bipartition test the same split, so the pair
+# is represented by its called side with the lowest p-value, or by its lowest-p side when neither
+# side is called; "called" therefore means either side is, as for the bipartition elsewhere.
+# n_sides is the number of sides of the bipartition matched to the event.
+pair_key <- c("contrast", "gene", "event", "rMATS_EventType", "ID")
+full_data <- as.data.table(full_data)
+full_data[, n_sides := .N, by = pair_key]
+full_data <- unique(full_data[order(fifelse(is.na(grase_sig), TRUE, !grase_sig), get(p_col), na.last = TRUE)], by = pair_key)
+message("Bipartition-event pairs: ", nrow(full_data), " (", sum(full_data$n_sides > 1), " with two sides, one kept)")
+
 # --- Function for Stats ---
 calc_stats <- function(dt, p_col, eff_col, label="Dataset") {
   list(
