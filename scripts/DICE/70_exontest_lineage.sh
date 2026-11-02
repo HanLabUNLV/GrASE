@@ -30,7 +30,7 @@ for A in $ARMS; do
     ln -sf "$(realpath "$f")" "$MDIR/$(basename "$f")"
   done
 
-  Rscript $S/exontest.R \
+  Rscript $S/exontest.R --independent_filtering --padj_threshold=0.01 \
     --file="$COMBINED" \
     --outdir="$OUT" \
     --countdir="$MDIR/" \
