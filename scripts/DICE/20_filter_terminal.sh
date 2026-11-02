@@ -2,8 +2,8 @@
 # Split each gene's bipartitions into internal and terminal events.
 # Usage: bash 20_filter_terminal.sh
 set -eu -o pipefail
-cd /mnt/data1/home/mirahan/DICE
-R=$HOME/GrASE/Rpkg/scripts
+. "$(dirname "$0")/config.sh"
+cd "$DICE"
 [ ! -e bipartition.filtered ] || { echo "bipartition.filtered already exists; move it aside or delete it first" >&2; exit 1; }
 Rscript $R/filterTerminal.R --split_dir=bipartition.v34 --outdir=bipartition.filtered --split_type=bipartition
 

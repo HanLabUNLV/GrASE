@@ -3,11 +3,12 @@
 # (merge_exon_sj_counts.R). Every other side keeps its exonic counts.
 # Usage: bash 60_merge_lineage.sh
 set -eux
-cd /mnt/data1/home/mirahan/DICE
+. "$(dirname "$0")/config.sh"
+cd "$DICE"
 for D in counts_lineage/bipartition.exsj.internal.counts counts_lineage/bipartition.exsj.terminal.counts; do
   [ ! -e $D ] || { echo "$D already exists; move it aside or delete it first" >&2; exit 1; }
 done
-M=$HOME/GrASE/Rpkg/scripts/merge_exon_sj_counts.R
+M=$R/merge_exon_sj_counts.R
 
 Rscript $M --exon_counts counts_lineage/bipartition.ex.internal.counts \
            --sj_counts   sjcnt \

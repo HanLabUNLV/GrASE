@@ -18,11 +18,12 @@
 #               monocyte BAMs need it (MONO_CLASSIC_* vs MONO.CLASSIC_*).
 #   output      <outdir>/<sample>_counts.txt; existing ones are skipped
 set -eu
-cd /mnt/data1/home/mirahan/DICE
+. "$(dirname "$0")/config.sh"
+cd "$DICE"
 
 # dexseq_count.py: the copy shipped with grase, else the first one found below
 # (all identical). $DEXSEQ_COUNT overrides.
-HTSEQ_PYTHON=/mnt/data1/home/jaquino/miniconda3/bin/python3
+HTSEQ_PYTHON=$PY
 DEXSEQ_COUNT=${DEXSEQ_COUNT:-}
 if [ -z "$DEXSEQ_COUNT" ]; then
   for c in \
@@ -30,7 +31,7 @@ if [ -z "$DEXSEQ_COUNT" ]; then
     /mnt/data1/home/jaquino/R/x86_64-pc-linux-gnu-library/4.2/DEXSeq/python_scripts/dexseq_count.py \
     /mnt/data1/home/mirahan/GrASE_teleport/scripts/dexseq_count.py \
     /mnt/data1/home/mirahan/scGrASE/GrASE/scripts/dexseq_count.py \
-    /mnt/data1/home/mirahan/GrASE/scripts/dexseq_count.py
+    $GRASE/scripts/dexseq_count.py
   do
     [ -s "$c" ] && { DEXSEQ_COUNT=$c; break; }
   done

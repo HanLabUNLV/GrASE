@@ -2,14 +2,14 @@
 # Test the merged exon+junction counts, lineage panel, 10 pairwise contrasts.
 # Usage: bash 70_exontest_lineage.sh [internal|terminal]   (default: both)
 set -eu
-cd /mnt/data1/home/mirahan/DICE
+. "$(dirname "$0")/config.sh"
+cd "$DICE"
 ARMS=${1:-"internal terminal"}
-S=~/GrASE/Rpkg/scripts
-C=~/DICE/counts_lineage
-OUT=~/DICE/grase_lineage_exsj
+C=$DICE/counts_lineage
+OUT=$DICE/grase_lineage_exsj
 mkdir -p "$OUT"
 
-CTR='CD4:B,CD8:B,NK:B,MONO.CLASSIC:B,CD8:CD4,NK:CD4,MONO.CLASSIC:CD4,NK:CD8,MONO.CLASSIC:CD8,MONO.CLASSIC:NK'
+CTR=$LINEAGE_CTR
 
 for A in $ARMS; do
   case "$A" in
@@ -22,7 +22,7 @@ for A in $ARMS; do
   fi
 
   # combined table, plus the bipartition files linked from the exonic counts
-  [ -s "$MDIR/$COMBINED" ] || python3 $S/combine_exoncnt.py "$MDIR" "$MDIR/$COMBINED"
+  [ -s "$MDIR/$COMBINED" ] || python3 $R/combine_exoncnt.py "$MDIR" "$MDIR/$COMBINED"
   echo "$A combined rows: $(wc -l < "$MDIR/$COMBINED")"
   echo "$A symlinking annotations and running exontest ..."
 
@@ -30,7 +30,7 @@ for A in $ARMS; do
     ln -sf "$(realpath "$f")" "$MDIR/$(basename "$f")"
   done
 
-  Rscript $S/exontest.R --independent_filtering --padj_threshold=0.01 \
+  Rscript $R/exontest.R --independent_filtering --padj_threshold=$PVAL \
     --file="$COMBINED" \
     --outdir="$OUT" \
     --countdir="$MDIR/" \

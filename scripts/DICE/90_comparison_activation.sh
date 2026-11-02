@@ -9,19 +9,18 @@
 # Effect signs: GrASE effect_size is <CT>_N_STIM minus <CT>; rMATS ran <CT> as sample 1 (--rmats_sample1)
 # and satuRn's estimate is its group 1 (<CT>) minus group 2, so it is flipped (--exon_sign -1).
 # Usage: bash 90_comparison_activation.sh [CD4|CD8]   (default: both)
-# Output: ~/DICE/comparison/<celltype>/
+# Output: $DICE/comparison/<celltype>/
 set -eu -o pipefail
-cd /mnt/data1/home/mirahan/DICE
-R=~/GrASE/Rpkg/scripts
-PVAL=${PVAL:-0.01}
+. "$(dirname "$0")/config.sh"
+cd "$DICE"
 CORES=${CORES:-8}
-G=~/DICE/grase_activation_exsj/test_bipartition.exsj
+G=$DICE/grase_activation_exsj/test_bipartition.exsj
 
 for CT in ${1:-CD4 CD8}; do
   CTR=${CT}_N_STIM_vs_${CT}
-  RM=~/DICE/rmats_post_${CT}_${CT}_N_STIM
-  SAT=~/DICE/saturn_${CT}_${CT}_N_STIM/all.${CT}_${CT}_N_STIM.sumExp_filteredbyCount.txt
-  OUT=~/DICE/comparison/$CT
+  RM=$DICE/rmats_post_${CT}_${CT}_N_STIM
+  SAT=$DICE/saturn_${CT}_${CT}_N_STIM/all.${CT}_${CT}_N_STIM.sumExp_filteredbyCount.txt
+  OUT=$DICE/comparison/$CT
   for f in "$RM/fromGTF.SE.txt" "$RM/SE.MATS.JCEC.txt" "$SAT" "$G.internal_betabinom_EBmap.annotated.txt" "$G.terminal_betabinom_EBmap.annotated.txt"; do
     [ -s "$f" ] || { echo "missing $f" >&2; exit 1; }
   done

@@ -3,9 +3,9 @@
 # so junction samples are named <celltype>_<SRR> like the exonic counts.
 # Usage: bash link_star_sj.sh
 set -euo pipefail
-DICE=$HOME/DICE
-SRC=/mnt/carrie/SRA/dump/sra
-CTS="B CD4 CD4_N_STIM CD8 CD8_N_STIM MONO.CLASSIC MONO.NONCLASSIC NK TH1 TH17 TH2 TREG_MEMORY TREG_NAIVE"
+. "$(dirname "$0")/config.sh"
+SRC=$SJ_SRC
+CTS=${ALL13//,/ }
 
 # remove any non-link files left in sj/
 find "$DICE/sj" -type f \( -name '*.SJ.out.tab' -o -name '*.tmp' \) -delete
