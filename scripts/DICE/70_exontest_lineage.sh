@@ -37,6 +37,7 @@ for A in $ARMS; do
     --splittype=bipartition \
     --phi=phi.merged.${A}.txt \
     --model=betabinom_EBmap --mc_cores=8 \
+    --gff_dir="$DEXSEQ_GFF_DIR" --read_length="$READ_LEN" \
     --contrasts="$CTR" &> "$OUT/test_${A}.log"
 done
 echo "=== merged lineage exontest done ==="

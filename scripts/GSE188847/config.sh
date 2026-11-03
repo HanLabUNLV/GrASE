@@ -23,4 +23,5 @@ CONDS='Control,COVID19'
 CTR='COVID19:Control'                           # trt:ref
 # paired-end 2x150, dUTP (fr-firststrand)
 DEXSEQ_FLAGS=(--format bam --paired yes --stranded reverse --order pos -a 10)
+READ_LEN=${READ_LEN:-150}                       # mate length; effective exonic-part lengths of per-base pi
 CORES=${CORES:-16}

@@ -13,6 +13,7 @@ PVAL=${PVAL:-0.01}
 PY=${PY:-/mnt/data1/home/jaquino/miniconda3/bin/python3}
 # Per-gene DEXSeq GFFs of the v34 annotation (outward walk part geometry)
 DEXSEQ_GFF_DIR=${DEXSEQ_GFF_DIR:-/mnt/storage/jaquino/scRNAseq_sim_pt2/grase/graphml.dexseq.v34/dexseq.gff}
+READ_LEN=${READ_LEN:-50}   # single-end 50 bp; effective exonic-part lengths of per-base pi
 # STAR output per cell type, <SJ_SRC>/<celltype>/bam/pass2_<SRR>.SJ.out.tab
 SJ_SRC=${SJ_SRC:-/mnt/carrie/SRA/dump/sra}
 
