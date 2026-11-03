@@ -968,7 +968,7 @@ compute_lfc_summary <- function(splitcnts, pseudocount = 1L,
     return(data.frame(gene = splitcnts$gene[0], event = splitcnts$event[0],
                       lfc_diff = numeric(0), lfc_ref = numeric(0),
                       lfc_diff_net = numeric(0), pi_trt = numeric(0),
-                      pi_ref = numeric(0), delta_pi = numeric(0),
+                      pi_ctrl = numeric(0), delta_pi = numeric(0),
                       stringsAsFactors = FALSE))
   }
 
@@ -999,11 +999,11 @@ compute_lfc_summary <- function(splitcnts, pseudocount = 1L,
       lfc_diff_net = abs(lfc_diff) - abs(lfc_ref),
       pi_trt       = .data[[paste0("mean_diff_", cond_trt)]] /
                        (.data[[paste0("mean_diff_", cond_trt)]] + .data[[paste0("mean_ref_", cond_trt)]]),
-      pi_ref       = .data[[paste0("mean_diff_", cond_ref)]] /
+      pi_ctrl      = .data[[paste0("mean_diff_", cond_ref)]] /
                        (.data[[paste0("mean_diff_", cond_ref)]] + .data[[paste0("mean_ref_", cond_ref)]]),
-      delta_pi     = pi_trt - pi_ref
+      delta_pi     = pi_trt - pi_ctrl
     ) %>%
-    dplyr::select(gene, event, lfc_diff, lfc_ref, lfc_diff_net, pi_trt, pi_ref, delta_pi)
+    dplyr::select(gene, event, lfc_diff, lfc_ref, lfc_diff_net, pi_trt, pi_ctrl, delta_pi)
 }
 
 #' Annotate test results with denominator-effect flag columns
@@ -1029,7 +1029,7 @@ posthoc_lfc_summary <- function(results, lfc_summary) {
 #' @param min_dpi_sj Numeric. |delta_pi| threshold for sides whose distinct set
 #'   came from SPLIT READS rather than exonic parts (merged exon+SJ runs). Split
 #'   -read distinct counts sit on a much lower pi scale than the exonic shared
-#'   reference -- measured mean pi_ref 0.120 vs 0.332 on the DICE internal arm --
+#'   reference -- measured mean pi_ctrl 0.120 vs 0.332 on the DICE internal arm --
 #'   so one absolute threshold is not scale-fair: |delta_pi| >= 0.1 demands a
 #'   2.07x odds shift from a junction-sourced side against 1.53x from an exonic
 #'   one, and passes them at 3.7% vs 14.7%. 0.05 at pi 0.120 is an odds ratio of
@@ -1040,8 +1040,9 @@ posthoc_lfc_summary <- function(results, lfc_summary) {
 #'
 #' The single authoritative definition of "significant". A call requires an
 #' adjusted p-value below \code{padj_thr}, a net log fold change above
-#' \code{delta}, and an absolute path-proportion shift of at least the dpi
-#' threshold. Returns a logical vector so callers sweeping a threshold grid
+#' \code{delta}, an absolute path-proportion shift of at least the dpi
+#' threshold, and an absolute log odds ratio (\code{effect_size}) of at least
+#' \code{min_effect}. Returns a logical vector so callers sweeping a threshold grid
 #' (PR curves, ROC, metric tables) use the same rule as the tool itself
 #' instead of re-implementing it.
 #'
@@ -1053,12 +1054,9 @@ posthoc_lfc_summary <- function(results, lfc_summary) {
 #'   deliberate: \code{lfc_diff_net = abs(lfc_diff) - abs(lfc_ref)}, so the
 #'   magnitudes are already inside the quantity and it is positive when the
 #'   distinct set moved more than the shared reference. Do not wrap in abs().
-#' @param use_perbase effect-size gate on \code{delta_pi}: \code{"or"}
-#'   (default), TRUE or FALSE.
+#' @param use_perbase effect-size gate on \code{delta_pi}: TRUE (default) or
+#'   FALSE.
 #'   \itemize{
-#'     \item \code{"or"}: a row passes when EITHER the raw or the per-base
-#'       \code{abs(delta_pi)} reaches the threshold; a missing per-base value
-#'       leaves only the raw test.
 #'     \item \code{TRUE}: gate on \code{delta_pi_perbase} wherever it is
 #'       defined, falling back to the raw \code{delta_pi} elsewhere.
 #'     \item \code{FALSE}: gate on the raw \code{delta_pi} alone.
@@ -1068,6 +1066,11 @@ posthoc_lfc_summary <- function(results, lfc_summary) {
 #'   required, not optional: a junction-substituted side has a point feature as
 #'   its distinct set, so it has no length and no per-base pi.
 #' @param min_dpi minimum \code{abs(delta_pi)} for exon-sourced sides.
+#' @param min_effect minimum \code{abs(effect_size)}, the log odds ratio of the
+#'   fitted model; 0 or a missing column drops the condition. Required together
+#'   with the \code{delta_pi} gate: the log odds ratio does not depend on the
+#'   lengths of the distinct set and the reference, while \code{delta_pi} keeps
+#'   the absolute size of the shift, so a side must clear both.
 #' @param min_dpi_sj minimum \code{abs(delta_pi)} for sides whose distinct set
 #'   came from split reads. DEFAULTS TO \code{min_dpi} (a uniform gate). Set it
 #'   lower for a scale-fair gate: split-read distinct counts sit on a lower pi
@@ -1091,16 +1094,17 @@ posthoc_lfc_summary <- function(results, lfc_summary) {
 #'   two-stage nested-BH sweep, pass \code{pmax(within_gene_BH, padj_gene)}.
 #' @return logical vector, one element per row of \code{res}.
 #'
-#' @details NA handling: a missing \code{lfc_diff_net} or \code{delta_pi}
-#'   PASSES its condition, so the call rests on padj alone. A missing padj never
+#' @details NA handling: a missing \code{lfc_diff_net}, \code{delta_pi} or
+#'   \code{effect_size} PASSES its condition, so the call rests on padj alone. A missing padj never
 #'   passes. This is the tool's long-standing convention and is preserved here;
 #'   on the current simulation no row has either NA, so it is latent.
 #' @export
-is_significant <- function(res, padj_thr, delta = 0, min_dpi = 0.1,
+is_significant <- function(res, padj_thr, delta = 0, min_dpi = 0.05,
                            min_dpi_sj = min_dpi, min_reads = 0, padj = NULL,
-                           omnibus_pairs = NULL, use_perbase = "or") {
-  ## use_perbase is last in the signature on purpose: existing positional calls
-  ## must keep working.
+                           omnibus_pairs = NULL, use_perbase = TRUE,
+                           min_effect = 0.5) {
+  ## use_perbase and min_effect are last in the signature on purpose: existing
+  ## positional calls must keep working.
   pv <- if (is.null(padj)) res$padj else padj
   n  <- nrow(res)
 
@@ -1127,20 +1131,21 @@ is_significant <- function(res, padj_thr, delta = 0, min_dpi = 0.1,
     ## (30.7% of rows on the DICE activation arm). Requiring per-base
     ## everywhere would fail those sides on NA rather than on effect size.
     ## Note min_dpi_sj already carries a partial scale correction for them.
+    stopifnot(is.logical(use_perbase), length(use_perbase) == 1L, !is.na(use_perbase))
     dpi <- abs(res$delta_pi)
-    if (identical(use_perbase, "or") && "delta_pi_perbase" %in% names(res)) {
+    if (use_perbase && "delta_pi_perbase" %in% names(res)) {
       pb <- abs(res$delta_pi_perbase)
-      or_pass <- (dpi >= thr) | (!is.na(pb) & pb >= thr)
-      dpi_pass <- or_pass | is.na(res$delta_pi)
-    } else {
-      if (isTRUE(use_perbase) && "delta_pi_perbase" %in% names(res)) {
-        pb <- abs(res$delta_pi_perbase)
-        dpi <- ifelse(is.na(pb), dpi, pb)
-      }
-      dpi_pass <- (dpi >= thr) | is.na(res$delta_pi)
+      dpi <- ifelse(is.na(pb), dpi, pb)
     }
-    dpi_pass
+    (dpi >= thr) | is.na(res$delta_pi)
   } else TRUE
+
+  ## log odds ratio gate, folded into dpi_ok so omnibus rows below are gated on
+  ## their pairwise contrasts for it too
+  if (min_effect > 0 && "effect_size" %in% names(res)) {
+    eff_pass <- (abs(res$effect_size) >= min_effect) | is.na(res$effect_size)
+    dpi_ok <- dpi_ok & eff_pass
+  }
 
   ## read support for the tested distinct set, in EITHER contrasted group.
   ## Applied to every side regardless of source: restricting it to junction
@@ -1198,12 +1203,12 @@ is_significant <- function(res, padj_thr, delta = 0, min_dpi = 0.1,
 #' @inheritParams is_significant
 #' @return \code{res} with a logical \code{significant} column.
 #' @export
-add_significant <- function(res, padj_thr, delta, min_dpi = 0.1, min_dpi_sj = 0.05,
+add_significant <- function(res, padj_thr, delta, min_dpi = 0.05, min_dpi_sj = 0.05,
                             min_reads = 10, omnibus_pairs = NULL,
-                            use_perbase = "or") {
+                            use_perbase = TRUE, min_effect = 0.5) {
   res$significant <- is_significant(res, padj_thr, delta, min_dpi, min_dpi_sj,
                                     min_reads, omnibus_pairs = omnibus_pairs,
-                                    use_perbase = use_perbase)
+                                    use_perbase = use_perbase, min_effect = min_effect)
   res
 }
 

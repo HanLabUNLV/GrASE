@@ -20,8 +20,10 @@ option_list <- list(
               help = "Output file path [default= %default]", metavar = "character"),
   make_option("--contrast", type = "character", default = NULL,
               help = "GrASE contrast to compare; required when the GrASE results hold more than one"),
-  make_option("--min_dpi", type = "double", default = 0.1,
-              help = "GrASE |delta_pi| gate of is_significant() [default= %default]"),
+  make_option("--min_dpi", type = "double", default = 0.05,
+              help = "GrASE |delta_pi| gate of is_significant(), per-base where defined [default= %default]"),
+  make_option("--min_effect", type = "double", default = 0.5,
+              help = "GrASE |effect_size| (log odds ratio) gate of is_significant() [default= %default]"),
   make_option("--min_dpi_sj", type = "double", default = 0.05,
               help = "the same for a junction-sourced side [default= %default]"),
   make_option("--min_dpsi", type = "double", default = 0.1,
@@ -76,7 +78,7 @@ if (is.null(opt$contrast)) {
   if (!nrow(grase_dt)) stop("no rows for --contrast ", opt$contrast, "; the file has: ", paste(cts, collapse = " "))
 }
 # a GrASE side is called by grase::is_significant() at --pval: padj, lfc_diff_net, delta_pi gates, read support
-grase_dt[, grase_call := is_significant(grase_dt, opt$pval, 0, opt$min_dpi, opt$min_dpi_sj, opt$min_reads)]
+grase_dt[, grase_call := is_significant(grase_dt, opt$pval, 0, opt$min_dpi, opt$min_dpi_sj, opt$min_reads, min_effect = opt$min_effect)]
 message("GrASE rows: ", nrow(grase_dt), " | called: ", sum(grase_dt$grase_call))
 
 # --- Process Each rMATS Event Type ---

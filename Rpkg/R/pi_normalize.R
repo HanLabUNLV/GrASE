@@ -6,7 +6,13 @@
 ## the distinct set and the reference differ in length: a 221 bp distinct set
 ## against a 67 bp reference inflates pi by the length ratio.
 ##
-## LCP2 event 26 is the worked case -- reported pi_ref 0.548 corresponds to
+## Lengths are EFFECTIVE lengths for the counting: DEXSeq counts a read in every
+## exonic part it overlaps, so a part of L bases is overlapped by reads starting
+## at L + r - 1 positions (r = read length). Each part's L + r - 1 is summed over
+## the set, matching how the per-part counts are summed. Plain lengths understate
+## short parts badly: a 10 bp part is overlapped from 59 positions at r = 50.
+##
+## LCP2 event 26 is the worked case -- reported pi_ctrl 0.548 corresponds to
 ## about 25% on a per-base basis.
 ##
 ## These functions add the per-base reading alongside the raw one. They change
@@ -24,7 +30,8 @@
 #' len_d*len_s and divide by (D+S).
 #'
 #' @param pi Raw-count pi, in `[0, 1]`.
-#' @param len_d,len_s Lengths in bases of the distinct set and the reference.
+#' @param len_d,len_s Lengths of the distinct set and the reference: effective
+#'   lengths (see \code{annotate_pi_perbase}) or plain lengths in bases.
 #' @return Per-base pi, or NA where a length is missing or non-positive.
 #' @export
 pi_perbase <- function(pi, len_d, len_s) {
@@ -95,17 +102,28 @@ gene_gff_path <- function(gff_dir, gene) {
 
 #' Annotate a results table with per-base pi
 #'
-#' Adds \code{len_D}, \code{len_S}, \code{pi_ref_perbase},
+#' Adds \code{len_D}, \code{len_S}, \code{pi_ctrl_perbase},
 #' \code{pi_trt_perbase} and \code{delta_pi_perbase}. Rows whose distinct set
 #' is a JUNCTION rather than exonic parts are left NA: a junction is a point
 #' feature with no length, so a per-base reading is undefined for it.
 #'
-#' @param res Results data frame with pi_ref, pi_trt, ref_ex_part, setdiff1,
+#' \code{len_D} and \code{len_S} are effective lengths: each exonic part counts
+#' \code{L + read_length - 1}, the number of read start positions that overlap
+#' it, summed over the parts of the set.
+#'
+#' @param res Results data frame with pi_ctrl, pi_trt, ref_ex_part, setdiff1,
 #'   setdiff2, comparison, gene.
 #' @param gff_dir Directory of per-gene \code{<gene>.dexseq.gff} files.
+#' @param read_length Read length of the counted reads (the mate length for
+#'   paired-end data). NULL uses plain part lengths, with a warning.
 #' @return \code{res} with the new columns appended.
 #' @export
-annotate_pi_perbase <- function(res, gff_dir) {
+annotate_pi_perbase <- function(res, gff_dir, read_length = NULL) {
+  if (is.null(read_length))
+    warning("read_length not given: per-base pi uses plain part lengths, not effective lengths",
+            call. = FALSE)
+  else stopifnot(is.numeric(read_length), length(read_length) == 1L, read_length >= 1)
+  extra <- if (is.null(read_length)) 0 else read_length - 1
   side <- ifelse(grepl("^diff1", res$comparison), 1L, 2L)
   sd   <- ifelse(side == 1L, res$setdiff1, res$setdiff2)
   res$len_D <- NA_real_
@@ -115,16 +133,17 @@ annotate_pi_perbase <- function(res, gff_dir) {
   ## different things -- one is undefined by nature, the other is missing input.
   ## Track it so the gap is reported rather than absorbed into the NA count.
   unresolved <- character(0)
-  for (g in unique(res$gene)) {
+  rows_by_gene <- split(seq_len(nrow(res)), res$gene)
+  for (g in names(rows_by_gene)) {
     lens <- cache[[g]]
     if (is.null(lens)) {
       p <- gene_gff_path(gff_dir, g)
       if (is.na(p)) unresolved <- c(unresolved, g)
-      lens <- if (is.na(p)) numeric(0) else part_lengths_from_gff(p)
+      lens <- if (is.na(p)) numeric(0) else part_lengths_from_gff(p) + extra
       cache[[g]] <- lens
     }
     if (!length(lens)) next
-    i <- which(res$gene == g)
+    i <- rows_by_gene[[g]]
     res$len_D[i] <- vapply(sd[i], feature_length, numeric(1), lens = lens)
     res$len_S[i] <- vapply(res$ref_ex_part[i], feature_length, numeric(1),
                            lens = lens)
@@ -137,8 +156,8 @@ annotate_pi_perbase <- function(res, gff_dir) {
                     sum(res$gene %in% unresolved),
                     paste(utils::head(unresolved, 3), collapse = ", ")),
             call. = FALSE)
-  res$pi_ref_perbase   <- pi_perbase(res$pi_ref, res$len_D, res$len_S)
+  res$pi_ctrl_perbase  <- pi_perbase(res$pi_ctrl, res$len_D, res$len_S)
   res$pi_trt_perbase   <- pi_perbase(res$pi_trt, res$len_D, res$len_S)
-  res$delta_pi_perbase <- res$pi_trt_perbase - res$pi_ref_perbase
+  res$delta_pi_perbase <- res$pi_trt_perbase - res$pi_ctrl_perbase
   res
 }

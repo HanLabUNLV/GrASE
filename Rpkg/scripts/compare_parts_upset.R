@@ -13,7 +13,7 @@
 ##   DEXSeq  called  padj < pval and |log2 fold change of exon usage| >= --min_l2fc
 ##   GrASE   called  in the distinct sets (setdiff1 and setdiff2) of a bipartition with either side
 ##                   called by grase::is_significant(), the rule behind the `significant` column, with
-##                   pval as its p-value threshold (--min_dpi, --min_dpi_sj, --min_reads). A
+##                   pval as its p-value threshold (--min_dpi, --min_dpi_sj, --min_effect, --min_reads). A
 ##                   junction-sourced side has no exonic part.
 ##   rMATS   called  in the distinct set of an event matched to a bipartition, with
 ##                   FDR < pval and |IncLevelDifference| >= --min_dpsi
@@ -61,7 +61,8 @@ o <- parse_args(OptionParser(option_list = list(
   make_option("--pval",      type = "double", default = 0.05, help = "adjusted p cutoff for all three tools [%default]"),
   make_option("--min_dpsi",  type = "double", default = 0.1,  help = "rMATS |IncLevelDifference| [%default]"),
   make_option("--min_l2fc",  type = "double", default = 0.5,  help = "DEXSeq |log2 fold change| [%default]"),
-  make_option("--min_dpi",   type = "double", default = 0.1,  help = "GrASE |delta_pi| [%default]"),
+  make_option("--min_dpi",   type = "double", default = 0.05, help = "GrASE |delta_pi|, per-base where defined [%default]"),
+  make_option("--min_effect", type = "double", default = 0.5, help = "GrASE |effect_size| (log odds ratio) [%default]"),
   make_option("--min_dpi_sj", type = "double", default = 0.05, help = "GrASE |delta_pi| for a junction-sourced side [%default]"),
   make_option("--class",    type = "character", default = NULL, help = "GrASE class of each --grase file, comma separated [internal,terminal]"),
   make_option("--font",     type = "character", default = "Arial", help = "font of every plot, embedded in the PDFs [%default]"),
@@ -130,7 +131,7 @@ if (is.null(o$draw)) {
     g <- fread(gfiles[k], colClasses = list(character = c("gene", "setdiff1", "setdiff2")))
     if (!is.null(o$contrast)) g <- g[contrast == o$contrast]
     if (!nrow(g)) stop("no rows for --contrast ", o$contrast, "; the file has: ", paste(unique(fread(gfiles[k], select = "contrast")$contrast), collapse = " "))
-    g[, call := is_significant(g, o$pval, 0, o$min_dpi, o$min_dpi_sj, o$min_reads)]
+    g[, call := is_significant(g, o$pval, 0, o$min_dpi, o$min_dpi_sj, o$min_reads, min_effect = o$min_effect)]
     ## tested = has a p-value; padj is NA for tests in genes not selected at the gene level
     g <- g[!is.na(p.value)]
     ## each row (one side of a bipartition) spreads over both distinct sets of its bipartition

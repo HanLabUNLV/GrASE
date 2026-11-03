@@ -8,12 +8,13 @@ is_significant(
   res,
   padj_thr,
   delta = 0,
-  min_dpi = 0.1,
+  min_dpi = 0.05,
   min_dpi_sj = min_dpi,
   min_reads = 0,
   padj = NULL,
   omnibus_pairs = NULL,
-  use_perbase = "or"
+  use_perbase = TRUE,
+  min_effect = 0.5
 )
 }
 \arguments{
@@ -54,12 +55,9 @@ precision, which does not justify a source-dependent rule.}
 \item{padj}{optional vector to use in place of \code{res$padj} -- for a
 two-stage nested-BH sweep, pass \code{pmax(within_gene_BH, padj_gene)}.}
 
-\item{use_perbase}{effect-size gate on \code{delta_pi}: \code{"or"}
-(default), TRUE or FALSE.
+\item{use_perbase}{effect-size gate on \code{delta_pi}: TRUE (default) or
+FALSE.
 \itemize{
-\item \code{"or"}: a row passes when EITHER the raw or the per-base
-\code{abs(delta_pi)} reaches the threshold; a missing per-base value
-leaves only the raw test.
 \item \code{TRUE}: gate on \code{delta_pi_perbase} wherever it is
 defined, falling back to the raw \code{delta_pi} elsewhere.
 \item \code{FALSE}: gate on the raw \code{delta_pi} alone.
@@ -68,6 +66,12 @@ pi is a raw count ratio, so one absolute threshold is not scale-fair across
 sides whose distinct set and reference differ in length. The fallback is
 required, not optional: a junction-substituted side has a point feature as
 its distinct set, so it has no length and no per-base pi.}
+
+\item{min_effect}{minimum \code{abs(effect_size)}, the log odds ratio of the
+fitted model; 0 or a missing column drops the condition. Required together
+with the \code{delta_pi} gate: the log odds ratio does not depend on the
+lengths of the distinct set and the reference, while \code{delta_pi} keeps
+the absolute size of the shift, so a side must clear both.}
 }
 \value{
 logical vector, one element per row of \code{res}.
@@ -76,8 +80,8 @@ logical vector, one element per row of \code{res}.
 Add a significant column to test results
 }
 \details{
-NA handling: a missing \code{lfc_diff_net} or \code{delta_pi}
-PASSES its condition, so the call rests on padj alone. A missing padj never
+NA handling: a missing \code{lfc_diff_net}, \code{delta_pi} or
+\code{effect_size} PASSES its condition, so the call rests on padj alone. A missing padj never
 passes. This is the tool's long-standing convention and is preserved here;
 on the current simulation no row has either NA, so it is latent.
 }

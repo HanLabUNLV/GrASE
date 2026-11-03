@@ -483,25 +483,27 @@ The `significant` column is TRUE when all of the following hold, which is the ru
 every reported result uses:
 
 - `padj < --padj_threshold` (0.05 by default, under nested BH)
-- the effect size passes `--dpi_gate` (below), at `--min_dpi`, or at `--min_dpi_sj` where the side is junction-sourced
+- \|delta_pi\| passes `--dpi_gate` (below), at `--min_dpi` (0.05), or at `--min_dpi_sj` (0.05) where the side is junction-sourced
+- \|effect_size\|, the log odds ratio of the fitted model, is at least `--min_effect` (0.5)
 - `lfc_diff_net > --delta`, i.e. the distinct set moved more than the shared reference
 - at least `--min_reads` on the distinct set, on average, in one group
 
 `delta_pi` is a ratio of raw counts. It is comparable across samples, but not across
 partitions or genes whose distinct and shared sets differ in length. With `--gff_dir`
-the output also carries the length-normalized (per-base) columns `len_D`, `len_S`,
-`pi_ref_perbase`, `pi_trt_perbase` and `delta_pi_perbase`. A junction-sourced side has
-no length, so its per-base values are NA.
+and `--read_length` the output also carries the length-normalized (per-base) columns
+`len_D`, `len_S`, `pi_ctrl_perbase`, `pi_trt_perbase` and `delta_pi_perbase`. The lengths
+are effective lengths: a read is counted in every exonic part it overlaps, so each part
+counts `L + read_length - 1` bases, summed over the set. A junction-sourced side has no
+length, so its per-base values are NA.
 
 `--dpi_gate` chooses which effect size the `significant` column uses:
 
 | `--dpi_gate` | `significant` requires |
 |---|---|
-| `or` (default) | raw or per-base \|delta_pi\| at the cutoff; a missing per-base value leaves the raw test |
+| `perbase` (default) | per-base \|delta_pi\| at the cutoff, raw where per-base is NA |
 | `raw` | raw \|delta_pi\| at the cutoff |
-| `perbase` | per-base \|delta_pi\| at the cutoff, raw where per-base is NA |
 
-`or` and `perbase` need `--gff_dir`; without it the gate is raw. The output also has
+`perbase` needs `--gff_dir`; without it the gate is raw, with a warning. The output also has
 `dpi_raw_pass` and `dpi_perbase_pass`, which report each gate at the same per-row
 cutoff whatever `--dpi_gate` was, so a call can be read as raw-only, per-base-only
 or both. Re-running with a different gate does not refit: when the results already
@@ -882,15 +884,14 @@ bash 20_unpack_star_sj.sh
 bash 30_exoncnt.sh
 bash 40_bipartition_sjcnt.sh
 bash 50_merge_exon_sj.sh
-bash 60_exontest.sh                 # betabinom_EBmap, --gff_dir, --dpi_gate=or, --padj_threshold=0.05, --independent_filtering
+bash 60_exontest.sh                 # betabinom_EBmap, --gff_dir, --dpi_gate=perbase, --padj_threshold=0.05, --independent_filtering
 bash 70_outward_walk.sh             # needs 60; stops if outward_walk/ exists
+bash 75_volcano.sh                  # needs 60; comparison/volcano/volcano.{png,pdf}
 ```
 
 Stage 60 writes `grase_covid_exsj/test_bipartition.exsj.{internal,terminal}_betabinom_EBmap.annotated.txt`.
-With the default `or` gate, 277 internal events (188 genes) and 1,722 terminal events
-(767 genes) are called at padj < 0.05. To change the gate, edit `--dpi_gate` in
-`60_exontest.sh` and rerun it: the fits are reused and only the annotation is
-redone (about 7 minutes). To change `--padj_threshold` or the filtering, rerun it
+To change the gate, edit `--dpi_gate` in `60_exontest.sh` and
+rerun it: the fits are reused and only the annotation is redone (about 7 minutes). To change `--padj_threshold` or the filtering, rerun it
 with `READJUST=1`, which also recomputes `padj` from the stored p-values. Stage 70 reads the terminal calls, so rerun it after
 changing them (move `outward_walk/` aside first).
 

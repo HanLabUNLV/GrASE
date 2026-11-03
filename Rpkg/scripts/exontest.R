@@ -26,6 +26,8 @@ option_list = list(
               help="count dir that contains the count and split files by gene", metavar="character"),
   make_option(c("--gff_dir"), type="character", default=NULL,
               help="dir of per-gene DEXSeq GFFs, flat <gene>.dexseq.gff or nested <gene>/<gene>.dexseq.gff. Supplying it adds length-normalized (per-base) pi to the annotated output", metavar="character"),
+  make_option(c("--read_length"), type="integer", default=NULL,
+              help="read length of the counted reads (mate length if paired); required with --gff_dir, for the effective lengths L + read_length - 1 of per-base pi", metavar="integer"),
   make_option(c("-s", "--splittype"), type="character", 
               help="split type: bipartition or multinomial or n_choose_2", metavar="character"),
   make_option(c("-p", "--phi"), type="character",
@@ -69,13 +71,15 @@ make_option(c("--use_prec_loess"), action="store_true", default=FALSE,
                          "(merged exon+SJ runs). Split-read counts sit on a lower pi scale than",
                          "the exonic reference, so one absolute threshold is not scale-fair",
                          "[default: 0.05]"), metavar="double"),
-  make_option(c("--min_dpi"), type="double", default=0.1,
-              help="minimum |delta_pi| (path proportion effect size) for the significant column; events with |delta_pi| < min_dpi are not significant [default: 0.1]", metavar="double"),
-  make_option(c("--dpi_gate"), type="character", default="or",
-              help=paste("effect-size gate of the final significant column: raw (|delta_pi|),",
-                         "perbase (|delta_pi_perbase|, raw where undefined) or or (a row passes",
-                         "if either reaches the cutoff). perbase and or need --gff_dir [default: or]"),
+  make_option(c("--min_dpi"), type="double", default=0.05,
+              help="minimum |delta_pi| (path proportion effect size) for the significant column; events with |delta_pi| < min_dpi are not significant [default: 0.05]", metavar="double"),
+  make_option(c("--dpi_gate"), type="character", default="perbase",
+              help=paste("delta_pi gate of the final significant column: raw (|delta_pi|) or",
+                         "perbase (|delta_pi_perbase|, raw where undefined). perbase needs --gff_dir",
+                         "[default: perbase]"),
               metavar="character"),
+  make_option(c("--min_effect"), type="double", default=0.5,
+              help="minimum |effect_size| (log odds ratio) for the significant column, required with the delta_pi gate; 0 drops it [default: 0.5]", metavar="double"),
   make_option(c("--mc_cores"), type="integer", default=NULL,
               help="number of parallel worker processes for mclapply [default: %default]", metavar="integer"),
   make_option(c("--retest"), action="store_true", default=FALSE,
@@ -184,8 +188,14 @@ delta            <- as.double(opt$delta)
 padj_method      <- as.character(opt$padj_method)
 min_dpi          <- as.double(opt$min_dpi)
 min_dpi_sj       <- as.double(opt$min_dpi_sj)
-dpi_gate         <- match.arg(opt$dpi_gate, c("raw", "perbase", "or"))
-use_perbase      <- switch(dpi_gate, raw = FALSE, perbase = TRUE, or = "or")
+dpi_gate         <- match.arg(opt$dpi_gate, c("raw", "perbase"))
+min_effect       <- as.double(opt$min_effect)
+if (!is.null(opt$gff_dir) && is.null(opt$read_length))
+  stop("--gff_dir needs --read_length (effective lengths of per-base pi)")
+if (dpi_gate != "raw" && is.null(opt$gff_dir))
+  warning("--dpi_gate ", dpi_gate, " without --gff_dir: no per-base pi, so every side is gated on the raw delta_pi",
+          call. = FALSE, immediate. = TRUE)
+use_perbase      <- dpi_gate == "perbase"
 min_reads        <- as.double(opt$min_reads)
 
 # Expand tilde in paths
@@ -433,7 +443,7 @@ if (split != "multinomial") {
     sc_d2r  <- apply_pseudo(sc_d2r)
   }
 
-  ## PAIRWISE contrasts only. pi_trt, pi_ref, delta_pi, lfc_diff and lfc_ref are
+  ## PAIRWISE contrasts only. pi_trt, pi_ctrl, delta_pi, lfc_diff and lfc_ref are
   ## all two-group quantities, so an omnibus contrast has none of them -- calling
   ## compute_lfc_summary() with ct$trt = NULL builds the column name
   ## "mean_diff_" and aborts. Omnibus rows therefore join to NA on these
@@ -736,7 +746,7 @@ if (model == 'betabinom_EBmap') {
   }
 
   results <- add_significant(add_support(results), padj_thr, delta, min_dpi, min_dpi_sj, min_reads,
-                               omnibus_pairs = omnibus_pairs)
+                               omnibus_pairs = omnibus_pairs, use_perbase = use_perbase, min_effect = min_effect)
   write.table(results, file = out_resultfile, quote = FALSE, sep = "\t", row.names = FALSE)
 
 } else if (model == 'betabinom_EBapprox') {
@@ -805,7 +815,7 @@ if (model == 'betabinom_EBmap') {
   }
 
   results <- add_significant(add_support(results), padj_thr, delta, min_dpi, min_dpi_sj, min_reads,
-                               omnibus_pairs = omnibus_pairs)
+                               omnibus_pairs = omnibus_pairs, use_perbase = use_perbase, min_effect = min_effect)
   write.table(results, file = out_resultfile, quote = FALSE, sep = "\t", row.names = FALSE)
 
 } else if (model == 'dirmult_EBplugin') {
@@ -849,7 +859,7 @@ if (model == 'betabinom_EBmap') {
     res <- adjust_pvalues(filter_unsupported(res), independentFiltering = FALSE, alpha = padj_thr, method = padj_method)
     res$pvalue <- NULL
     add_significant(add_support(res), padj_thr, delta, min_dpi, min_dpi_sj, min_reads,
-                               omnibus_pairs = omnibus_pairs)
+                               omnibus_pairs = omnibus_pairs, use_perbase = use_perbase, min_effect = min_effect)
   })
   results <- bind_rows(contrast_results)
   write.table(results, file = out_resultfile, sep = "\t", quote = FALSE, row.names = FALSE)
@@ -877,7 +887,7 @@ if (model == 'betabinom_EBmap') {
     res <- adjust_pvalues(filter_unsupported(res), independentFiltering = indep_filter, alpha = padj_thr, method = padj_method)
     res$pvalue <- NULL
     add_significant(add_support(res), padj_thr, delta, min_dpi, min_dpi_sj, min_reads,
-                               omnibus_pairs = omnibus_pairs)
+                               omnibus_pairs = omnibus_pairs, use_perbase = use_perbase, min_effect = min_effect)
   })
   results <- bind_rows(contrast_results)
   write.table(results, file = out_resultfile, quote = FALSE, sep = "\t", row.names = FALSE)
@@ -907,7 +917,7 @@ if (model == 'betabinom_EBmap') {
   }
 
   results <- add_significant(add_support(results), padj_thr, delta, min_dpi, min_dpi_sj, min_reads,
-                               omnibus_pairs = omnibus_pairs)
+                               omnibus_pairs = omnibus_pairs, use_perbase = use_perbase, min_effect = min_effect)
   write.table(results, file = out_resultfile, quote = FALSE, sep = "\t", row.names = FALSE)
 
 } else {
@@ -1008,7 +1018,7 @@ message(paste("Merged dataset has", nrow(merged_data), "rows."))
 # counts, so the raw ratio stays the tested quantity and no call moves.
 if (!is.null(opt$gff_dir)) {
   message("Adding length-normalized pi from ", opt$gff_dir, " ...")
-  merged_data <- annotate_pi_perbase(merged_data, path.expand(opt$gff_dir))
+  merged_data <- annotate_pi_perbase(merged_data, path.expand(opt$gff_dir), opt$read_length)
   ok <- !is.na(merged_data$delta_pi_perbase)
   message(sprintf("  per-base pi resolved for %d of %d rows (%.1f%%)",
                   sum(ok), nrow(merged_data), 100 * mean(ok)))
@@ -1017,7 +1027,7 @@ if (!is.null(opt$gff_dir)) {
             "expected <gene>.dexseq.gff or <gene>/<gene>.dexseq.gff")
 } else {
   message("--gff_dir not given: annotated output will carry raw pi only ",
-          "(no pi_ref_perbase/delta_pi_perbase columns)")
+          "(no pi_ctrl_perbase/delta_pi_perbase columns)")
 }
 
 # `significant` was set before the annotation merge, where setdiff1/setdiff2 did
@@ -1025,11 +1035,11 @@ if (!is.null(opt$gff_dir)) {
 # attached them, recompute so junction-sourced sides use min_dpi_sj.
 if (nrow(merged_data) > 0 && all(c("setdiff1", "setdiff2") %in% names(merged_data))) {
   merged_data <- add_significant(add_support(merged_data), padj_thr, delta, min_dpi, min_dpi_sj, min_reads,
-                               omnibus_pairs = omnibus_pairs, use_perbase = use_perbase)
+                               omnibus_pairs = omnibus_pairs, use_perbase = use_perbase, min_effect = min_effect)
 }
 
 # Effect-size gates reported separately, for reading the table: `significant`
-# above gates as --dpi_gate says (or, by default). NA where there is no
+# above gates as --dpi_gate says (perbase, by default). NA where there is no
 # delta_pi, or no per-base value (junction-sourced sides, or --gff_dir not given).
 # The cutoff per row is the one is_significant() uses: min_dpi, or min_dpi_sj where
 # the tested distinct set is empty (a junction-sourced side).
@@ -1089,7 +1099,7 @@ if (isTRUE(opt$combine_p) && (split == 'bipartition' || split == 'n_choose_2')) 
     }
 
     min_data <- add_significant(add_support(min_data), padj_thr, delta, min_dpi, min_dpi_sj, min_reads,
-                               omnibus_pairs = omnibus_pairs)
+                               omnibus_pairs = omnibus_pairs, use_perbase = use_perbase, min_effect = min_effect)
     out_mincomb <- sub("\\.annotated\\.txt$", ".mincomb.annotated.txt",
                       out_result_annotated)
     write.table(min_data, out_mincomb, sep = "\t", quote = FALSE, row.names = FALSE)
@@ -1124,7 +1134,7 @@ if (isTRUE(opt$combine_p) && (split == 'bipartition' || split == 'n_choose_2')) 
     }
 
     fisher_data <- add_significant(add_support(fisher_data), padj_thr, delta, min_dpi, min_dpi_sj, min_reads,
-                               omnibus_pairs = omnibus_pairs)
+                               omnibus_pairs = omnibus_pairs, use_perbase = use_perbase, min_effect = min_effect)
     out_fisher <- sub("\\.annotated\\.txt$", ".fisher_combined.annotated.txt",
                       out_result_annotated)
     write.table(fisher_data, out_fisher, sep = "\t", quote = FALSE, row.names = FALSE)

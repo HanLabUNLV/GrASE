@@ -32,8 +32,10 @@ option_list <- list(
               help = "output table; the PDF and discrepancy list are named after it"),
   make_option("--contrast", type = "character", default = NULL,
               help = "GrASE contrast to compare; required when the GrASE results hold more than one"),
-  make_option("--min_dpi", type = "double", default = 0.1,
-              help = "GrASE |delta_pi| gate of is_significant() [default= %default]"),
+  make_option("--min_dpi", type = "double", default = 0.05,
+              help = "GrASE |delta_pi| gate of is_significant(), per-base where defined [default= %default]"),
+  make_option("--min_effect", type = "double", default = 0.5,
+              help = "GrASE |effect_size| (log odds ratio) gate of is_significant() [default= %default]"),
   make_option("--min_dpi_sj", type = "double", default = 0.05,
               help = "the same for a junction-sourced side [default= %default]"),
   make_option("--min_l2fc", type = "double", default = 0.5,
@@ -99,7 +101,7 @@ if (is.null(opt$contrast)) {
   if (!nrow(g)) stop("no rows for --contrast ", opt$contrast, "; the files have: ", paste(cts, collapse = " "))
 }
 g <- g[!is.na(p.value)]
-g[, grase_call := is_significant(g, opt$pval, 0, opt$min_dpi, opt$min_dpi_sj, opt$min_reads)]
+g[, grase_call := is_significant(g, opt$pval, 0, opt$min_dpi, opt$min_dpi_sj, opt$min_reads, min_effect = opt$min_effect)]
 ## a bipartition is called if either side is; its parts are those of both distinct sets
 g[, grase_call := any(grase_call), by = .(cls, gene, event, contrast)]
 g[, side := fifelse(grepl("diff1", comparison), 1L, 2L)]

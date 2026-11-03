@@ -9,7 +9,8 @@ pi_perbase(pi, len_d, len_s)
 \arguments{
 \item{pi}{Raw-count pi, in \verb{[0, 1]}.}
 
-\item{len_d, len_s}{Lengths in bases of the distinct set and the reference.}
+\item{len_d, len_s}{Lengths of the distinct set and the reference: effective
+lengths (see \code{annotate_pi_perbase}) or plain lengths in bases.}
 }
 \value{
 Per-base pi, or NA where a length is missing or non-positive.

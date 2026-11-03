@@ -287,13 +287,19 @@ test_that("use_perbase can also promote a side the raw value failed", {
   expect_true(is_significant(r, 0.01, 0, min_dpi = 0.1, use_perbase = TRUE))
 })
 
-test_that("use_perbase='or' (the default) passes a side if either value clears", {
-  expect_true(is_significant(mk_res(dpi = 0.12, pb = 0.03), 0.01, 0, min_dpi = 0.1))
-  expect_true(is_significant(mk_res(dpi = 0.08, pb = 0.15), 0.01, 0, min_dpi = 0.1))
-  expect_false(is_significant(mk_res(dpi = 0.08, pb = 0.03), 0.01, 0, min_dpi = 0.1))
-  ## no per-base value: only the raw test is left
-  expect_true(is_significant(mk_res(dpi = 0.12, pb = NA_real_), 0.01, 0, min_dpi = 0.1))
-  expect_false(is_significant(mk_res(dpi = 0.08, pb = NA_real_), 0.01, 0, min_dpi = 0.1))
+test_that("the default gates on per-base delta_pi >= 0.05 and |effect_size| >= 0.5", {
+  r <- mk_res(dpi = 0.03, pb = 0.06); r$effect_size <- 0.6
+  expect_true(is_significant(r, 0.01, 0))
+  r$effect_size <- 0.4                       # log odds ratio too small
+  expect_false(is_significant(r, 0.01, 0))
+  r <- mk_res(dpi = 0.08, pb = 0.04); r$effect_size <- 2
+  expect_false(is_significant(r, 0.01, 0))   # per-base too small, raw ignored
+  r <- mk_res(dpi = 0.06, pb = NA_real_, sd = NA_character_); r$effect_size <- 2
+  expect_true(is_significant(r, 0.01, 0))    # junction side: raw against min_dpi_sj
+  r$effect_size <- NA_real_                  # a missing effect_size passes, as delta_pi does
+  expect_true(is_significant(r, 0.01, 0))
+  r$effect_size <- 0.1
+  expect_true(is_significant(r, 0.01, 0, min_effect = 0))   # 0 drops the condition
 })
 
 test_that("a junction side with no per-base value falls back to raw, not NA", {
@@ -312,7 +318,7 @@ test_that("use_perbase is inert when the column is absent", {
 
 test_that("add_significant threads use_perbase through", {
   r <- mk_res(dpi = 0.12, pb = 0.03)
-  expect_true(add_significant(r, 0.01, 0)$significant)
+  expect_true(add_significant(r, 0.01, 0, min_dpi = 0.1, use_perbase = FALSE)$significant)
   expect_false(add_significant(r, 0.01, 0, min_dpi = 0.1,
                                use_perbase = TRUE)$significant)
 })

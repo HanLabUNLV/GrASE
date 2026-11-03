@@ -4,20 +4,28 @@
 \alias{annotate_pi_perbase}
 \title{Annotate a results table with per-base pi}
 \usage{
-annotate_pi_perbase(res, gff_dir)
+annotate_pi_perbase(res, gff_dir, read_length = NULL)
 }
 \arguments{
-\item{res}{Results data frame with pi_ref, pi_trt, ref_ex_part, setdiff1,
+\item{res}{Results data frame with pi_ctrl, pi_trt, ref_ex_part, setdiff1,
 setdiff2, comparison, gene.}
 
 \item{gff_dir}{Directory of per-gene \code{<gene>.dexseq.gff} files.}
+
+\item{read_length}{Read length of the counted reads (the mate length for
+paired-end data). NULL uses plain part lengths, with a warning.}
 }
 \value{
 \code{res} with the new columns appended.
 }
 \description{
-Adds \code{len_D}, \code{len_S}, \code{pi_ref_perbase},
+Adds \code{len_D}, \code{len_S}, \code{pi_ctrl_perbase},
 \code{pi_trt_perbase} and \code{delta_pi_perbase}. Rows whose distinct set
 is a JUNCTION rather than exonic parts are left NA: a junction is a point
 feature with no length, so a per-base reading is undefined for it.
+}
+\details{
+\code{len_D} and \code{len_S} are effective lengths: each exonic part counts
+\code{L + read_length - 1}, the number of read start positions that overlap
+it, summed over the parts of the set.
 }

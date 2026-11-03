@@ -220,7 +220,7 @@ for (i in seq_len(nrow(rows))) {
   cc <- rows$contrast[i]
   if (!grepl("_vs_", cc)) next
   tt <- sub("_vs_.*$", "", cc); rf <- sub("^.*?_vs_", "", cc)
-  pit <- num(rows$pi_trt[i]); pir <- num(rows$pi_ref[i]); pa <- num(rows$padj[i])
+  pit <- num(rows$pi_trt[i]); pir <- num(rows$pi_ctrl[i]); pa <- num(rows$padj[i])
   if (is.na(pit) || is.na(pir) || is.na(pa)) next
   pivals[[tt]] <- pit; pivals[[rf]] <- pir; best[[cc]] <- pa
 }

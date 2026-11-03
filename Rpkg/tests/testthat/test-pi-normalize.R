@@ -65,3 +65,19 @@ test_that("a junction-substituted side gets NA, not a bogus per-base pi", {
   ## D is a junction: a point feature with no length
   expect_true(is.na(pi_perbase(0.72, feature_length(NA_character_, c("1" = 10)), 67)))
 })
+
+test_that("annotate_pi_perbase uses effective lengths L + read_length - 1", {
+  d <- tempfile(); dir.create(d)
+  writeLines(c(
+    'chr1\tdexseq\texonic_part\t1\t10\t.\t+\t.\ttranscripts "t1"; exonic_part_number "001"; gene_id "G1"',
+    'chr1\tdexseq\texonic_part\t101\t400\t.\t+\t.\ttranscripts "t1"; exonic_part_number "002"; gene_id "G1"'),
+    file.path(d, "G1.dexseq.gff"))
+  res <- data.frame(gene = "G1", comparison = "diff1_vs_ref", setdiff1 = "E001", setdiff2 = NA_character_,
+                    ref_ex_part = "E002", pi_ctrl = 0.2, pi_trt = 0.4, stringsAsFactors = FALSE)
+  r <- annotate_pi_perbase(res, d, read_length = 50)
+  expect_equal(r$len_D, 10 + 49)
+  expect_equal(r$len_S, 300 + 49)
+  expect_equal(r$pi_ctrl_perbase, pi_perbase(0.2, 59, 349))
+  expect_warning(r0 <- annotate_pi_perbase(res, d), "plain part lengths")
+  expect_equal(r0$len_D, 10)
+})
