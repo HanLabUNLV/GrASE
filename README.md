@@ -38,6 +38,9 @@ R packages:
 * tidyverse
 * MASS and matrixStats (`exontest.R`)
 * data.table (the outward-walk scripts)
+* UpSetR (1.4.1), patchwork (1.3.2) and systemfonts (the comparison scripts; `compare_parts_upset.R`
+  composes its UpSet panels with patchwork, so it fails to start without it)
+* goseq, org.Hs.eg.db and GO.db (`grase_enrichment.R`)
 
 Python packages (only for the bundled DEXSeq helpers):
 * python3 (3.11.5)
