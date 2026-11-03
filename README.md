@@ -40,6 +40,8 @@ R packages:
 * data.table (the outward-walk scripts)
 * UpSetR (1.4.1), patchwork (1.3.2) and systemfonts (the comparison scripts; `compare_parts_upset.R`
   composes its UpSet panels with patchwork, so it fails to start without it)
+* ggrastr (1.0.2) and its Cairo dependency (`plot_volcano.R` rasterizes the point layer; Cairo is
+  compiled, so it needs the system cairo headers)
 * goseq, org.Hs.eg.db and GO.db (`grase_enrichment.R`)
 
 Python packages (only for the bundled DEXSeq helpers):
