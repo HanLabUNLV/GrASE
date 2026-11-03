@@ -31,8 +31,10 @@ o$use_perbase <- switch(o$use_perbase, both = "both", "TRUE" = TRUE, "FALSE" = F
 for (f in strsplit(o$results, ",")[[1]]) {
   d <- fread(f, sep = "\t", na.strings = "NA")
   if ("pi_ref" %in% names(d)) setnames(d, "pi_ref", "pi_ctrl")
+  ## pi_ref_perbase is the pre-rename name of pi_ctrl_perbase: drop it too, or a file written
+  ## before the rename keeps a stale copy beside the recomputed column.
   drop <- intersect(c("len_D", "len_S", "pi_ctrl_perbase", "pi_trt_perbase", "delta_pi_perbase",
-                      "dpi_raw_pass", "dpi_perbase_pass"), names(d))
+                      "pi_ref_perbase", "dpi_raw_pass", "dpi_perbase_pass"), names(d))
   if (length(drop)) d[, (drop) := NULL]
   old <- d$significant %in% c(TRUE, "TRUE")
   d <- as.data.table(annotate_pi_perbase(as.data.frame(d), path.expand(o$gff_dir), o$read_length))
