@@ -229,7 +229,17 @@ if (length(miss)) stop("no pi for conditions: ", paste(miss, collapse = ", "))
 
 perbase <- !isTRUE(a$raw)
 pb_used <- FALSE
-len_D <- set_length(tested_D, coords); len_S <- set_length(S, coords)
+## exontest.R already wrote the lengths behind per-base pi: len_D and len_S are
+## EFFECTIVE lengths (each part's L + read_length - 1, summed over the set), so take
+## them from the row rather than re-measuring the GFF here -- re-measuring gives plain
+## lengths and the panel then disagrees with the call it is drawing. NA for a junction
+## side is carried through as before, and only a results file written without the
+## columns falls back to measuring.
+if (all(c("len_D", "len_S") %in% names(focal))) {
+  len_D <- num(focal$len_D); len_S <- num(focal$len_S)
+} else {
+  len_D <- set_length(tested_D, coords); len_S <- set_length(S, coords)
+}
 if (perbase && (is.na(len_D) || is.na(len_S))) {
   message("  per-base pi undefined: ",
           if (is.na(len_D)) "distinct set is a junction (no length)"
