@@ -742,6 +742,19 @@ test_model_glmmTMB_EB <- function(dd, L, model_label = "betabinom_EBapprox") {
     target_log_phi <- dd$z_mod[1]
     if (is.na(target_log_phi)) return(NULL)
 
+    ## A group with no reads on the distinct set (or none on the reference) has
+    ## a log odds of -Inf (+Inf), which makes the covariance matrix non-finite and
+    ## fails the whole fit -- losing every contrast of the event, including those
+    ## that do not involve that group. Leave such groups out. With the dispersion
+    ## fixed, the likelihood separates by group, so every other group's
+    ## coefficient and every contrast between them are exactly what a fit of
+    ## those groups alone would give; a contrast that needs a dropped group is
+    ## skipped below, as for a group with no samples.
+    ys <- tapply(dd$y, dd$groups, sum); ns <- tapply(dd$n - dd$y, dd$groups, sum)
+    keep <- names(ys)[!is.na(ys) & ys > 0 & ns > 0]
+    dd <- dd[dd$groups %in% keep, ]
+    if (length(keep) < 2) return(NULL)
+
     dd$groups <- droplevels(dd$groups)
     m1 <- tryCatch(
       glmmTMB(cbind(y, n - y) ~ 0 + groups,
@@ -1054,9 +1067,12 @@ posthoc_lfc_summary <- function(results, lfc_summary) {
 #'   deliberate: \code{lfc_diff_net = abs(lfc_diff) - abs(lfc_ref)}, so the
 #'   magnitudes are already inside the quantity and it is positive when the
 #'   distinct set moved more than the shared reference. Do not wrap in abs().
-#' @param use_perbase effect-size gate on \code{delta_pi}: TRUE (default) or
-#'   FALSE.
+#' @param use_perbase effect-size gate on \code{delta_pi}: \code{"both"}
+#'   (default), TRUE or FALSE.
 #'   \itemize{
+#'     \item \code{"both"}: a row passes when the raw AND the per-base
+#'       \code{abs(delta_pi)} reach the threshold; where per-base is not
+#'       defined, the raw test alone.
 #'     \item \code{TRUE}: gate on \code{delta_pi_perbase} wherever it is
 #'       defined, falling back to the raw \code{delta_pi} elsewhere.
 #'     \item \code{FALSE}: gate on the raw \code{delta_pi} alone.
@@ -1101,7 +1117,7 @@ posthoc_lfc_summary <- function(results, lfc_summary) {
 #' @export
 is_significant <- function(res, padj_thr, delta = 0, min_dpi = 0.05,
                            min_dpi_sj = min_dpi, min_reads = 0, padj = NULL,
-                           omnibus_pairs = NULL, use_perbase = TRUE,
+                           omnibus_pairs = NULL, use_perbase = "both",
                            min_effect = 0.5) {
   ## use_perbase and min_effect are last in the signature on purpose: existing
   ## positional calls must keep working.
@@ -1131,11 +1147,16 @@ is_significant <- function(res, padj_thr, delta = 0, min_dpi = 0.05,
     ## (30.7% of rows on the DICE activation arm). Requiring per-base
     ## everywhere would fail those sides on NA rather than on effect size.
     ## Note min_dpi_sj already carries a partial scale correction for them.
-    stopifnot(is.logical(use_perbase), length(use_perbase) == 1L, !is.na(use_perbase))
+    ## "both" takes the smaller of the two: per-base rescaling enlarges the raw
+    ## value when the distinct set is much shorter than the reference, and at
+    ## transcript ends, where coverage is not uniform, that enlargement is not
+    ## an effect.
+    stopifnot(length(use_perbase) == 1L, !is.na(use_perbase),
+              is.logical(use_perbase) || identical(use_perbase, "both"))
     dpi <- abs(res$delta_pi)
-    if (use_perbase && "delta_pi_perbase" %in% names(res)) {
+    if (!isFALSE(use_perbase) && "delta_pi_perbase" %in% names(res)) {
       pb <- abs(res$delta_pi_perbase)
-      dpi <- ifelse(is.na(pb), dpi, pb)
+      dpi <- if (isTRUE(use_perbase)) ifelse(is.na(pb), dpi, pb) else ifelse(is.na(pb), dpi, pmin(dpi, pb))
     }
     (dpi >= thr) | is.na(res$delta_pi)
   } else TRUE
@@ -1205,7 +1226,7 @@ is_significant <- function(res, padj_thr, delta = 0, min_dpi = 0.05,
 #' @export
 add_significant <- function(res, padj_thr, delta, min_dpi = 0.05, min_dpi_sj = 0.05,
                             min_reads = 10, omnibus_pairs = NULL,
-                            use_perbase = TRUE, min_effect = 0.5) {
+                            use_perbase = "both", min_effect = 0.5) {
   res$significant <- is_significant(res, padj_thr, delta, min_dpi, min_dpi_sj,
                                     min_reads, omnibus_pairs = omnibus_pairs,
                                     use_perbase = use_perbase, min_effect = min_effect)

@@ -500,10 +500,14 @@ length, so its per-base values are NA.
 
 | `--dpi_gate` | `significant` requires |
 |---|---|
-| `perbase` (default) | per-base \|delta_pi\| at the cutoff, raw where per-base is NA |
+| `both` (default) | raw and per-base \|delta_pi\| both at the cutoff, raw alone where per-base is NA |
+| `perbase` | per-base \|delta_pi\| at the cutoff, raw where per-base is NA |
 | `raw` | raw \|delta_pi\| at the cutoff |
 
-`perbase` needs `--gff_dir`; without it the gate is raw, with a warning. The output also has
+Per-base rescaling enlarges delta_pi when the distinct set is much shorter than the
+reference, and per-base assumes reads are spread evenly along a part, which does not
+hold near transcript ends. `both` keeps a side only when neither scale is below the
+cutoff. `both` and `perbase` need `--gff_dir`; without it the gate is raw, with a warning. The output also has
 `dpi_raw_pass` and `dpi_perbase_pass`, which report each gate at the same per-row
 cutoff whatever `--dpi_gate` was, so a call can be read as raw-only, per-base-only
 or both. Re-running with a different gate does not refit: when the results already
@@ -539,9 +543,16 @@ bash scripts/outward_walk.sh \
     --exon_counts     ${WD}/DEXSeq/count_files \
     --samples         samples.tsv \
     --contrasts       group2:group1 \
+    --read_length     <read length> \
     --dexseq_flags    "--format bam --paired yes --stranded reverse --order pos -a 10" \
     --python          <python with HTSeq>
 ```
+
+A terminus or outward unit is called with `is_significant()`, the rule that
+called the sides: `--padj` (0.01), raw and per-base `--min_dpi` (0.05), `--min_effect`
+(0.5) and `--min_reads` (10). Set them to the values the terminal results were
+called with. Per-base delta_pi uses the unit's own effective length, so
+`--read_length` is required; `--dpi_gate raw` or `perbase` gates on one scale only.
 
 Add `--subset_called --samtools <samtools>` to build the intronic parts only for genes
 with a called side and to count each BAM reduced to the read pairs that touch them
@@ -884,7 +895,7 @@ bash 20_unpack_star_sj.sh
 bash 30_exoncnt.sh
 bash 40_bipartition_sjcnt.sh
 bash 50_merge_exon_sj.sh
-bash 60_exontest.sh                 # betabinom_EBmap, --gff_dir, --dpi_gate=perbase, --padj_threshold=0.05, --independent_filtering
+bash 60_exontest.sh                 # betabinom_EBmap, --gff_dir, --dpi_gate=both, --padj_threshold=0.05, --independent_filtering
 bash 70_outward_walk.sh             # needs 60; stops if outward_walk/ exists
 bash 75_volcano.sh                  # needs 60; comparison/volcano/volcano.{png,pdf}
 ```

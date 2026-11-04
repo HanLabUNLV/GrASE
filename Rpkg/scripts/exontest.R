@@ -73,10 +73,11 @@ make_option(c("--use_prec_loess"), action="store_true", default=FALSE,
                          "[default: 0.05]"), metavar="double"),
   make_option(c("--min_dpi"), type="double", default=0.05,
               help="minimum |delta_pi| (path proportion effect size) for the significant column; events with |delta_pi| < min_dpi are not significant [default: 0.05]", metavar="double"),
-  make_option(c("--dpi_gate"), type="character", default="perbase",
-              help=paste("delta_pi gate of the final significant column: raw (|delta_pi|) or",
-                         "perbase (|delta_pi_perbase|, raw where undefined). perbase needs --gff_dir",
-                         "[default: perbase]"),
+  make_option(c("--dpi_gate"), type="character", default="both",
+              help=paste("delta_pi gate of the final significant column: both (raw AND per-base",
+                         "|delta_pi|, raw alone where per-base is undefined), raw (|delta_pi|) or",
+                         "perbase (|delta_pi_perbase|, raw where undefined). both and perbase need",
+                         "--gff_dir [default: both]"),
               metavar="character"),
   make_option(c("--min_effect"), type="double", default=0.5,
               help="minimum |effect_size| (log odds ratio) for the significant column, required with the delta_pi gate; 0 drops it [default: 0.5]", metavar="double"),
@@ -188,14 +189,14 @@ delta            <- as.double(opt$delta)
 padj_method      <- as.character(opt$padj_method)
 min_dpi          <- as.double(opt$min_dpi)
 min_dpi_sj       <- as.double(opt$min_dpi_sj)
-dpi_gate         <- match.arg(opt$dpi_gate, c("raw", "perbase"))
+dpi_gate         <- match.arg(opt$dpi_gate, c("both", "raw", "perbase"))
 min_effect       <- as.double(opt$min_effect)
 if (!is.null(opt$gff_dir) && is.null(opt$read_length))
   stop("--gff_dir needs --read_length (effective lengths of per-base pi)")
 if (dpi_gate != "raw" && is.null(opt$gff_dir))
   warning("--dpi_gate ", dpi_gate, " without --gff_dir: no per-base pi, so every side is gated on the raw delta_pi",
           call. = FALSE, immediate. = TRUE)
-use_perbase      <- dpi_gate == "perbase"
+use_perbase      <- switch(dpi_gate, both = "both", perbase = TRUE, raw = FALSE)
 min_reads        <- as.double(opt$min_reads)
 
 # Expand tilde in paths
@@ -305,7 +306,7 @@ if (annotate_only) {
             basename(out_resultfile))
   }
 } else if (file.exists(exoncnt_master)) {
-  splitcnts <- read.table(exoncnt_master, header=TRUE, row.names=NULL)
+  splitcnts <- as.data.frame(data.table::fread(exoncnt_master, na.strings="NA"))
   # Include all groups mentioned in any contrast; drop samples from other groups.
   splitcnts$groups <- factor(splitcnts$groups, levels = all_groups)
   splitcnts <- splitcnts[!is.na(splitcnts$groups), ]
@@ -941,7 +942,7 @@ if (grepl("\\.txt$", out_resultfile)) {
 
 # Read test results first to get the list of genes
 message(paste("Reading test results from", out_resultfile, "..."))
-tests <- read.table(out_resultfile, header = TRUE, stringsAsFactors = FALSE)
+tests <- as.data.frame(data.table::fread(out_resultfile, na.strings = "NA"))
 tests <- as_tibble(tests)
 message(paste("Loaded", nrow(tests), "test results."))
 
@@ -1039,7 +1040,7 @@ if (nrow(merged_data) > 0 && all(c("setdiff1", "setdiff2") %in% names(merged_dat
 }
 
 # Effect-size gates reported separately, for reading the table: `significant`
-# above gates as --dpi_gate says (perbase, by default). NA where there is no
+# above gates as --dpi_gate says (both, by default). NA where there is no
 # delta_pi, or no per-base value (junction-sourced sides, or --gff_dir not given).
 # The cutoff per row is the one is_significant() uses: min_dpi, or min_dpi_sj where
 # the tested distinct set is empty (a junction-sourced side).

@@ -13,7 +13,7 @@ is_significant(
   min_reads = 0,
   padj = NULL,
   omnibus_pairs = NULL,
-  use_perbase = TRUE,
+  use_perbase = "both",
   min_effect = 0.5
 )
 }
@@ -55,9 +55,12 @@ precision, which does not justify a source-dependent rule.}
 \item{padj}{optional vector to use in place of \code{res$padj} -- for a
 two-stage nested-BH sweep, pass \code{pmax(within_gene_BH, padj_gene)}.}
 
-\item{use_perbase}{effect-size gate on \code{delta_pi}: TRUE (default) or
-FALSE.
+\item{use_perbase}{effect-size gate on \code{delta_pi}: \code{"both"}
+(default), TRUE or FALSE.
 \itemize{
+\item \code{"both"}: a row passes when the raw AND the per-base
+\code{abs(delta_pi)} reach the threshold; where per-base is not
+defined, the raw test alone.
 \item \code{TRUE}: gate on \code{delta_pi_perbase} wherever it is
 defined, falling back to the raw \code{delta_pi} elsewhere.
 \item \code{FALSE}: gate on the raw \code{delta_pi} alone.

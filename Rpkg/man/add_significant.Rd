@@ -12,7 +12,7 @@ add_significant(
   min_dpi_sj = 0.05,
   min_reads = 10,
   omnibus_pairs = NULL,
-  use_perbase = TRUE,
+  use_perbase = "both",
   min_effect = 0.5
 )
 }
@@ -51,9 +51,12 @@ Applied to every side, not only split-read-sourced ones: restricting it to
 junction sides saved only 16 true positives out of 692 at identical
 precision, which does not justify a source-dependent rule.}
 
-\item{use_perbase}{effect-size gate on \code{delta_pi}: TRUE (default) or
-FALSE.
+\item{use_perbase}{effect-size gate on \code{delta_pi}: \code{"both"}
+(default), TRUE or FALSE.
 \itemize{
+\item \code{"both"}: a row passes when the raw AND the per-base
+\code{abs(delta_pi)} reach the threshold; where per-base is not
+defined, the raw test alone.
 \item \code{TRUE}: gate on \code{delta_pi_perbase} wherever it is
 defined, falling back to the raw \code{delta_pi} elsewhere.
 \item \code{FALSE}: gate on the raw \code{delta_pi} alone.

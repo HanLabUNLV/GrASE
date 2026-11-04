@@ -26,7 +26,8 @@ already exists.
 | `50_bipartition_sjcnt.sh` | Split-read counts on the intronic edges of each bipartition (`bipartition_sjcnt.R`) |
 | `60_merge_lineage.sh` | Lineage panel: junction counts where a distinct set is empty (`merge_exon_sj_counts.R`) |
 | `70_exontest_lineage.sh` | Tests the merged counts, 10 lineage contrasts (`exontest.R`) |
-| `80_outward_walk_lineage.sh` | Outward walk on the terminal calls (`outward_walk.sh`) |
+| `80_outward_walk_lineage.sh` | Outward walk on the lineage terminal calls (`outward_walk.sh`) |
+| `80_outward_walk_activation.sh` | Outward walk on the activation terminal calls; reuses the lineage intronic parts and the counts of the shared samples |
 | `85_volcano_activation.sh` | Activation panel, CD4 and CD8: volcano plots on raw delta_pi, per-base delta_pi and the log odds ratio (`plot_volcano.R`) |
 | `90_comparison_activation.sh` | Activation panel, CD4 and CD8: GrASE against rMATS and satuRn, and the three on exonic parts with UpSet plots (`compare_rmats_grase.R`, `compare_dexseq_grase.R`, `compare_rmats_dexseq.R`, `compare_parts_upset.R`) |
 

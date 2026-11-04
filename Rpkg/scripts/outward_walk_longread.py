@@ -45,7 +45,26 @@ Gene edge: with the intergenic flanks built (IG=1) a gene-edge terminus HAS an
 outward flank, so those termini are INCLUDED. Without them the flank is absent
 and the walk cannot judge the side.
 
-Usage: IG=1 python3 -I outward_walk_longread.py [window] [minpres] [mode]
+ACTIVATION PANEL (PANEL=activation). The long reads are from resting cells
+only, so for CD4_N_STIM_vs_CD4 and CD8_N_STIM_vs_CD8 only the resting side has a
+library. A called terminus is scored only when its part_dpi says it is used more
+in the resting group (dpi < 0), against `exists` in that resting lineage; termini
+claimed for the stimulated group are skipped and counted, since no long reads can
+corroborate them. `exclusive` needs both lineages and is not reported.
+
+STIMULATED CD4 (PANEL=activation LRSRC=isoseq). For CD4_N_STIM_vs_CD4 both
+sides can be checked against PacBio Iso-Seq from one lab: the stimulated side
+against anti-CD3/CD28-activated CD4 T cells (GEO GSE229971; ISO_STIM=4h for the
+4 h sample, the default, or ISO_STIM=all for 4, 16, 48 and 120 h pooled) and the
+resting side against resting CD4 T cells (GEO GSE202327, GSM6108477). The
+collapsed transcript models carry no counts, so only `exists` is defined: a model
+end within W of the terminus in the claimed side's set. ISO_DIR=stim or rest
+keeps only termini claimed for that side (default: both). ISO_SWAP=1 scores each
+called terminus against the OTHER side's set: the specificity check, since a
+model end that exists in both states says the boundary is real, not that it is
+specific to the state the call claims.
+
+Usage: IG=1 [PANEL=activation [LRSRC=isoseq]] python3 -I outward_walk_longread.py [window] [minpres] [mode]
 """
 import os, re, csv, math, bisect, collections, sys
 from scipy.stats import chi2
@@ -57,7 +76,8 @@ D = os.environ.get("DICE", "/mnt/data1/home/mirahan/DICE")
 IG  = os.environ.get("IG", "0") == "1"
 MAN = f"{D}/intronparts_ig/intronparts_manifest.tsv" if IG else \
       f"{D}/intronparts/intronparts_manifest.tsv"
-PAN = f"{D}/intronparts/lineage/ig" if IG else f"{D}/intronparts/lineage"
+ACT = os.environ.get("PANEL", "lineage") == "activation"
+PAN = f"{D}/intronparts/{'activation' if ACT else 'lineage'}" + ("/ig" if IG else "")
 sys.stderr.write("IG=%s  manifest=%s  panel=%s\n" % (IG, MAN, PAN))
 TR = {"DRR465268":"CD4","DRR465269":"CD4","DRR465270":"CD4","DRR465271":"CD4",
  "DRR465272":"CD4","DRR465273":"CD4","DRR465274":"CD4","DRR465275":"CD4",
@@ -77,6 +97,17 @@ LIN = ["CD4","CD8","B","MONO.CLASSIC"]
 PAIRS = [("CD4","B"),("CD8","B"),("MONO.CLASSIC","B"),
          ("CD8","CD4"),("MONO.CLASSIC","CD4"),("MONO.CLASSIC","CD8")]
 DEFS = ("exists","exclusive")          # the REPORTED references
+ISO = os.environ.get("LRSRC", "isoquant") == "isoseq"
+ISO_STIM = os.environ.get("ISO_STIM", "4h")
+ISO_DIR = os.environ.get("ISO_DIR", "both")
+ISO_SWAP = os.environ.get("ISO_SWAP", "0") == "1"
+if ISO and not ACT: sys.exit("LRSRC=isoseq needs PANEL=activation")
+if ACT:
+    ## the stimulated groups have no library: they enter LIN with zero counts
+    LIN = LIN + ["CD4_N_STIM", "CD8_N_STIM"]
+    PAIRS = [("CD4_N_STIM","CD4"), ("CD8_N_STIM","CD8")]
+    DEFS = ("exists",)
+    if ISO: PAIRS = [("CD4_N_STIM","CD4")]
 ## BOTH REFERENCES ARE DIRECTIONAL, so each index is built in two halves. A call
 ## says which lineage the terminus is used in -- the sign of part_dpi -- and only
 ## long-read evidence in THAT lineage corroborates it. Until 2026-10-26 both
@@ -133,6 +164,38 @@ def build(trt, ref):
         for kk in out[k]: out[k][kk] = sorted(set(out[k][kk]))
     return out
 
+ISO_D = f"{D}/isoseq_activated"
+ISO_FILES = {"stim": [f"{ISO_D}/GSM7182107_ST143_4Hr_bs1_bc1018_flnc_ALIGNED_CUPCAKE.sorted.REDUCED.gff.gz"] +
+                     ([] if ISO_STIM == "4h" else
+                      [f"{ISO_D}/GSM7182108_ST143_16Hr_bs2_bc1019_flnc_ALIGNED_CUPCAKE.sorted.REDUCED.gff.gz",
+                       f"{ISO_D}/GSM7182109_ST143_48Hr_bs3_bc1020_flnc_ALIGNED_CUPCAKE.sorted.REDUCED.gff.gz",
+                       f"{ISO_D}/GSM7182110_ST143_120hr_bs4_bc1023_flnc_ALIGNED_CUPCAKE.sorted.REDUCED.gff.gz"]),
+             "rest": [f"{D}/isoseq_lymphocyte/GSM6108477_SL87_CD4_bc1001_Reduced_SQANTI_corrected.gtf"]}
+
+def build_isoseq():
+    """The same index as build(), from collapsed Iso-Seq transcript models: the
+    stimulated set fills the _trt half and the resting set the _ref half. No
+    counts, so the exclusive halves stay empty and are not reported. The GTFs
+    name chromosomes `1`, the DEXSeq GFFs `chr1`."""
+    import gzip
+    out = {(d, e): collections.defaultdict(list) for d in IDX for e in ("5","3")}
+    for side, half in (("stim", "exists_trt"), ("rest", "exists_ref")):
+        n = 0
+        for fn in ISO_FILES[side]:
+            fh = gzip.open(fn, "rt") if fn.endswith(".gz") else open(fn)
+            for ln in fh:
+                f = ln.split("\t")
+                if len(f) < 9 or f[2] != "transcript": continue
+                c = f[0] if f[0].startswith("chr") else ("chrM" if f[0] == "MT" else "chr" + f[0])
+                s0, e0, st = int(f[3]), int(f[4]), f[6]
+                five, three = (s0, e0) if st == "+" else (e0, s0)
+                out[(half, "5")][(c, st)].append(five); out[(half, "3")][(c, st)].append(three)
+                n += 1
+        print("  iso-seq %s: %d transcript models from %d file(s)" % (side, n, len(ISO_FILES[side])))
+    for k in out:
+        for kk in out[k]: out[k][kk] = sorted(set(out[k][kk]))
+    return out
+
 def hit(ds, d, e, c, st, pos, dpi):
     """One reference, resolved for direction. Both are directional: `exists`
     asks whether a transcript ends here IN THE LINEAGE THE CALL CLAIMS, and
@@ -145,6 +208,7 @@ def hit(ds, d, e, c, st, pos, dpi):
         return (near(ds[(pre + "_trt", e)], c, st, pos) or
                 near(ds[(pre + "_ref", e)], c, st, pos))
     if dpi == 0: return False
+    if ISO and ISO_SWAP: dpi = -dpi       # the other side's set
     return near(ds[(pre + ("_trt" if dpi > 0 else "_ref"), e)], c, st, pos)
 
 def near(d, c, st, pos):
@@ -215,6 +279,7 @@ for r in csv.DictReader(open(f"{PAN}/outward_walk_verdict.tsv"), delimiter="\t")
     if IG or r["gene_edge"] != "TRUE": verd[r["contrast"]].append(r)
 
 cells = collections.Counter(); hits = collections.Counter(); rank_n = collections.Counter()
+n_skip_stim = collections.Counter()
 bg_n = collections.Counter(); bg_h = collections.Counter()
 # EXACT-rank counters, for the MH test at the end. The binned ones above are
 # for the o/e tables; MH must not be binned, see the comment on that block.
@@ -223,7 +288,7 @@ n_rk = collections.Counter(); h_rk = collections.Counter()
 # is a separate binary split, so one terminus contributes to several labels.
 lab_n = collections.Counter(); lab_h = collections.Counter()
 for trt, ref in PAIRS:
-    ds = build(trt, ref)
+    ds = build_isoseq() if ISO else build(trt, ref)
     for r in verd.get(f"{trt}_vs_{ref}", []):
         key = (r["gene"], r["event"], r["side"])
         ## score_outward_walk.R carries `anchor` itself, so the part number
@@ -243,6 +308,12 @@ for trt, ref in PAIRS:
         ## claim, so its references fall back to the non-directional union.
         try: dpi = float(r["part_dpi"])
         except (KeyError, ValueError): dpi = None
+        if ACT and not ISO and dpi is not None and dpi >= 0:
+            n_skip_stim[r["walk"]] += 1   # claimed for the stimulated group: no library
+            continue
+        if ISO and dpi is not None and ((ISO_DIR == "stim" and dpi <= 0) or (ISO_DIR == "rest" and dpi >= 0)):
+            n_skip_stim[r["walk"]] += 1   # claimed for the other side
+            continue
         grp = r["walk"]
         e = "5" if kind == "5prime" else "3"
         cell = (kind, grp)
@@ -297,9 +368,13 @@ def pooled(kind, grp):
         res[d] = (obs, exp, (obs / exp) if exp else float('nan'))
     return n, res
 
+if ACT:
+    print(("  iso-seq %s, direction %s%s: termini skipped: " % (ISO_STIM, ISO_DIR, ", SWAPPED" if ISO_SWAP else "") if ISO else
+           "  activation: termini claimed for the stimulated group, skipped (no long reads): ") +
+          ", ".join("%s %d" % kv for kv in sorted(n_skip_stim.items())))
 print("\n### each walk group against the rank- and distance-matched background")
-print("  %-8s %-14s %9s | %-22s | %-22s" %
-      ("end", "grp", "n", "exists (Q1)", "exclusive (Q2)"))
+print(("  %-8s %-14s %9s" + " | %-22s" * len(DEFS)) %
+      (("end", "grp", "n") + ("exists (Q1)", "exclusive (Q2)")[:len(DEFS)]))
 POOL = {}
 for kind in ("5prime", "3prime"):
     for grp in ("walk_stops", "walk_continues", "no_claim"):

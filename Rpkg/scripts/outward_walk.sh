@@ -28,7 +28,11 @@
 #                      [--format bam --paired no --stranded reverse --order pos -a 10]
 #   --python           python that can import HTSeq [python3]
 #   --cores            parallel samples and R workers [8]
-#   --padj, --min_dpi, --min_reads   call thresholds [0.05, 0.1, 10]
+#   --read_length      read length of the counted reads; required with --dpi_gate perbase
+#   --padj, --min_dpi, --min_effect, --min_reads
+#                      unit call thresholds of grase::is_significant(), the same as the
+#                      side calls [0.01, 0.05, 0.5, 10]
+#   --dpi_gate         both, raw or perbase delta_pi for the unit call [both]
 #   --subset_called    build the intronic parts only for genes with a called side,
 #                      and count each BAM reduced to the read pairs that touch
 #                      them (both mates kept). Same counts as the full run for
@@ -44,7 +48,8 @@
 set -euo pipefail
 
 FLAGS="--format bam --paired no --stranded reverse --order pos -a 10"
-PY=python3; CORES=8; PADJ=0.05; MIN_DPI=0.1; MIN_READS=10; SUBSET=0; SAMTOOLS=samtools
+PY=python3; CORES=8; PADJ=0.01; MIN_DPI=0.05; MIN_EFFECT=0.5; MIN_READS=10; DPI_GATE=both
+READ_LEN=; SUBSET=0; SAMTOOLS=samtools
 while [ $# -gt 0 ]; do
   case "$1" in
     --subset_called) SUBSET=1; shift; continue ;;
@@ -54,6 +59,7 @@ while [ $# -gt 0 ]; do
     --exon_counts) ECNT=$2 ;; --samples) SAMPLES=$2 ;; --contrasts) CTR=$2 ;;
     --dexseq_flags) FLAGS=$2 ;; --python) PY=$2 ;; --cores) CORES=$2 ;;
     --padj) PADJ=$2 ;; --min_dpi) MIN_DPI=$2 ;; --min_reads) MIN_READS=$2 ;;
+    --min_effect) MIN_EFFECT=$2 ;; --dpi_gate) DPI_GATE=$2 ;; --read_length) READ_LEN=$2 ;;
     *) echo "unknown option: $1" >&2; exit 1 ;;
   esac
   shift 2
@@ -61,6 +67,7 @@ done
 for v in W RES TCNT SPLIT GRAPH GFF ECNT SAMPLES CTR; do
   [ -n "${!v:-}" ] || { echo "missing a required option (see the header of $0)" >&2; exit 1; }
 done
+[ "$DPI_GATE" = raw ] || [ -n "$READ_LEN" ] || { echo "--dpi_gate $DPI_GATE needs --read_length" >&2; exit 1; }
 for f in "$RES" "$TCNT" "$SAMPLES"; do [ -s "$f" ] || { echo "missing $f" >&2; exit 1; }; done
 
 S=$(dirname "$(realpath "$0")")
@@ -147,5 +154,6 @@ Rscript "$S/score_outward_walk.R" --side_table "$W/outward_side_table.tsv" \
   --exonic "$RES" --combined "$W/$COMBINED" --group_means "$W/outward_unit_group_means.tsv" \
   --intronparts "$IP/intronparts_manifest.tsv" --unmeasurable "$IP/unmeasurable.tsv" \
   --contrasts "$CTR" --min_reads "$MIN_READS" --padj "$PADJ" --min_dpi "$MIN_DPI" \
+  --min_effect "$MIN_EFFECT" --dpi_gate "$DPI_GATE" --gff_dir "$GFF" ${READ_LEN:+--read_length "$READ_LEN"} \
   --out "$W/outward_walk_verdict.tsv"
 echo "=== done: $W/outward_walk_verdict.tsv  $(date '+%F %T')"

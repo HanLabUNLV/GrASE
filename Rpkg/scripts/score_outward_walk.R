@@ -109,13 +109,25 @@ opt_list <- list(
               help = "trt:ref pairs, comma separated, e.g. 'CD4_N_STIM:CD4,CD8_N_STIM:CD8'"),
   make_option("--min_reads",   type = "double", default = 10,
               help = "read floor on d_support [default %default]"),
-  make_option("--padj",        type = "double", default = 0.05),
-  make_option("--min_dpi",     type = "double", default = 0.1),
+  make_option("--padj",        type = "double", default = 0.01),
+  make_option("--min_dpi",     type = "double", default = 0.05,
+              help = "|delta_pi| of grase::is_significant(), per-base with --dpi_gate perbase [default %default]"),
+  make_option("--min_effect",  type = "double", default = 0.5,
+              help = "|effect_size| of grase::is_significant() [default %default]"),
+  make_option("--dpi_gate",    type = "character", default = "both",
+              help = "both, raw or perbase, as exontest.R [default %default]"),
+  make_option("--gff_dir",     type = "character", default = NULL,
+              help = "per-gene DEXSeq GFFs, for the per-base lengths of exonic units and references"),
+  make_option("--read_length", type = "integer", default = NULL,
+              help = "read length of the counted reads, for effective lengths"),
   make_option("--out",         type = "character", help = "per-side verdict table")
 )
 a <- parse_args(OptionParser(option_list = opt_list))
 for (req in c("side_table", "results", "exonic", "intronparts", "contrasts", "out"))
   if (is.null(a[[req]])) stop("--", req, " is required")
+stopifnot(a$dpi_gate %in% c("both", "raw", "perbase"))
+if (a$dpi_gate != "raw" && (is.null(a$gff_dir) || is.null(a$read_length)))
+  stop("--dpi_gate ", a$dpi_gate, " needs --gff_dir and --read_length", call. = FALSE)
 
 CTR <- lapply(strsplit(strsplit(a$contrasts, ",", fixed = TRUE)[[1]], ":", fixed = TRUE),
               function(x) { if (length(x) != 2) stop("bad contrast: ", paste(x, collapse = ":")); trimws(x) })
@@ -233,7 +245,55 @@ if (nrow(dupc))
   stop(nrow(dupc), " (contrast, gene, event, comparison) keys appear more than once ",
        "across --results; the files overlap and the verdict counts would be inflated",
        call. = FALSE)
-res[, called := padj < a$padj & abs(delta_pi) >= a$min_dpi & lfc_diff_net > 0]
+## ---- the unit call: the rule that called the sides -------------------------
+## grase::is_significant(), not a condition written here, so a unit is called
+## under the same rule as the side it is judged against. The annotation columns
+## exontest wrote (source, sink, setdiff1/2, ref_ex_part) describe the EXONIC
+## event that happens to share the synthetic id, not the unit, so nothing below
+## reads them: min_dpi_sj = min_dpi keeps is_significant() off the setdiff
+## branch, and the per-base lengths come from the side table.
+umap <- unique(st[, .(gene, event = synth_event, u_type = unit_type,
+                      u_id = unit_id, u_ref = ref_ex_part)])
+if (anyDuplicated(umap, by = c("gene", "event")))
+  stop("a synthetic event maps to more than one unit in --side_table", call. = FALSE)
+res <- merge(res, umap, by = c("gene", "event"), all.x = TRUE)
+if (anyNA(res$u_type))
+  stop(sum(is.na(res$u_type)), " result rows have no unit in --side_table", call. = FALSE)
+if (a$dpi_gate != "raw") {
+  ## effective lengths, as grase::annotate_pi_perbase(): each part counts
+  ## L + read_length - 1. An intronic unit is one bin of the intronic-part GFF,
+  ## counted the same way, so its width takes the same correction.
+  r1 <- a$read_length - 1
+  ulen <- umap[, {
+    eff <- part_lengths_from_gff(gene_gff_path(path.expand(a$gff_dir), .BY$gene)) + r1
+    .(event,
+      len_S = vapply(u_ref, feature_length, 0, lens = eff, USE.NAMES = FALSE),
+      ## only exonic units are part numbers; intronic widths come from the manifest
+      len_D = vapply(seq_along(u_id), function(i)
+        if (u_type[i] == "exon") feature_length(u_id[i], eff) else NA_real_, 0))
+  }, by = gene]
+  ip <- unique(fread(a$intronparts, sep = "\t", showProgress = FALSE, select = c("gene", "bin_id", "width"),
+                     colClasses = list(character = c("gene", "bin_id"))))
+  if (anyDuplicated(ip, by = c("gene", "bin_id")))
+    stop("--intronparts has a (gene, bin_id) twice", call. = FALSE)
+  res <- merge(res, ulen, by = c("gene", "event"), all.x = TRUE)
+  res[ip, on = .(gene, u_id = bin_id), len_D := fifelse(u_type == "exon", len_D, i.width + r1)]
+  res[, delta_pi_perbase := pi_perbase(pi_trt, len_D, len_S) - pi_perbase(pi_ctrl, len_D, len_S)]
+  cat(sprintf("per-base delta_pi for %d of %d unit rows (%d intronic, %d exonic without one)\n",
+              sum(!is.na(res$delta_pi_perbase)), nrow(res),
+              sum(res$u_type == "intron" & is.na(res$delta_pi_perbase)),
+              sum(res$u_type == "exon" & is.na(res$delta_pi_perbase))))
+}
+## the floor is applied by this script on d_support (below), so min_reads = 0 here
+res[, called := is_significant(res, a$padj, 0, a$min_dpi, a$min_dpi, 0,
+                               use_perbase = switch(a$dpi_gate, both = "both", perbase = TRUE, raw = FALSE),
+                               min_effect = a$min_effect)]
+## tested = exontest returned a p-value. is_significant() is FALSE, never NA,
+## where padj is NA, so `called` no longer carries this.
+res[, tested := !is.na(p.value)]
+cat(sprintf("unit call: padj < %g, |%s delta_pi| >= %g, |effect_size| >= %g, lfc_diff_net > 0\n",
+            a$padj, switch(a$dpi_gate, both = "raw and per-base", perbase = "per-base", raw = "raw"),
+            a$min_dpi, a$min_effect))
 ## exontest.R already wrote a d_support column into --results. Recompute it with
 ## the shared function and CHECK, rather than trusting either copy: a silent
 ## disagreement here would move the floor and every verdict with it.
@@ -268,18 +328,18 @@ allu <- as.data.table(grase::add_support(as.data.frame(allu), d_grp, CTR))
 ## the treatment lineage scores a hit from a transcript exclusive to the
 ## reference lineage, which dilutes a real effect toward the null. The sign of
 ## delta_pi says which lineage the call claims the terminus is used in.
-u <- merge(u, res[, .(gene, synth_event = event, contrast, called, delta_pi)],
+u <- merge(u, res[, .(gene, synth_event = event, contrast, called, tested, delta_pi)],
            by = c("gene", "synth_event", "contrast"), all.x = TRUE)
 u <- merge(u, allu[, .(gene, synth_event = event, contrast, d_support)],
            by = c("gene", "synth_event", "contrast"), all.x = TRUE)
-u[, tested := !is.na(called)]
+u[is.na(tested), tested := FALSE]
 u[, min_read_support := !is.na(d_support) & d_support >= a$min_reads]
 ## zero_count separates "measured and empty" from "never measured". A unit whose
 ## counts are in the table with a mean of zero IS a measurement: it says no
 ## reads lie there. One with no support value at all says nothing.
 u[, zero_count := !is.na(d_support) & d_support == 0]
 cat(sprintf("floor: d_support >= %g reads (max over the contrast's two groups)\n", a$min_reads))
-cat(sprintf("units: %d enumerated, %d tested, %d with support but no test row, %d of those zero-count\n",
+cat(sprintf("units: %d enumerated, %d tested, %d with support but no p-value, %d of those zero-count\n",
             nrow(u), sum(u$tested), sum(!u$tested & !is.na(u$d_support)),
             sum(!u$tested & u$zero_count)))
 
@@ -304,7 +364,7 @@ ts <- u[anchor_kind == "terminus_self"]
 w <- merge(ts[, .(gene, event, side, contrast, rank, anchor, gene_edge,
                   part_called = called, part_dpi = delta_pi,
                   part_min_read_support = min_read_support,
-                  part_tested = tested, part_zero = zero_count)],
+                  part_tested = tested, part_zero = zero_count, part_ds = d_support)],
            u[anchor_kind == "terminus",
              .(gene, event, side, contrast, rank, flank_called = called,
                flank_dpi = delta_pi,
@@ -354,6 +414,14 @@ if (!is.null(unmeas)) {
 ## there is no signal there, so it is not a start and cannot anchor anything. It
 ## fails the floor regardless; the explicit clause makes the asymmetry visible
 ## rather than an accident of NA handling.
+## LOST: a unit with no p-value that is not explained by its counts -- not zero,
+## and not known to be under the floor (exontest tests nothing there). What is
+## left is a support value at or above the floor, or none at all: a failed fit
+## or a failed join.
+unexplained <- function(tested, zero, ds)
+  !isTRUE_v(tested) & !isTRUE_v(zero) & (is.na(ds) | ds >= a$min_reads)
+w[, lost := unexplained(part_tested, part_zero, part_ds) |
+            (isTRUE_v(flank_present) & unexplained(flank_tested, flank_zero, flank_ds))]
 w[, t_ok := isTRUE_v(part_min_read_support) & isTRUE_v(part_called) &
             !isTRUE_v(part_zero)]
 w[, u_dead := fcase(
@@ -397,6 +465,9 @@ w[, u_dead := fcase(
 ##   outward tested, uncalled  d_support >= floor, tested, no differential
 w[, term_verdict := fcase(
     !t_ok & isTRUE_v(part_zero),               "terminus zero count",
+    ## below floor before not tested: exontest gives no p-value under the floor,
+    ## so "not tested" is left for a terminus above it, or with no support value
+    !t_ok & !is.na(part_ds) & !isTRUE_v(part_min_read_support), "terminus below floor",
     !t_ok & !isTRUE_v(part_tested),            "terminus not tested",
     !t_ok & !isTRUE_v(part_min_read_support),  "terminus below floor",
     !t_ok,                                     "terminus above floor, not called",
@@ -427,9 +498,7 @@ v <- w[, .(n_term      = .N,
            ## LOST means neither tested nor measured. A zero-count unit is
            ## untested by design -- exontest emits no row for it -- but it IS
            ## measured, so it is not lost.
-           n_lost      = sum((!isTRUE_v(part_tested) & !isTRUE_v(part_zero)) |
-                             (isTRUE_v(flank_present) & !isTRUE_v(flank_tested) &
-                              !isTRUE_v(flank_zero))),
+           n_lost      = sum(lost),
            positive    = any(term_positive),
            ## the strongest kind of evidence the side has, since a side with
            ## several termini can carry several kinds at once. Ordered by how
@@ -581,10 +650,7 @@ for (cn in names(CTR)) {
 }
 
 cat("\n=== termini lost to a failed join, by contrast (NOT drops)\n")
-print(w[, .(lost = sum((!isTRUE_v(part_tested) & !isTRUE_v(part_zero)) |
-                           (isTRUE_v(flank_present) & !isTRUE_v(flank_tested) &
-                            !isTRUE_v(flank_zero)))),
-        by = contrast])
+print(w[, .(lost = sum(lost)), by = contrast])
 
 cat("\n=== NOTE no pooled figure is reported on purpose: contrasts are",
     "\n    independent tests, and the between-contrast replication rate for the",

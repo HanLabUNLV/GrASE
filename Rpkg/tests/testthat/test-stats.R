@@ -287,13 +287,15 @@ test_that("use_perbase can also promote a side the raw value failed", {
   expect_true(is_significant(r, 0.01, 0, min_dpi = 0.1, use_perbase = TRUE))
 })
 
-test_that("the default gates on per-base delta_pi >= 0.05 and |effect_size| >= 0.5", {
-  r <- mk_res(dpi = 0.03, pb = 0.06); r$effect_size <- 0.6
+test_that("the default needs raw and per-base delta_pi >= 0.05 and |effect_size| >= 0.5", {
+  r <- mk_res(dpi = 0.06, pb = 0.07); r$effect_size <- 0.6
   expect_true(is_significant(r, 0.01, 0))
   r$effect_size <- 0.4                       # log odds ratio too small
   expect_false(is_significant(r, 0.01, 0))
+  r <- mk_res(dpi = 0.03, pb = 0.06); r$effect_size <- 2
+  expect_false(is_significant(r, 0.01, 0))   # raw too small
   r <- mk_res(dpi = 0.08, pb = 0.04); r$effect_size <- 2
-  expect_false(is_significant(r, 0.01, 0))   # per-base too small, raw ignored
+  expect_false(is_significant(r, 0.01, 0))   # per-base too small
   r <- mk_res(dpi = 0.06, pb = NA_real_, sd = NA_character_); r$effect_size <- 2
   expect_true(is_significant(r, 0.01, 0))    # junction side: raw against min_dpi_sj
   r$effect_size <- NA_real_                  # a missing effect_size passes, as delta_pi does
@@ -310,6 +312,13 @@ test_that("a junction side with no per-base value falls back to raw, not NA", {
                              use_perbase = TRUE))
 })
 
+test_that("use_perbase='both' fails a side either value fails", {
+  expect_false(is_significant(mk_res(0.03, 0.15), 0.01, 0, min_dpi = 0.1, use_perbase = "both"))
+  expect_false(is_significant(mk_res(0.15, 0.03), 0.01, 0, min_dpi = 0.1, use_perbase = "both"))
+  expect_true(is_significant(mk_res(0.12, 0.15), 0.01, 0, min_dpi = 0.1, use_perbase = "both"))
+  expect_error(is_significant(mk_res(0.12, 0.15), 0.01, 0, use_perbase = "or"))
+})
+
 test_that("use_perbase is inert when the column is absent", {
   r <- mk_res(dpi = 0.12, pb = 0.03)
   r$delta_pi_perbase <- NULL
@@ -321,4 +330,40 @@ test_that("add_significant threads use_perbase through", {
   expect_true(add_significant(r, 0.01, 0, min_dpi = 0.1, use_perbase = FALSE)$significant)
   expect_false(add_significant(r, 0.01, 0, min_dpi = 0.1,
                                use_perbase = TRUE)$significant)
+})
+
+## --- a group with no reads on one side ---------------------------------------
+## Its log odds are infinite, which used to fail the whole fit and drop every
+## contrast. It is now left out: the other contrasts match a fit without it.
+
+mk_dd <- function(groups, y, n) {
+  data.frame(gene = "G", event = 1L, groups = factor(groups), y = y, n = n,
+             z_mod = log(20), stringsAsFactors = FALSE)
+}
+mk_L <- function(trt, ref, lev) {
+  C <- matrix(0, 1, length(lev), dimnames = list(NULL, paste0("groups", lev)))
+  C[1, paste0("groups", trt)] <- 1; C[1, paste0("groups", ref)] <- -1
+  C
+}
+
+test_that("an empty group drops only the contrasts that need it", {
+  set.seed(1)
+  g <- rep(c("A", "B", "C"), each = 6)
+  n <- rep(100L, 18)
+  y <- c(rbinom(6, 100, 0.3), rbinom(6, 100, 0.6), rep(0L, 6))
+  L <- list(A_vs_B = mk_L("A", "B", c("A", "B", "C")), A_vs_C = mk_L("A", "C", c("A", "B", "C")))
+  r <- test_model_glmmTMB_EB(mk_dd(g, y, n), L)
+  expect_equal(r$contrast, "A_vs_B")
+  k <- g != "C"
+  r2 <- test_model_glmmTMB_EB(mk_dd(g[k], y[k], n[k]), L["A_vs_B"])
+  expect_equal(r$p.value, r2$p.value, tolerance = 1e-6)
+  expect_equal(r$effect_size, r2$effect_size, tolerance = 1e-6)
+})
+
+test_that("a group with every read on the distinct set is left out too", {
+  g <- rep(c("A", "B", "C"), each = 4)
+  y <- c(30L, 35L, 28L, 33L, 60L, 55L, 62L, 58L, 100L, 100L, 100L, 100L)
+  L <- list(A_vs_B = mk_L("A", "B", c("A", "B", "C")), C_vs_B = mk_L("C", "B", c("A", "B", "C")))
+  r <- test_model_glmmTMB_EB(mk_dd(g, y, rep(100L, 12)), L)
+  expect_equal(r$contrast, "A_vs_B")
 })
