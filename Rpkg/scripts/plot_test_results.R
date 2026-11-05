@@ -261,21 +261,29 @@ sig_contrasts <- rows$contrast[rows$contrast %in% names(best) & is_sig(rows$sign
 nsig <- length(sig_contrasts)
 
 ## bipartition stack
+bkey <- function(s, d1, d2)
+  paste(paste(sort(parts(s)), collapse = "|"), paste(sort(parts(d1)), collapse = "|"),
+        paste(sort(parts(d2)), collapse = "|"), sep = "~")
+focal_key <- bkey(S, D1, D2)
+## only bipartitions with a row in the results are drawn: the bipartition file
+## also holds rows exontest.R never tested
 read_bips <- function(kinds) {
   out <- NULL
   for (k in kinds) {
     p <- file.path(bipdir, sprintf("%s.bipartition.%s.txt", gv, k))
     if (!file.exists(p)) next
     tb <- read_tsv(p); tb$`_kind` <- k
+    rs <- all_rows[[k]]
+    tested <- if (is.null(rs)) character(0) else unique(mapply(bkey, rs$ref_ex_part, rs$setdiff1, rs$setdiff2))
+    keep <- mapply(bkey, tb$ref_ex_part, tb$setdiff1, tb$setdiff2) %in% tested
+    if (any(!keep)) message(sprintf("  panel B: %d of %d %s bipartitions have no test results, not drawn",
+                                    sum(!keep), nrow(tb), k))
+    tb <- tb[keep, , drop = FALSE]
     out <- if (is.null(out)) tb else rbind(out, tb)
   }
   out
 }
 bips <- read_bips(stack_kinds)
-bkey <- function(s, d1, d2)
-  paste(paste(sort(parts(s)), collapse = "|"), paste(sort(parts(d1)), collapse = "|"),
-        paste(sort(parts(d2)), collapse = "|"), sep = "~")
-focal_key <- bkey(S, D1, D2)
 
 stack <- list()
 if (!is.null(bips)) for (i in seq_len(nrow(bips))) {
@@ -305,6 +313,9 @@ for (k in names(all_rows)) {
 ord <- order(vapply(stack, `[[`, numeric(1), "lo"),
              -(vapply(stack, `[[`, numeric(1), "hi") - vapply(stack, `[[`, numeric(1), "lo")))
 stack <- stack[ord]
+n_tested <- length(stack)
+n_marked_all <- sum(vapply(stack, function(s_) !is.null(sig_D[[bkey(s_$b$ref_ex_part, s_$b$setdiff1,
+                                                                     s_$b$setdiff2)]]), logical(1)))
 if (a$max_stack > 0 && length(stack) > a$max_stack) {
   fi <- which(vapply(stack, function(s) bkey(s$b$ref_ex_part, s$b$setdiff1, s$b$setdiff2) ==
                        focal_key, logical(1)))
@@ -477,12 +488,16 @@ for (y in seq_along(stack)) {
     text(s_$hi + 2.8, yy, "tested here", adj = c(0, 0.5), cex = 0.62, xpd = NA)
   }
 }
-mtext(sprintf("B   All %d bipartitions tested at this locus, ordered by span containment",
-              length(stack)), side = 3, line = 0.2, adj = 0, cex = 0.78)
+mtext(sprintf("B   %s, ordered by span containment",
+              if (length(stack) < n_tested)
+                sprintf("%d of the %d bipartitions tested at this locus", length(stack), n_tested)
+              else sprintf("All %d bipartitions tested at this locus", n_tested)),
+      side = 3, line = 0.2, adj = 0, cex = 0.78)
 mtext("exonic parts, genomic order  ->", side = 1, line = 1.1, cex = 0.62)
 mtext(sprintf(paste0("each row = one tested bipartition; rows nest where spans are contained | ",
                      "*D1 / *D2 / *D1/D2 = significant (exontest.R call rule) in at least one ",
-                     "contrast [%d of %d shown]"), n_marked, length(stack)),
+                     "contrast [%d of %d drawn; %d of %d tested]"), n_marked, length(stack),
+                     n_marked_all, n_tested),
       side = 1, line = 2.1, adj = 0, cex = 0.55, col = "#555555")
 
 ## ---- C (panel 3): the tested bipartition as graph routes -----------------
@@ -566,7 +581,7 @@ if (is.null(matched)) {
 }
 
 ## ---- D: path proportion across conditions --------------------------------
-par(mai = c(0.45, 0.78, TOP, 0.15))
+par(mai = c(0.62, 0.78, TOP, 0.15))
 vals <- vapply(conds, function(c_) pivals[[c_]], numeric(1))
 ## per-sample pi of the tested distinct set, from the same counts the test used
 ps <- NULL
@@ -577,7 +592,7 @@ if (!is.null(cnt_tb)) {
     dd <- num(tb_s[[dcol]]); rr <- num(tb_s$ref)
     pi_s <- ifelse(!is.na(dd) & !is.na(rr) & dd + rr > 0, dd / (dd + rr), NA_real_)
     if (pb_used) pi_s <- pi_perbase(pi_s, len_D, len_S)
-    ps <- data.frame(g = match(tb_s$groups, conds) - 1, pi = pi_s)
+    ps <- data.frame(g = match(tb_s$groups, conds) - 1, pi = pi_s, n = dd + rr)
     ps <- ps[!is.na(ps$g) & !is.na(ps$pi), , drop = FALSE]
     if (!nrow(ps)) ps <- NULL
   }
@@ -587,6 +602,9 @@ span <- max(yr) - min(yr); pad <- max(span, 0.05)
 plot(seq_along(conds) - 1, vals, type = "n", axes = FALSE, xlab = "", ylab = "",
      xlim = c(-0.4, length(conds) - 0.6),
      ylim = c(min(yr) - pad * 0.30, max(yr) + pad * 0.30))
+## each group's median reads on D + S goes under its label: per-sample pi is
+## noisy where depth is low, and the dots alone do not show which groups those are
+use_depth <- !is.null(ps)
 if (!is.null(ps)) {
   set.seed(1)
   points(ps$g + runif(nrow(ps), -0.04, 0.04), ps$pi, pch = 16, cex = 0.55,
@@ -597,6 +615,13 @@ points(seq_along(conds) - 1, vals, pch = 21, bg = CB[["D2"]], col = "white", cex
 text(seq_along(conds) - 1, vals + pad * 0.11, sprintf("%.3f", vals), cex = 0.65)
 axis(1, at = seq_along(conds) - 1, labels = sub("\\.CLASSIC", "", conds),
      cex.axis = 0.72, tick = FALSE, line = -0.4)
+if (use_depth) {
+  med_n <- vapply(seq_along(conds) - 1, function(i) {
+    v <- ps$n[ps$g == i]; if (length(v)) median(v) else NA_real_ }, numeric(1))
+  med_lab <- vapply(med_n, function(m) if (is.na(m)) "no reads" else
+    sprintf("median %s reads", prettyNum(m, big.mark = ",")), character(1))
+  mtext(med_lab, side = 1, at = seq_along(conds) - 1, line = 1.3, cex = 0.5, col = "#555555")
+}
 axis(2, las = 1, cex.axis = 0.7)
 grid(nx = NA, ny = NULL, col = "#CCCCCC", lty = 1)
 yl <- if (!is.null(a$ylab)) a$ylab else
@@ -605,10 +630,11 @@ yl <- if (!is.null(a$ylab)) a$ylab else
 mtext(yl, side = 2, line = 2.6, cex = 0.68)
 mtext("D   Path proportion across conditions", side = 3, line = 0.2, adj = 0, cex = 0.78)
 if (!is.null(ps))
-  mtext(sprintf("grey dots: samples (%s); coloured: group pi",
+  mtext(sprintf("grey dots: samples (%s); coloured: group pi%s",
                 paste(sprintf("%s n=%d", sub("\\.CLASSIC", "", conds),
-                              vapply(seq_along(conds) - 1, function(i) sum(ps$g == i), integer(1))), collapse = ", ")),
-        side = 1, line = 1.5, cex = 0.55, col = "#555555")
+                              vapply(seq_along(conds) - 1, function(i) sum(ps$g == i), integer(1))), collapse = ", "),
+                if (use_depth) sprintf("; reads = per-sample reads on %s + S", which_D) else ""),
+        side = 1, line = if (use_depth) 2.3 else 1.5, cex = 0.55, col = "#555555")
 
 ## ---- D text block --------------------------------------------------------
 par(mai = c(0.45, 0.10, TOP, 0.10))
