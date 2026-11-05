@@ -84,18 +84,20 @@ TR = {"DRR465268":"CD4","DRR465269":"CD4","DRR465270":"CD4","DRR465271":"CD4",
  "DRR465276":"CD4","DRR465277":"CD4","DRR465278":"CD4","DRR465279":"CD8",
  "DRR465280":"CD8","DRR465281":"CD8","DRR465295":"CD8","DRR465282":"B",
  "DRR465283":"B","DRR465284":"B","DRR465285":"B","DRR465288":"MONO.CLASSIC",
- "DRR465289":"MONO.CLASSIC","DRR465290":"MONO.CLASSIC","DRR465291":"MONO.CLASSIC"}
+ "DRR465289":"MONO.CLASSIC","DRR465290":"MONO.CLASSIC","DRR465291":"MONO.CLASSIC",
+ "DRR465287":"NK"}
 # MATCHED mode uses the ONE TRAILS subset that corresponds to each DICE group,
 # so the long-read contrast is the same contrast DICE ran. Pooled mode uses all
 # 11 CD4 subsets (Tregs, Th1/2/17, Tfh, memory ...), which asks a broader
 # question than naive-CD4-vs-B and may be why C2+ anti-associates. The cost is
 # depth: one library per lineage instead of up to eleven.
 MATCHED = {"DRR465268":"CD4", "DRR465295":"CD8",
-           "DRR465282":"B",   "DRR465288":"MONO.CLASSIC"}
+           "DRR465282":"B",   "DRR465288":"MONO.CLASSIC", "DRR465287":"NK"}
 if MODE == "matched": TR = MATCHED
-LIN = ["CD4","CD8","B","MONO.CLASSIC"]
+LIN = ["CD4","CD8","B","MONO.CLASSIC","NK"]
 PAIRS = [("CD4","B"),("CD8","B"),("MONO.CLASSIC","B"),
-         ("CD8","CD4"),("MONO.CLASSIC","CD4"),("MONO.CLASSIC","CD8")]
+         ("CD8","CD4"),("MONO.CLASSIC","CD4"),("MONO.CLASSIC","CD8"),
+         ("NK","B"),("NK","CD4"),("NK","CD8"),("MONO.CLASSIC","NK")]
 DEFS = ("exists","exclusive")          # the REPORTED references
 ISO = os.environ.get("LRSRC", "isoquant") == "isoseq"
 ISO_STIM = os.environ.get("ISO_STIM", "4h")
@@ -124,7 +126,8 @@ if ACT:
 ## of the two halves is used, which for exists reduces to the old a + b > 0.
 IDX  = ("exists_trt","exists_ref","excl_trt","excl_ref")
 
-O = f"{D}/longread/isoquant_TBM/OUT"
+## isoquant_TBMN is the 23-library run plus TRAILS NK (DRR465287), same settings
+O = f"{D}/longread/{os.environ.get('LRRUN', 'isoquant_TBMN')}/OUT"
 mcoord = {}
 for ln in open(f"{O}/OUT.transcript_models.gtf"):
     f = ln.split("\t")
