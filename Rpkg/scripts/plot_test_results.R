@@ -34,6 +34,9 @@ opt_list <- list(
   make_option("--desc", type = "character", default = NULL),
   make_option("--ylab", type = "character", default = NULL),
   make_option("--raw", action = "store_true", default = FALSE),
+  make_option("--sig_brackets", action = "store_true", default = FALSE),
+  make_option("--d_width", type = "double", default = 2.1),
+  make_option("--d_height", type = "double", default = 2),
   make_option("--out", type = "character")
 )
 a <- parse_args(OptionParser(option_list = opt_list))
@@ -378,6 +381,10 @@ fig_h <- per_unit_h * (ratio_A + ratio_B + ratio_E + ratio_CD)
 C_MAI_B <- if (length(sj_side)) 0.72 else 0.52
 ratio_A <- (per_unit_h * ratio_A + A_MAI[1] + A_MAI[3]) / per_unit_h
 ratio_E <- (per_unit_h * ratio_E + C_MAI_B + 0.24) / per_unit_h
+## --d_height multiplies the height of panel D's plotting area (its margins,
+## D_MAI_TB inches, stay fixed); the page grows to fit, the other panels keep their size
+D_MAI_TB <- 0.80 + 0.26
+ratio_CD <- ((per_unit_h * ratio_CD - D_MAI_TB) * a$d_height + D_MAI_TB) / per_unit_h
 fig_h <- per_unit_h * (ratio_A + ratio_B + ratio_E + ratio_CD)
 sym <- if (!is.null(a$symbol)) a$symbol else gv
 
@@ -394,8 +401,15 @@ if (ext == "pdf") {
   stop("unsupported output extension: ", ext)
 }
 
-layout(matrix(c(1, 1, 2, 2, 3, 3, 4, 5), nrow = 4, byrow = TRUE),
-       heights = c(ratio_A, ratio_B, ratio_E, ratio_CD), widths = c(3.1, 1))
+## --d_width below 3.1 (the full width beside the text block) narrows panel D and
+## leaves the freed width blank at the right, so the text block keeps its size
+if (a$d_width < 3.1) {
+  layout(matrix(c(1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 5, 6), nrow = 4, byrow = TRUE),
+         heights = c(ratio_A, ratio_B, ratio_E, ratio_CD), widths = c(a$d_width, 1, 3.1 - a$d_width))
+} else {
+  layout(matrix(c(1, 1, 2, 2, 3, 3, 4, 5), nrow = 4, byrow = TRUE),
+         heights = c(ratio_A, ratio_B, ratio_E, ratio_CD), widths = c(a$d_width, 1))
+}
 par(xaxs = "i", yaxs = "i")
 ## Margins in inches. matplotlib puts the title and the x-label in the
 ## gridspec gap; here they come out of the panel, so keep them tight or the
@@ -458,7 +472,7 @@ setlab <- function(x, cell = NULL) {
   }
   "none"
 }
-legend(x = -0.6, y = -0.06, horiz = TRUE, bty = "n", cex = 0.58, xpd = NA, x.intersp = 0.5,
+legend(x = -0.6, y = -0.06, horiz = TRUE, bty = "n", cex = 0.85, xpd = NA, x.intersp = 0.5,
        fill = CB[c("S", "D2", "D1", "other")], border = NA,
        legend = c(sprintf("shared S (%s)", setlab(S, "intron_shared")),
                   sprintf("distinct D2 (%s)", setlab(D2, "intron_distinct2")),
@@ -581,7 +595,7 @@ if (is.null(matched)) {
 }
 
 ## ---- D: path proportion across conditions --------------------------------
-par(mai = c(0.62, 0.78, TOP, 0.15))
+par(mai = c(0.80, 0.78, TOP, 0.15))
 vals <- vapply(conds, function(c_) pivals[[c_]], numeric(1))
 ## per-sample pi of the tested distinct set, from the same counts the test used
 ps <- NULL
@@ -599,9 +613,37 @@ if (!is.null(cnt_tb)) {
 }
 yr <- c(vals, if (!is.null(ps)) ps$pi)
 span <- max(yr) - min(yr); pad <- max(span, 0.05)
+## --sig_brackets: one bracket per called contrast, joining its two groups, stacked
+## so that brackets sharing an x range sit on different levels
+brk <- NULL
+if (isTRUE(a$sig_brackets) && nsig) {
+  brk <- data.frame(contrast = sig_contrasts,
+                    x1 = match(sub("_vs_.*$", "", sig_contrasts), conds) - 1,
+                    x2 = match(sub("^.*?_vs_", "", sig_contrasts), conds) - 1)
+  brk <- brk[!is.na(brk$x1) & !is.na(brk$x2), , drop = FALSE]
+  brk$lo <- pmin(brk$x1, brk$x2); brk$hi <- pmax(brk$x1, brk$x2)
+  brk$padj <- num(rows$padj[match(brk$contrast, rows$contrast)])
+  brk <- brk[order(brk$hi - brk$lo, brk$lo), , drop = FALSE]
+  brk$level <- 0L
+  for (i in seq_len(nrow(brk))) {
+    lv <- 1L
+    while (any(brk$level[seq_len(i - 1)] == lv &
+               brk$lo[seq_len(i - 1)] <= brk$hi[i] & brk$hi[seq_len(i - 1)] >= brk$lo[i])) lv <- lv + 1L
+    brk$level[i] <- lv
+  }
+  if (!nrow(brk)) brk <- NULL
+}
+## each bracket level takes a fixed share of the panel height, so the labels
+## clear the bracket above whatever the data range
+ylo <- min(yr) - pad * 0.30
+brk_base <- max(yr) + pad * 0.22
+brk_frac <- 0.09
+brk_step <- if (is.null(brk)) 0 else
+  brk_frac * (brk_base + pad * 0.05 - ylo) / (1 - brk_frac * max(brk$level))
+ytop <- if (is.null(brk)) max(yr) + pad * 0.30 else brk_base + max(brk$level) * brk_step + pad * 0.05
 plot(seq_along(conds) - 1, vals, type = "n", axes = FALSE, xlab = "", ylab = "",
      xlim = c(-0.4, length(conds) - 0.6),
-     ylim = c(min(yr) - pad * 0.30, max(yr) + pad * 0.30))
+     ylim = c(ylo, ytop))
 ## each group's median reads on D + S goes under its label: per-sample pi is
 ## noisy where depth is low, and the dots alone do not show which groups those are
 use_depth <- !is.null(ps)
@@ -613,28 +655,40 @@ if (!is.null(ps)) {
 lines(seq_along(conds) - 1, vals, lwd = 2, col = CB[["D2"]])
 points(seq_along(conds) - 1, vals, pch = 21, bg = CB[["D2"]], col = "white", cex = 1.1, lwd = 1.2)
 text(seq_along(conds) - 1, vals + pad * 0.11, sprintf("%.3f", vals), cex = 0.65)
+if (!is.null(brk)) {
+  tick <- brk_step * 0.15
+  for (i in seq_len(nrow(brk))) {
+    yb <- brk_base + (brk$level[i] - 1) * brk_step
+    segments(c(brk$lo[i], brk$lo[i], brk$hi[i]), c(yb - tick, yb, yb - tick),
+             c(brk$lo[i], brk$hi[i], brk$hi[i]), c(yb, yb, yb), lwd = 0.9, xpd = NA)
+    pl <- if (is.na(brk$padj[i])) "" else if (brk$padj[i] == 0) "padj < 1e-300" else
+      sprintf("padj %s", formatC(brk$padj[i], format = "e", digits = 0))
+    text((brk$lo[i] + brk$hi[i]) / 2, yb, pl, pos = 3, offset = 0.1, cex = 0.55, xpd = NA)
+  }
+}
 axis(1, at = seq_along(conds) - 1, labels = sub("\\.CLASSIC", "", conds),
      cex.axis = 0.72, tick = FALSE, line = -0.4)
 if (use_depth) {
   med_n <- vapply(seq_along(conds) - 1, function(i) {
     v <- ps$n[ps$g == i]; if (length(v)) median(v) else NA_real_ }, numeric(1))
-  med_lab <- vapply(med_n, function(m) if (is.na(m)) "no reads" else
-    sprintf("median %s reads", prettyNum(m, big.mark = ",")), character(1))
+  med_lab <- vapply(med_n, function(m) if (is.na(m)) "0" else
+    prettyNum(m, big.mark = ","), character(1))
   mtext(med_lab, side = 1, at = seq_along(conds) - 1, line = 1.3, cex = 0.5, col = "#555555")
+  mtext("median reads", side = 1, at = -0.45, adj = 1, line = 1.3, cex = 0.5, col = "#555555")
 }
 axis(2, las = 1, cex.axis = 0.7)
-grid(nx = NA, ny = NULL, col = "#CCCCCC", lty = 1)
 yl <- if (!is.null(a$ylab)) a$ylab else
   sprintf("%s path proportion pi\nof distinct %s",
           if (perbase) "per-base" else "raw", which_D)
 mtext(yl, side = 2, line = 2.6, cex = 0.68)
 mtext("D   Path proportion across conditions", side = 3, line = 0.2, adj = 0, cex = 0.78)
 if (!is.null(ps))
-  mtext(sprintf("grey dots: samples (%s); coloured: group pi%s",
+  mtext(sprintf("grey dots: samples (%s)\ncoloured: group pi%s",
                 paste(sprintf("%s n=%d", sub("\\.CLASSIC", "", conds),
                               vapply(seq_along(conds) - 1, function(i) sum(ps$g == i), integer(1))), collapse = ", "),
                 if (use_depth) sprintf("; reads = per-sample reads on %s + S", which_D) else ""),
-        side = 1, line = if (use_depth) 2.3 else 1.5, cex = 0.55, col = "#555555")
+        side = 1, line = if (use_depth) 3.3 else 2.5, cex = 0.55, col = "#555555",
+        at = -0.4, adj = 0, xpd = NA)
 
 ## ---- D text block --------------------------------------------------------
 par(mai = c(0.45, 0.10, TOP, 0.10))
