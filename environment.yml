@@ -1,0 +1,59 @@
+# Conda environment for GrASE (R package in Rpkg/ + bundled DEXSeq helpers).
+#
+#   mamba env create -f environment.yml        # or: conda env create -f environment.yml
+#   conda activate grase
+#   R CMD INSTALL Rpkg
+#
+# Tested on Linux x86_64 (2026-11-10): R 4.4.3, Bioconductor 3.20, Python 3.11.
+name: grase
+channels:
+  - conda-forge
+  - bioconda
+# strict channel priority recommended: conda config --set channel_priority strict
+dependencies:
+  # --- R / Bioconductor (Rpkg/DESCRIPTION Imports + Rpkg/scripts) ---
+  - r-base=4.4                      # txdbmaker needs Bioconductor >= 3.19
+  - bioconductor-splicinggraphs
+  - bioconductor-txdbmaker
+  - bioconductor-genomicfeatures
+  - bioconductor-annotationdbi
+  - bioconductor-genomeinfodb
+  - bioconductor-iranges
+  - bioconductor-s4vectors
+  - bioconductor-matrixgenerics
+  - bioconductor-rtracklayer
+  - bioconductor-dexseq
+  - r-glmmtmb
+  # glmmTMB 1.1.14 on conda-forge is built against TMB 1.9.19; newer TMB gives an
+  # ABI-mismatch warning at load (risk of crashes / wrong fits)
+  - r-tmb=1.9.19
+  # lme4 1.1.x is built against Matrix ABI 1; 2.x matches current Matrix
+  - r-lme4>=2.0
+  - r-igraph
+  - r-optparse
+  - r-tidyverse
+  - r-data.table
+  - r-matrixstats
+  - r-fs
+  # comparison / plotting scripts
+  - r-upsetr
+  - r-patchwork
+  - r-systemfonts
+  - r-ggrastr
+  - r-cairo
+  # grase_enrichment.R (also needs an org.*.eg.db for your organism, e.g.
+  # bioconductor-org.hs.eg.db for human; not included here)
+  - bioconductor-goseq
+  - bioconductor-go.db
+  # package build / tests / vignettes
+  - r-knitr
+  - r-rmarkdown
+  - r-testthat
+  # --- Python (bundled DEXSeq helpers in Rpkg/inst/python, outward-walk scripts) ---
+  - python=3.11
+  - htseq
+  - numpy
+  - pandas
+  - scipy
+  # --- optional ---
+  - samtools                        # outward walk with --subset_called
