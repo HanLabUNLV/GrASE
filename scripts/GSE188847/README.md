@@ -31,7 +31,7 @@ installed and a python that imports HTSeq (`PY=... bash ...`).
 | `80_comparison.sh` | GrASE, rMATS and DEXSeq pairwise (`compare_rmats_grase.R`, `compare_dexseq_grase.R`, `compare_rmats_dexseq.R`) and three-way on exonic parts (`compare_parts_upset.R`), with rMATS parts from the matched bipartitions and from `map_rmats_graph.R`; `PVAL=` sets the adjusted p cutoff (default 0.05) |
 
 Stages 10 and 20 are independent of each other; both need stage 00. Stage 60 passes
-`--dpi_gate=or` (a call passes on the raw or the per-base effect size). Stage 70 needs a
+`--dpi_gate=both` (a call needs both the raw and the per-base effect size to pass). Stage 70 needs a
 samtools (`SAMTOOLS=`).
 
 ## Check before running

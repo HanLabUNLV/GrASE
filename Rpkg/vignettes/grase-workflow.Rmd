@@ -467,7 +467,7 @@ For more than two groups, replace `--cond1`/`--cond2` with `--contrasts` in
 | `--contrasts` | NULL | Multi-group contrasts as `trt:ref`, comma separated; overrides `--cond1`/`--cond2` |
 | `--padj_method` | `BH` | Plain Benjamini-Hochberg over all events of a contrast. `nested_BH` instead selects genes by BH on each gene's Simes p-value, then BH-adjusts tests within each selected gene and multiplies them by the number of genes tested over the number selected (Benjamini-Bogomolov). Any other `p.adjust` method is also accepted. |
 | `--padj_threshold` | 0.05 | Threshold for the `significant` column, and the gene screen in `nested_BH` |
-| `--min_dpi` | 0.1 | Minimum \|delta_pi\| for an exon-sourced side to be called |
+| `--min_dpi` | 0.05 | Minimum \|delta_pi\| for an exon-sourced side to be called |
 | `--min_dpi_sj` | 0.05 | The same for a junction-sourced side, where the distinct set is junction counts |
 | `--min_reads` | 10 | Mean reads on the distinct set, in at least one group, required to call a side |
 | `--delta` | 0 | `lfc_diff_net` must exceed this; the post-hoc filter on reference movement |
