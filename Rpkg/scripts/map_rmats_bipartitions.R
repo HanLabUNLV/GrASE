@@ -82,9 +82,19 @@ one_gene <- function(gene) {
   }
   res
 }
-res <- mclapply(genes, function(g) tryCatch(one_gene(g),
-                error = function(e) list(status = paste("error:", conditionMessage(e)))),
-                mc.cores = o$mc_cores, mc.preschedule = FALSE)
+## progress on stderr about every 5% of genes (genes are dispatched in order, one worker each, so the
+## index of a finishing gene tracks the progress closely); the time per percent gives the remaining time
+t0 <- Sys.time(); n_genes <- length(genes); step <- max(1L, n_genes %/% 20L)
+message(sprintf("[%s] mapping %d genes on %d cores", format(t0, "%H:%M:%S"), n_genes, o$mc_cores))
+res <- mclapply(seq_along(genes), function(i) {
+  r <- tryCatch(one_gene(genes[i]), error = function(e) list(status = paste("error:", conditionMessage(e))))
+  if (i %% step == 0L) {
+    el <- as.numeric(difftime(Sys.time(), t0, units = "mins"))
+    message(sprintf("[%s] %d / %d genes (%.0f%%), %.1f min elapsed, ~%.0f min left",
+                    format(Sys.time(), "%H:%M:%S"), i, n_genes, 100 * i / n_genes, el, el * (n_genes - i) / i))
+  }
+  r
+}, mc.cores = o$mc_cores, mc.preschedule = FALSE)
 names(res) <- genes
 st <- vapply(res, `[[`, "", "status")
 cat("genes:", length(genes), "|", paste(names(table(st)), table(st), sep = " ", collapse = ", "), "\n")
