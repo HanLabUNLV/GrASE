@@ -57,3 +57,4 @@ dependencies:
   - scipy
   # --- optional ---
   - samtools                        # outward walk with --subset_called
+  - parallel                        # scripts/createfiles.sh (per-gene DEXSeq GFFs)

@@ -218,13 +218,13 @@ nested_bh <- function(res, alpha = 0.05) {
 #' @param independentFiltering Logical. Apply independent filtering before
 #'   adjustment.
 #' @param alpha Numeric. FDR level (default 0.05).
-#' @param method Character. Adjustment method: \code{"nested_BH"} (default) or
-#'   any method accepted by \code{p.adjust} (e.g. \code{"BH"}).
+#' @param method Character. Adjustment method: \code{"BH"} (default) or any other
+#'   method accepted by \code{p.adjust}, or \code{"nested_BH"}.
 #' @return \code{res} with \code{padj} added (and \code{padj_gene} for
 #'   \code{"nested_BH"}).
 #' @export
 adjust_pvalues <- function(res, independentFiltering = FALSE, alpha = 0.05,
-                           method = "nested_BH") {
+                           method = "BH") {
   if (method == "nested_BH") {
     if (independentFiltering && "baseMean" %in% names(res)) {
       filt       <- pvalueAdjustment(res, independentFiltering = TRUE,

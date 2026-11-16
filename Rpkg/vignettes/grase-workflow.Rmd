@@ -465,7 +465,7 @@ For more than two groups, replace `--cond1`/`--cond2` with `--contrasts` in
 | `--model` | `betabinom_EBmap` | See the table above |
 | `--cond1`, `--cond2` | | Two-group contrast; the coefficient is cond1 - cond2 |
 | `--contrasts` | NULL | Multi-group contrasts as `trt:ref`, comma separated; overrides `--cond1`/`--cond2` |
-| `--padj_method` | `nested_BH` | Genes are selected by BH on each gene's Simes p-value; tests within each selected gene are then BH-adjusted and multiplied by the number of genes tested over the number selected (Benjamini-Bogomolov). Any `p.adjust` method (e.g. `BH`) applies plain correction instead. |
+| `--padj_method` | `BH` | Plain Benjamini-Hochberg over all events of a contrast. `nested_BH` instead selects genes by BH on each gene's Simes p-value, then BH-adjusts tests within each selected gene and multiplies them by the number of genes tested over the number selected (Benjamini-Bogomolov). Any other `p.adjust` method is also accepted. |
 | `--padj_threshold` | 0.05 | Threshold for the `significant` column, and the gene screen in `nested_BH` |
 | `--min_dpi` | 0.1 | Minimum \|delta_pi\| for an exon-sourced side to be called |
 | `--min_dpi_sj` | 0.05 | The same for a junction-sourced side, where the distinct set is junction counts |
@@ -482,7 +482,7 @@ For more than two groups, replace `--cond1`/`--cond2` with `--contrasts` in
 The `significant` column is TRUE when all of the following hold, which is the rule
 every reported result uses:
 
-- `padj < --padj_threshold` (0.05 by default, under nested BH)
+- `padj < --padj_threshold` (0.05 by default, under plain BH)
 - \|delta_pi\| passes `--dpi_gate` (below), at `--min_dpi` (0.05), or at `--min_dpi_sj` (0.05) where the side is junction-sourced
 - \|effect_size\|, the log odds ratio of the fitted model, is at least `--min_effect` (0.5)
 - `lfc_diff_net > --delta`, i.e. the distinct set moved more than the shared reference
