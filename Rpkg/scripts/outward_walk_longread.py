@@ -64,7 +64,11 @@ called terminus against the OTHER side's set: the specificity check, since a
 model end that exists in both states says the boundary is real, not that it is
 specific to the state the call claims.
 
-Usage: IG=1 [PANEL=activation [LRSRC=isoseq]] python3 -I outward_walk_longread.py [window] [minpres] [mode]
+TERMINI_OUT=<path> also writes one row per scored terminus (contrast, gene,
+event, side, anchor, end, part_called, walk, exists hit), the input of
+longread_side_support.py.
+
+Usage: IG=1 [PANEL=activation [LRSRC=isoseq]] [TERMINI_OUT=termini.tsv] python3 -I outward_walk_longread.py [window] [minpres] [mode]
 """
 import os, re, csv, math, bisect, collections, sys
 from scipy.stats import chi2
@@ -281,6 +285,8 @@ for r in csv.DictReader(open(f"{PAN}/outward_walk_verdict.tsv"), delimiter="\t")
     # termini the flanks were built to make testable.
     if IG or r["gene_edge"] != "TRUE": verd[r["contrast"]].append(r)
 
+TOUT = open(os.environ["TERMINI_OUT"], "w") if os.environ.get("TERMINI_OUT") else None
+if TOUT: TOUT.write("contrast\tgene\tevent\tside\tanchor\tend\tpart_called\twalk\texists\n")
 cells = collections.Counter(); hits = collections.Counter(); rank_n = collections.Counter()
 n_skip_stim = collections.Counter()
 bg_n = collections.Counter(); bg_h = collections.Counter()
@@ -318,6 +324,11 @@ for trt, ref in PAIRS:
             n_skip_stim[r["walk"]] += 1   # claimed for the other side
             continue
         grp = r["walk"]
+        if TOUT:
+            TOUT.write("\t".join([f"{trt}_vs_{ref}", r["gene"], r["event"], r["side"], anc, kind,
+                                   r["part_called"], grp,
+                                   str(int(hit(ds, "exists", "5" if kind == "5prime" else "3",
+                                               chrom_of[g], strand, pos, dpi)))]) + "\n")
         e = "5" if kind == "5prime" else "3"
         cell = (kind, grp)
         cells[cell] += 1
