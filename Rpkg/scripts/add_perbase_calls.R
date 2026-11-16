@@ -8,7 +8,7 @@
 ## Each file is rewritten in place; the original is kept as <file>.bak_rawpi (an existing backup is not
 ## overwritten).
 ## Usage: Rscript add_perbase_calls.R --results <a.annotated.txt>,<b.annotated.txt> --gff_dir <dir> --read_length <r>
-##          [--padj_threshold 0.01] [--delta 0] [--min_dpi 0.05] [--min_dpi_sj 0.05] [--min_effect 0.5]
+##          [--padj_threshold 0.05] [--delta 0] [--min_dpi 0.05] [--min_dpi_sj 0.05] [--min_effect 0.5]
 ##          [--min_reads 10]
 ## Use the padj threshold, delta and read floor of the exontest.R run that wrote the files.
 suppressPackageStartupMessages({library(optparse); library(data.table); library(grase)})
@@ -16,7 +16,7 @@ o <- parse_args(OptionParser(option_list = list(
   make_option("--results",        type = "character", help = "annotated exontest.R results, comma separated"),
   make_option("--gff_dir",        type = "character", help = "per-gene DEXSeq GFFs (<gene>.dexseq.gff or <gene>/<gene>.dexseq.gff)"),
   make_option("--read_length",    type = "integer", help = "read length of the counted reads (mate length if paired)"),
-  make_option("--padj_threshold", type = "double", default = 0.01),
+  make_option("--padj_threshold", type = "double", default = 0.05),
   make_option("--delta",          type = "double", default = 0),
   make_option("--min_dpi",        type = "double", default = 0.05),
   make_option("--min_dpi_sj",     type = "double", default = 0.05),
