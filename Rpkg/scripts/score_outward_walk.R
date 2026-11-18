@@ -39,6 +39,29 @@
 ## figure move when a threshold changed. Report them separately, never summed
 ## into a single "localized" fraction.
 ##
+## TWO GUARDS ON A DROP (added 2026-11-18). "Uncalled" and "below the floor" are
+## absences of evidence, and on their own they let a terminus be called bounded
+## when the signal plainly continues outward:
+##
+##   1. TESTED, UNCALLED, BUT COMPARABLE. With few reads both t_k and U_k sit near
+##      the padj cutoff; t_k scrapes under it and U_k does not, although U_k moves
+##      as much (NLRC5 on HDAC1 knockdown: terminus dpi +0.30 padj 0.019, outward
+##      dpi +0.26 padj 0.066). 20-34% of walk_stops looked like this. Now a tested
+##      uncalled flank is a drop only if its effect is weak: |dpi_U| < --min_dpi,
+##      or opposite in sign to dpi_t, or |dpi_U| < --max_outward_frac * |dpi_t|.
+##      Otherwise -> "outward uncalled, comparable effect", not judgeable.
+##   2. THIN BUT NOT A DROP. A flank with 1 <= d_support < floor is untestable;
+##      that is a drop only if coverage actually falls there:
+##      d_support_U <= --max_flank_cov * d_support_t. Otherwise it is just low
+##      depth -> "outward thin, no coverage drop", not judgeable.
+##
+## Empty and near-empty flanks (d_support < 1) and the gene edge are unchanged:
+## coverage stopping at the terminus is the clearest boundary evidence there is.
+## Both guards are off with --max_outward_frac Inf --max_flank_cov Inf, which
+## reproduces the verdicts from before 2026-11-18. Neither guard looks at replicate
+## noise in the terminus itself; a terminus resting on single-digit counts can
+## still pass, so plot it before quoting it.
+##
 ## ONLY U_k CAN CONTRADICT. The boundary claim is about t_k, so a called flank
 ## further out is a separate event -- another start, or an effect that skips the
 ## intervening flank -- and does not negate a drop immediately beyond the start.
@@ -109,13 +132,22 @@ opt_list <- list(
               help = "trt:ref pairs, comma separated, e.g. 'CD4_N_STIM:CD4,CD8_N_STIM:CD8'"),
   make_option("--min_reads",   type = "double", default = 10,
               help = "read floor on d_support [default %default]"),
-  make_option("--padj",        type = "double", default = 0.01),
+  make_option("--padj",        type = "double", default = 0.05,
+              help = "adjusted p cutoff of grase::is_significant(), the exontest.R --padj_threshold default [default %default]"),
   make_option("--min_dpi",     type = "double", default = 0.05,
               help = "|delta_pi| of grase::is_significant(), per-base with --dpi_gate perbase [default %default]"),
   make_option("--min_effect",  type = "double", default = 0.5,
               help = "|effect_size| of grase::is_significant() [default %default]"),
   make_option("--dpi_gate",    type = "character", default = "both",
               help = "both, raw or perbase, as exontest.R [default %default]"),
+  make_option("--max_outward_frac", type = "double", default = 0.5,
+              help = paste("a tested, uncalled outward unit is a drop only if |dpi_U| < --min_dpi,",
+                           "dpi_U is opposite in sign to dpi_t, or |dpi_U| < this fraction of |dpi_t|;",
+                           "Inf disables the guard [default %default]")),
+  make_option("--max_flank_cov", type = "double", default = 0.2,
+              help = paste("a below-floor (untestable) outward unit with d_support >= 1 is a drop only if",
+                           "its d_support is at most this fraction of the terminus's; Inf disables",
+                           "the guard [default %default]")),
   make_option("--gff_dir",     type = "character", default = NULL,
               help = "per-gene DEXSeq GFFs, for the per-base lengths of exonic units and references"),
   make_option("--read_length", type = "integer", default = NULL,
@@ -126,6 +158,7 @@ a <- parse_args(OptionParser(option_list = opt_list))
 for (req in c("side_table", "results", "exonic", "intronparts", "contrasts", "out"))
   if (is.null(a[[req]])) stop("--", req, " is required")
 stopifnot(a$dpi_gate %in% c("both", "raw", "perbase"))
+stopifnot(a$max_outward_frac >= 0, a$max_flank_cov >= 0)
 if (a$dpi_gate != "raw" && (is.null(a$gff_dir) || is.null(a$read_length)))
   stop("--dpi_gate ", a$dpi_gate, " needs --gff_dir and --read_length", call. = FALSE)
 
@@ -424,6 +457,20 @@ w[, lost := unexplained(part_tested, part_zero, part_ds) |
             (isTRUE_v(flank_present) & unexplained(flank_tested, flank_zero, flank_ds))]
 w[, t_ok := isTRUE_v(part_min_read_support) & isTRUE_v(part_called) &
             !isTRUE_v(part_zero)]
+## The two guards (see the header). Both are FALSE when they cannot be evaluated,
+## so a missing value never turns a drop into a non-drop silently; the branches
+## below decide what an unevaluable flank is.
+## THIN, NO DROP: below the floor but with real coverage (d_support >= 1) that is
+## not a clear fall from the terminus.
+w[, flank_thin_nodrop := !is.na(flank_ds) & flank_ds >= 1 &
+                         !isTRUE_v(flank_min_read_support) &
+                         !(!is.na(part_ds) & flank_ds <= a$max_flank_cov * part_ds)]
+## COMPARABLE: tested and uncalled, but moving the same way at a non-trivial size.
+w[, flank_comparable := isTRUE_v(flank_tested) & !isTRUE_v(flank_called) &
+                        !is.na(flank_dpi) & !is.na(part_dpi) &
+                        abs(flank_dpi) >= a$min_dpi &
+                        sign(flank_dpi) == sign(part_dpi) &
+                        abs(flank_dpi) >= a$max_outward_frac * abs(part_dpi)]
 w[, u_dead := fcase(
     ## CANNOT BE MEASURED. A flank completely covered by a neighbouring gene's bin
     ## reads 0 whatever is transcribed there, because every read touching it
@@ -448,12 +495,20 @@ w[, u_dead := fcase(
     ## discarded exactly the intergenic flanks the gene-edge work exists to
     ## measure, ~70-75% of which land thin rather than empty. Changed
     ## 2026-10-21; this branch MUST precede the `tested` test.
+    ## Since 2026-11-18 a thin flank is dead only if coverage actually falls there
+    ## (guard 2); thin with no fall is low depth, which says nothing either way.
+    flank_thin_nodrop,                                        NA,
     !is.na(flank_ds) & !isTRUE_v(flank_min_read_support),      TRUE,
     ## no support value AT ALL says nothing: a bad join, not a drop. With the
     ## branch above, this now means what its name says.
     !isTRUE_v(flank_tested),                                  NA,
-    ## above the floor: dead only if tested and uncalled
-    default = !isTRUE_v(flank_called))]
+    ## above the floor and called: the signal continues
+    isTRUE_v(flank_called),                                   FALSE,
+    ## tested, uncalled, but moving as much as the terminus (guard 1): failing the
+    ## cutoff is not evidence of no change, so it is not judgeable either way
+    flank_comparable,                                         NA,
+    ## tested, uncalled and weak: a drop
+    default = TRUE)]
 
 ## The terminus-level label, kept beside the boolean so a reader can see WHICH
 ## kind of drop each positive is. All five are positives; the label records how
@@ -461,8 +516,13 @@ w[, u_dead := fcase(
 ##   gene edge                 no flank exists outward
 ##   outward empty             d_support exactly 0
 ##   outward near-empty        0 < d_support < 1
-##   outward untestable        1 <= d_support < floor; coverage, but untestable
-##   outward tested, uncalled  d_support >= floor, tested, no differential
+##   outward untestable        1 <= d_support < floor and <= --max_flank_cov of the
+##                             terminus: coverage falls, but too thin to test
+##   outward tested, uncalled  d_support >= floor, tested, no differential, and
+##                             weak (guard 1)
+## and two NOT-judgeable labels from the guards, never positives:
+##   outward thin, no coverage drop       below the floor, no fall from the terminus
+##   outward uncalled, comparable effect  uncalled, but moving like the terminus
 w[, term_verdict := fcase(
     !t_ok & isTRUE_v(part_zero),               "terminus zero count",
     ## below floor before not tested: exontest gives no p-value under the floor,
@@ -472,6 +532,8 @@ w[, term_verdict := fcase(
     !t_ok & !isTRUE_v(part_min_read_support),  "terminus below floor",
     !t_ok,                                     "terminus above floor, not called",
     flank_unmeasurable,                         "outward flank unmeasurable",
+    flank_thin_nodrop,                          "outward thin, no coverage drop",
+    flank_comparable,                           "outward uncalled, comparable effect",
     is.na(u_dead),                             "outward flank not tested",
     !u_dead,                                   "signal continues outward",
     !isTRUE_v(flank_present),                   "drop: gene edge",
@@ -481,6 +543,12 @@ w[, term_verdict := fcase(
     !isTRUE_v(flank_min_read_support),          "drop: outward untestable",
     default =                                  "drop: outward tested, uncalled")]
 w[, term_positive := t_ok & !is.na(u_dead) & u_dead]
+cat(sprintf(paste0("guards (--max_outward_frac %g, --max_flank_cov %g): of %d called termini, ",
+                   "%d not judgeable as 'outward uncalled, comparable effect', ",
+                   "%d as 'outward thin, no coverage drop'\n"),
+            a$max_outward_frac, a$max_flank_cov, sum(w$t_ok),
+            sum(w$t_ok & w$term_verdict == "outward uncalled, comparable effect"),
+            sum(w$t_ok & w$term_verdict == "outward thin, no coverage drop")))
 ## the walk at this terminus: the change stops here, continues outward, or the
 ## terminus makes no claim (not called, or the flank could not be judged)
 w[, walk := fcase(term_positive,                               "walk_stops",
@@ -509,6 +577,9 @@ v <- w[, .(n_term      = .N,
            n_untestable      = sum(term_verdict == "drop: outward untestable"),
            n_gene_edge       = sum(term_verdict == "drop: gene edge"),
            n_continues       = sum(term_verdict == "signal continues outward"),
+           ## the two guard labels: neither negative nor positive
+           n_comparable      = sum(term_verdict == "outward uncalled, comparable effect"),
+           n_thin_nodrop     = sum(term_verdict == "outward thin, no coverage drop"),
            ## counted separately so it is never read as a negative OR as a
            ## positive: the question could not be asked of these termini.
            n_unmeasurable    = sum(term_verdict == "outward flank unmeasurable")),

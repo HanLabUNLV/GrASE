@@ -528,8 +528,16 @@ its last before `L`. The script tests each terminus, and the unit just outward
 of it, in place of the distinct set: against the side's own shared reference,
 with the same test as Stage 4. The unit outward is the next exonic part, the
 intronic part between the two, or, beyond the gene's outermost part, a 300 bp
-flank. When a terminus is called and the unit outward is not, the change stops
-at that terminus.
+flank. When a terminus is called and the unit outward shows no comparable
+change, the change stops at that terminus. "No comparable change" means the
+outward unit is empty or nearly so; or too thin to test but with read support at
+most `--max_flank_cov` (0.2) of the terminus's; or tested and uncalled with a
+small effect (|delta_pi| below `--min_dpi`, opposite in sign, or below
+`--max_outward_frac` (0.5) of the terminus's). An outward unit that is uncalled
+but moves about as much as the terminus, or that is thin without a fall in
+coverage, leaves the terminus not judgeable rather than bounded: failing a
+cutoff is not evidence of no change. `Inf` for both options reproduces the
+verdicts from before these guards were added.
 
 Intronic parts are counted separately from the exonic parts, so the exonic
 counts do not change. Count them with the same `dexseq_count.py` flags as the
@@ -552,7 +560,7 @@ bash scripts/outward_walk.sh \
 ```
 
 A terminus or outward unit is called with `is_significant()`, the rule that
-called the sides: `--padj` (0.01), raw and per-base `--min_dpi` (0.05), `--min_effect`
+called the sides: `--padj` (0.05, as exontest.R), raw and per-base `--min_dpi` (0.05), `--min_effect`
 (0.5) and `--min_reads` (10). Set them to the values the terminal results were
 called with. Per-base delta_pi uses the unit's own effective length, so
 `--read_length` is required; `--dpi_gate raw` or `perbase` gates on one scale only.
