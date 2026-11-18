@@ -5,9 +5,10 @@ to the data directory `$DICE` and calls the GrASE scripts in `Rpkg/scripts` of
 this clone.
 
 `config.sh` holds the shared settings: `DICE` (default `~/DICE`), the adjusted p
-cutoff `PVAL` (0.01, used by `exontest.R` and the comparisons), the python that
-imports HTSeq (`PY`), the per-gene DEXSeq GFF directory, the STAR junction
-source, the cell types of each panel and the lineage and activation contrasts.
+cutoff `PVAL` (0.01, used by `exontest.R`, the outward walk and the
+comparisons), the python that imports HTSeq (`PY`), the per-gene DEXSeq GFF
+directory, the STAR junction source, the cell types of each panel and the
+lineage and activation contrasts.
 Any of them can be overridden from the environment, e.g.
 `DICE=/path/to/DICE bash 70_exontest_lineage.sh`. Core counts stay with each
 driver.

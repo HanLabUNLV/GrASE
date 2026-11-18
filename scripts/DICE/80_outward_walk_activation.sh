@@ -40,4 +40,4 @@ bash $R/outward_walk.sh --workdir "$W" --results "$RES" --terminal_counts "$TCNT
   --split_dir bipartition.filtered --graphml_dir graphml.v34 \
   --gff_dir "$DEXSEQ_GFF_DIR" --read_length "$READ_LEN" \
   --exon_counts count_files --samples "$W/samples.tsv" --contrasts "$CTR" \
-  --python "$PY" --cores "$CORES"
+  --python "$PY" --cores "$CORES" --padj "$PVAL"

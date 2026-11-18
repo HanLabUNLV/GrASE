@@ -7,7 +7,9 @@ R=$GRASE/Rpkg/scripts
 
 # Data and output directory; every driver cd's here
 DICE=${DICE:-$HOME/DICE}
-# Adjusted p cutoff: exontest.R --padj_threshold and every comparison
+# Adjusted p cutoff of the whole pipeline: exontest.R --padj_threshold, the
+# outward walk's --padj, and every comparison. Passed explicitly at each stage,
+# so a change to a script's own default cannot move the DICE runs.
 PVAL=${PVAL:-0.01}
 # A python that can import HTSeq (DEXSeq counting, outward walk)
 PY=${PY:-/mnt/data1/home/jaquino/miniconda3/bin/python3}
