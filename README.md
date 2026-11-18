@@ -382,6 +382,9 @@ Rscript Rpkg/scripts/map_rmats_bipartitions.R \
     --splitdir ${WD}/bipartition.filtered --class internal \
     --rmatsdir ${WD}/rMATS/rmats_post_group1_group2/ \
     --outdir ${WD}/map_rmats/results.bipartition
+# Several rMATS runs on the same annotation (e.g. the contrasts of a study):
+# --rmatsdir run1/,run2/,... --outdir map1/,map2/,... maps the distinct events
+# once and writes each run's own mapping (identical to mapping them one by one).
 
 # Step 2a: GrASE against rMATS
 Rscript Rpkg/scripts/compare_rmats_grase.R \

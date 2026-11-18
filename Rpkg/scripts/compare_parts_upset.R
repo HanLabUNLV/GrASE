@@ -7,7 +7,10 @@
 ##     --grase  <annotated results, comma separated, e.g. internal and terminal> \
 ##     --map_dirs <rMATS mapping directories, comma separated> \
 ##     --rmats_dir <dir with {SE,A3SS,A5SS,RI}.MATS.JCEC.txt> \
-##     --dexseq <DEXSeq results table> --outdir <dir> [--contrast NAME] [options]
+##     [--dexseq <DEXSeq results table>] --outdir <dir> [--contrast NAME] [options]
+##
+## --dexseq is optional: without it the comparison is GrASE vs rMATS only (two tools; "tested by
+## all" then means tested by both), with the same definitions, tables and plots.
 ##
 ## One adjusted-p cutoff (--pval) for all three tools, and an effect size for each. A part is
 ##   DEXSeq  called  padj < pval and |log2 fold change of exon usage| >= --min_l2fc
@@ -73,7 +76,7 @@ o <- parse_args(OptionParser(option_list = list(
   make_option("--count",    action = "store_true", default = FALSE, help = "count and write the tables only, drawing nothing"),
   make_option("--draw",     type = "character", default = NULL, help = "per-part tables written earlier, comma separated: draw them on one scale, each into its directory, reading no tool results"),
   make_option("--min_reads", type = "double", default = 10,   help = "GrASE reads on the distinct set in a group [%default]"))))
-if (is.null(o$draw)) for (r in c("grase", "map_dirs", "rmats_dir", "dexseq", "outdir"))
+if (is.null(o$draw)) for (r in c("grase", "map_dirs", "rmats_dir", "outdir"))
   if (is.null(o[[r]])) stop("--", r, " is required", call. = FALSE)
 split <- function(x) trimws(strsplit(x, ",")[[1]])
 if (is.null(o$draw)) dir.create(o$outdir, showWarnings = FALSE, recursive = TRUE)
@@ -81,21 +84,25 @@ if (is.null(o$draw)) dir.create(o$outdir, showWarnings = FALSE, recursive = TRUE
 font_used <- systemfonts::match_fonts(o$font)$path
 if (!grepl(o$font, basename(font_used), ignore.case = TRUE))
   warning(sprintf("font %s is not installed; plots use %s", o$font, basename(font_used)), call. = FALSE)
-if (is.null(o$draw)) cat(sprintf("pval %g | rMATS |dPSI| >= %g | DEXSeq |log2FC| >= %g | GrASE reads >= %g\n", o$pval, o$min_dpsi, o$min_l2fc, o$min_reads))
+has_dex <- !is.null(o$dexseq)            # (with --draw, set from the tables below)
+if (is.null(o$draw)) cat(sprintf("pval %g | rMATS |dPSI| >= %g | %sGrASE reads >= %g\n", o$pval, o$min_dpsi,
+                                 if (has_dex) sprintf("DEXSeq |log2FC| >= %g | ", o$min_l2fc) else "no DEXSeq | ", o$min_reads))
 
 cat_of <- function(D) apply(as.matrix(D), 1, function(r) { x <- names(D)[r]; if (length(x)) paste(x, collapse = "+") else "none" })
 ## the two comparisons: GrASE as one tool, and GrASE split by class, each against the same rMATS and
 ## DEXSeq; the classes are read off the per-part table's grase_<class>_called columns
 make_cmp <- function(P) {
   cls <- sub("^grase_(.*)_called$", "\\1", grep("^grase_.+_called$", names(P), value = TRUE))
-  cmp <- list(all = setNames(P[, .(grase_called, rmats_called, dex_called)], c("GrASE", "rMATS", "DEXSeq")))
+  dx <- if ("dex_called" %in% names(P)) "dex_called"; dn <- if (length(dx)) "DEXSeq"
+  cmp <- list(all = setNames(P[, c("grase_called", "rmats_called", dx), with = FALSE], c("GrASE", "rMATS", dn)))
   if (length(cls) > 1)
-    cmp$by_class <- setNames(P[, c(paste0("grase_", cls, "_called"), "rmats_called", "dex_called"), with = FALSE],
-                             c(paste0("GrASE_", cls), "rMATS", "DEXSeq"))
+    cmp$by_class <- setNames(P[, c(paste0("grase_", cls, "_called"), "rmats_called", dx), with = FALSE],
+                             c(paste0("GrASE_", cls), "rMATS", dn))
   cmp
 }
 
 if (is.null(o$draw)) {
+  if (has_dex) {
   ## DEXSeq: exonic parts with a DEXSeq row. A table without a pvalue column is read as satuRn
   ## (ids = gene:part, empirical_FDR, estimates), as in compare_dexseq_grase.R
   hd <- names(fread(o$dexseq, nrows = 0))
@@ -114,7 +121,8 @@ if (is.null(o$draw)) {
   d[, gene := gsub('"', "", gene)][, part := gsub('"', "", part)]
   cat(sprintf("DEXSeq groups merging genes: %d\n", uniqueN(grep("+", d$gene, fixed = TRUE, value = TRUE))))
   d[, `:=`(dex_tested = !is.na(padj), dex_called = !is.na(padj) & padj < o$pval & !is.na(l2fc) & abs(l2fc) >= o$min_l2fc)]
-  P <- d[, .(gene, part, dex_tested, dex_called)]
+  } else d <- data.table(gene = character(), part = character())
+  nodex <- function(x) if (has_dex) sprintf("; %d of %d parts have no DEXSeq row", nrow(fsetdiff(x[, .(gene, part)], d[, .(gene, part)])), nrow(x)) else ""
   min_na <- function(x) if (all(is.na(x))) NA_real_ else min(x, na.rm = TRUE)
   ids <- function(x) if (length(x)) paste(sort(unique(x)), collapse = ",") else NA_character_
 
@@ -123,7 +131,8 @@ if (is.null(o$draw)) {
   if (length(gfiles) != length(mdirs)) stop("--grase and --map_dirs must pair one to one")
   labels <- if (is.null(o$class)) c("internal", "terminal")[seq_along(gfiles)] else split(o$class)
   et <- split(o$etypes)
-  P <- copy(d[, .(gene, part, dex_tested, dex_called, dex_padj = padj, dex_l2fc = l2fc)])
+  P <- if (has_dex) copy(d[, .(gene, part, dex_tested, dex_called, dex_padj = padj, dex_l2fc = l2fc)]) else
+    data.table(gene = character(), part = character())
 
   ## GrASE, per class: parts of the distinct sets of both sides of a bipartition
   for (k in seq_along(gfiles)) {
@@ -139,9 +148,8 @@ if (is.null(o$draw)) {
     gp <- gp[!is.na(part) & part != "NA" & nzchar(part)]
     gp <- gp[, .(part = trimws(unlist(strsplit(part, ",")))), by = .(gene, event, padj, call)]
     gp <- gp[, .(called = any(call), events = ids(event), called_events = ids(event[call]), padj = min_na(padj)), by = .(gene, part)]
-    cat(sprintf("GrASE %s: %d bipartition-contrasts tested, %d called; %d of %d parts have no DEXSeq row\n", cl,
-                nrow(unique(g[, .(gene, event, contrast)])), nrow(unique(g[call == TRUE, .(gene, event, contrast)])),
-                nrow(fsetdiff(gp[, .(gene, part)], d[, .(gene, part)])), nrow(gp)))
+    cat(sprintf("GrASE %s: %d bipartition-contrasts tested, %d called%s\n", cl,
+                nrow(unique(g[, .(gene, event, contrast)])), nrow(unique(g[call == TRUE, .(gene, event, contrast)])), nodex(gp)))
     setnames(gp, c("called", "events", "called_events", "padj"), paste0("grase_", cl, c("_called", "_events", "_called_events", "_padj")))
     P <- merge(P, gp, by = c("gene", "part"), all = TRUE)
   }
@@ -159,7 +167,7 @@ if (is.null(o$draw)) {
   rt[, call := FDR < o$pval & abs(IncLevelDifference) >= o$min_dpsi]
   rp <- rt[, .(rmats_called = any(call), rmats_events = ids(tag), rmats_called_events = ids(tag[call]),
                rmats_fdr = min_na(FDR)), by = .(gene, part)]
-  cat(sprintf("rMATS: %d parts; %d have no DEXSeq row\n", nrow(rp), nrow(fsetdiff(rp[, .(gene, part)], d[, .(gene, part)]))))
+  cat(sprintf("rMATS: %d parts%s\n", nrow(rp), nodex(rp)))
   P <- merge(P, rp, by = c("gene", "part"), all = TRUE)
 
   ## rows are the union of the parts each tool tested: a part missing from a tool's table is untested by it.
@@ -167,24 +175,26 @@ if (is.null(o$draw)) {
   gcl <- paste0("grase_", labels, "_called"); gte <- paste0("grase_", labels, "_tested")
   P[, (gte) := lapply(.SD, function(x) !is.na(x)), .SDcols = gcl]
   P[, rmats_tested := !is.na(rmats_called)]
-  for (v in c("dex_tested", "dex_called", "rmats_called", gcl)) set(P, which(is.na(P[[v]])), v, FALSE)
+  for (v in c(if (has_dex) c("dex_tested", "dex_called"), "rmats_called", gcl)) set(P, which(is.na(P[[v]])), v, FALSE)
   P[, grase_tested := Reduce(`|`, .SD), .SDcols = gte][, grase_called := Reduce(`|`, .SD), .SDcols = gcl]
-  P[, tested_by_all := dex_tested & grase_tested & rmats_tested]
-  ## tools that tested the part, of the three
-  P[, n_tested := grase_tested + rmats_tested + dex_tested]
-  stopifnot(P[, all((!grase_called | grase_tested) & (!rmats_called | rmats_tested) & (!dex_called | dex_tested))])
+  P[, tested_by_all := grase_tested & rmats_tested]
+  ## tools that tested the part, of the two or three
+  P[, n_tested := grase_tested + rmats_tested]
+  if (has_dex) { P[, tested_by_all := tested_by_all & dex_tested]; P[, n_tested := n_tested + dex_tested] }
+  stopifnot(P[, all((!grase_called | grase_tested) & (!rmats_called | rmats_tested))])
+  if (has_dex) stopifnot(P[, all(!dex_called | dex_tested)])
 
   cmp <- make_cmp(P)
   P[, category := cat_of(cmp$all)]
   if (!is.null(cmp$by_class)) P[, category_by_class := cat_of(cmp$by_class)]
 
-  cat(sprintf("exonic parts (union) %d | tested: DEXSeq %d, GrASE %d (%s), rMATS %d, all three %d\n", nrow(P),
-              sum(P$dex_tested), sum(P$grase_tested), paste(sprintf("%s %d", labels, colSums(P[, ..gte])), collapse = ", "),
-              sum(P$rmats_tested), sum(P$tested_by_all)))
-  cat(sprintf("called: DEXSeq %d, GrASE %d (%s), rMATS %d\n", sum(P$dex_called), sum(P$grase_called),
-              paste(sprintf("%s %d", labels, colSums(P[, ..gcl])), collapse = ", "), sum(P$rmats_called)))
+  cat(sprintf("exonic parts (union) %d | tested: %sGrASE %d (%s), rMATS %d, all %d\n", nrow(P),
+              if (has_dex) sprintf("DEXSeq %d, ", sum(P$dex_tested)) else "", sum(P$grase_tested),
+              paste(sprintf("%s %d", labels, colSums(P[, ..gte])), collapse = ", "), sum(P$rmats_tested), sum(P$tested_by_all)))
+  cat(sprintf("called: %sGrASE %d (%s), rMATS %d\n", if (has_dex) sprintf("DEXSeq %d, ", sum(P$dex_called)) else "",
+              sum(P$grase_called), paste(sprintf("%s %d", labels, colSums(P[, ..gcl])), collapse = ", "), sum(P$rmats_called)))
   setcolorder(P, intersect(c("gene", "part", "category", "category_by_class", "tested_by_all", "n_tested"), names(P)))
-  fwrite(P, file.path(o$outdir, "exonic_parts_three_tools.tsv"), sep = "\t", na = "NA", quote = FALSE)
+  fwrite(P, file.path(o$outdir, if (has_dex) "exonic_parts_three_tools.tsv" else "exonic_parts_two_tools.tsv"), sep = "\t", na = "NA", quote = FALSE)
   dir.create(file.path(o$outdir, "categories"), showWarnings = FALSE)
   ## a category empty in this run must not keep a file from an earlier one
   unlink(Sys.glob(file.path(o$outdir, "categories", "*.tsv")))
@@ -198,17 +208,22 @@ if (is.null(o$draw)) {
 } else {
   tables <- split(o$draw)
   Ps <- lapply(tables, fread); outdirs <- dirname(tables)
+  has_dex <- all(vapply(Ps, function(P) "dex_called" %in% names(P), logical(1)))
 }
+n_tools <- if (has_dex) 3L else 2L
+all_word <- if (has_dex) "all three" else "both"
 
 th <- theme_minimal(base_size = 11, base_family = o$font) +
   theme(panel.grid.minor = element_blank(), panel.grid.major.x = element_blank())
 ylab <- "exonic parts"
 
-## UpSetR plot of the parts all three tools tested
+## UpSetR plot of the parts all the tools tested
 up_tba <- function(D, title, file) {
   B <- as.data.frame(lapply(D, as.integer)); B <- B[rowSums(B) > 0, ]
   cat(title, ": ", nrow(B), " parts called by at least one tool\n", sep = "")
   print(as.data.table(B)[, .N, by = names(B)][order(-N)])
+  B <- B[, colSums(B) > 0, drop = FALSE]   # UpSetR fails on an empty set (e.g. a class with no calls)
+  if (ncol(B) < 2) { cat("  fewer than two non-empty sets, no plot\n"); return(invisible()) }
   draw <- function() print(upset(B, sets = names(B), keep.order = TRUE, order.by = "freq", nintersects = NA,
                                  mainbar.y.label = ylab, sets.x.label = "parts called", text.scale = 1.3,
                                  mainbar.y.max = o$ymax_tested_by_all, set_size.scale_max = o$setmax_tested_by_all))
@@ -216,10 +231,10 @@ up_tba <- function(D, title, file) {
   png(sub("\\.pdf$", ".png", file), width = 2400, height = 1500, res = 300, type = "cairo", family = o$font); draw(); dev.off()
 }
 
-## every part called by any tool, each bar split by how many of the three tools tested the part
+## every part called by any tool, each bar split by how many of the tools tested the part
 up_split <- function(D, n_tested, title, file) {
   cg <- cat_of(D); keep <- cg != "none"
-  lev <- c("3", "2", "1")
+  lev <- as.character(n_tools:1)
   S <- data.table(category = cg[keep], others = as.character(n_tested[keep]))[, .N, by = .(category, others)]
   tot <- S[, .(N = sum(N)), by = category][order(-N)]
   fwrite(setnames(dcast(S, category ~ factor(others, levels = lev), value.var = "N", fill = 0L)[match(tot$category, category)],
@@ -240,7 +255,7 @@ up_split <- function(D, n_tested, title, file) {
     geom_col(width = 0.55, colour = "white", linewidth = 0.4, position = position_stack(reverse = TRUE)) +
     geom_text(data = tot[, .(category = factor(category, levels = tot$category), N)], aes(category, N, label = N),
               inherit.aes = FALSE, vjust = -0.4, size = 3, colour = "grey20", family = o$font) + xs +
-    scale_fill_manual(values = setNames(c("#104281", "#2a78d6", "#86b6ef"), lev), drop = FALSE,
+    scale_fill_manual(values = setNames(c("#104281", "#2a78d6", "#86b6ef")[seq_along(lev) + 3L - n_tools], lev), drop = FALSE,
                       name = "Tools that tested the part") +
     scale_y_continuous(expand = expansion(mult = c(0, 0.08)), limits = if (is.null(o$ymax)) NULL else c(0, o$ymax)) +
     guides(fill = guide_legend(reverse = TRUE, nrow = 1)) +
@@ -281,7 +296,7 @@ for (i in seq_along(Ps)) {
     stem <- if (nm == "all") "upset_exonic_parts" else "upset_exonic_parts.by_class"
     cat("\n=====", outdirs[i], nm, "=====\n")
     up_split(cmp[[nm]], P$n_tested, paste(nm, "called, any tool"), file.path(outdirs[i], paste0(stem, ".pdf")))
-    up_tba(cmp[[nm]][P$tested_by_all], paste(nm, "called, parts tested by all three"),
+    up_tba(cmp[[nm]][P$tested_by_all], paste(nm, "called, parts tested by", all_word),
            file.path(outdirs[i], paste0(stem, ".tested_by_all.pdf")))
   }
 }
