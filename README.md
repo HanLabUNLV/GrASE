@@ -233,9 +233,10 @@ Rscript Rpkg/scripts/exontest.R \
     --splittype=bipartition \
     --phi=phi.internal.txt \
     --model=betabinom_EBapprox \
-    --use_phi_loess \
     --cond1=group1 --cond2=group2
 ```
+
+The dispersion is shrunk toward a loess trend of log(phi) on log(baseMean) (`--use_phi_loess`, on by default); `--no_phi_loess` shrinks toward the global median instead, the default before 2026-11-18.
 
 `--phi` names a file inside `--outdir`. If it does not exist, phi is estimated and written there; if it does, it is reused, so use a fresh name (or outdir) whenever the counts or the bipartitions change (`event` is the row number in the per-gene bipartition file, so rebuilt bipartitions renumber events). `--gff_dir` is optional and adds length-normalized (per-base) pi columns to the annotated output.
 

@@ -421,9 +421,12 @@ They are not alternatives to choose between for an analysis.
 | `wilcoxon` | Needs no distributional assumption, but is the most conservative on null genes and gives no direct measure of how the path proportion changed. |
 | `dirmult_EBplugin` | Dirichlet-multinomial for `--splittype=multinomial`, which is itself benchmark-only. |
 
-Add `--use_phi_loess` with either EB model when read depth varies widely across
-events, so the shrinkage target follows the mean-dispersion trend rather than a
-single global value.
+With either EB model the dispersion is shrunk toward a loess trend of
+log(phi) on log(baseMean), so the shrinkage target follows the mean-dispersion
+trend rather than a single global value. This is on by default
+(`--use_phi_loess`); `--no_phi_loess` shrinks toward the global median instead,
+the default before 2026-11-18. Only phi is shrunk: the group coefficients, and
+so `effect_size`, are the unpenalized fit with that phi held fixed.
 
 ### Running the tests
 
@@ -471,7 +474,7 @@ For more than two groups, replace `--cond1`/`--cond2` with `--contrasts` in
 | `--min_dpi_sj` | 0.05 | The same for a junction-sourced side, where the distinct set is junction counts |
 | `--min_reads` | 10 | Mean reads on the distinct set, in at least one group, required to call a side |
 | `--delta` | 0 | `lfc_diff_net` must exceed this; the post-hoc filter on reference movement |
-| `--use_phi_loess` | FALSE | Loess trend log(phi) ~ log(baseMean) as the shrinkage target instead of the global mean |
+| `--use_phi_loess` | TRUE | Loess trend log(phi) ~ log(baseMean) as the shrinkage target instead of the global median; turn off with `--no_phi_loess` |
 | `--independent_filtering` | FALSE | Turn on DESeq2-style filtering on baseMean before correction. The filter runs on the event rows before the nested stages, choosing its cutoff by a plain BH, which is not the procedure applied afterwards |
 | `--readjust` | FALSE | With a reused results file, recompute `padj_gene` and `padj` from the stored p-values under the current `--padj_threshold`, `--padj_method` and filtering setting, without refitting |
 | `--pseudocount` | | Added to ref reads when ref == 0, for all-or-nothing switches |
