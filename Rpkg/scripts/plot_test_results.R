@@ -9,6 +9,17 @@
 ##
 ## Usage: Rscript scripts/plot_test_results.R --gene ENSG... --event 11 \
 ##          --kind terminal --analysis <dir> --conditions A,B,C --out fig.pdf
+##
+## TERMINUS MODE (--kind terminal --outward <outward_walk workdir>). A terminal call
+## says the side's distinct set D changes; it does not say which annotated start or
+## end carries the change. With --outward, a panel E is added beside D: the STRONGEST TERMINUS of
+## the tested side: the terminus exonic part against the side's shared
+## reference, exactly the unit outward_walk.sh tested, with its unit just outward as
+## a dashed line so a stop (or a leak) is visible. "Strongest" is the largest
+## |delta_pi| among the side's walk_stops termini (all termini if none stops),
+## within --feature_contrast if given; --terminus Exxx picks one explicitly. The
+## terminus is raw pi (the outward test is run without per-base lengths). Panels
+## A-D still describe the bipartition; panel A brackets the terminus.
 suppressPackageStartupMessages({ library(igraph); library(optparse) })
 
 CB <- c(S = "#4477AA", D1 = "#CCBB44", D2 = "#EE6677", other = "#DDDDDD")
@@ -19,6 +30,8 @@ opt_list <- list(
   make_option("--analysis", type = "character"),
   make_option("--kind", type = "character", default = "terminal"),
   make_option("--unit", type = "character", default = "exsj"),
+  make_option("--model", type = "character", default = "betabinom_EBmap",
+              help = "model in the results file name, as exontest.R --model [default %default]"),
   make_option("--conditions", type = "character"),
   make_option("--comparison", type = "character", default = NULL),
   make_option("--gffdir", type = "character", default = "~/DICE/dexseq.gff"),
@@ -37,6 +50,10 @@ opt_list <- list(
   make_option("--sig_brackets", action = "store_true", default = FALSE),
   make_option("--d_width", type = "double", default = 2.1),
   make_option("--d_height", type = "double", default = 2),
+  make_option("--outward", type = "character", default = "",
+              help = "outward_walk.sh --workdir; with --kind terminal, adds panel E: the strongest terminus, beside D"),
+  make_option("--terminus", type = "character", default = "",
+              help = "with --outward: the terminus to plot (e.g. E074) instead of the strongest"),
   make_option("--out", type = "character")
 )
 a <- parse_args(OptionParser(option_list = opt_list))
@@ -178,8 +195,8 @@ if (nzchar(a$sjcounts)) {
 ## result files are named by count unit and event class
 ## (test_bipartition.<unit>.<class>_...); the unprefixed name is the pre-rename layout
 read_gene_rows <- function(kind) {
-  fn <- sprintf("test_bipartition.%s_betabinom_EBmap.annotated.txt",
-                c(if (nzchar(a$unit)) paste(a$unit, kind, sep = "."), kind))
+  fn <- sprintf("test_bipartition.%s_%s.annotated.txt",
+                c(if (nzchar(a$unit)) paste(a$unit, kind, sep = "."), kind), a$model)
   for (p in c(file.path(andir, fn), file.path(andir, "exontest_results", fn))) {
     if (!file.exists(p)) next
     tb <- read_tsv(p)
@@ -262,6 +279,92 @@ if (perbase) {
 
 sig_contrasts <- rows$contrast[rows$contrast %in% names(best) & is_sig(rows$significant)]
 nsig <- length(sig_contrasts)
+
+## ---- terminus mode: panel E plots the strongest terminus beside D ---------
+TM <- NULL
+if (nzchar(a$outward) && a$kind != "terminal")
+  message("note: --outward applies to --kind terminal only; no panel E")
+if (nzchar(a$outward) && a$kind == "terminal") {
+  od <- path.expand(a$outward)
+  ## the outward tables run to many MB; read only this gene's rows
+  rd_gene <- function(p, col = 1) {
+    if (is.na(p) || !file.exists(p)) stop("--outward: missing ", p)
+    cmd <- sprintf("awk -F'\\t' 'NR == 1 || $%d ~ /^%s(\\.|$)/' %s", col, base_id, shQuote(p))
+    read.table(pipe(cmd), header = TRUE, sep = "\t", quote = "", stringsAsFactors = FALSE,
+               comment.char = "", colClasses = "character")
+  }
+  pad3 <- function(x) sprintf("%03d", as.integer(sub("^E", "", x)))
+  side_n <- if (which_D == "D1") "1" else "2"
+  st <- rd_gene(file.path(od, "outward_side_table.tsv"))
+  st <- st[st$event == as.character(a$event) & st$side == side_n, , drop = FALSE]
+  vd <- rd_gene(file.path(od, "outward_walk_verdict.tsv"))
+  vd <- vd[vd$event == as.character(a$event) & vd$side == side_n, , drop = FALSE]
+  if (!nrow(st) || !nrow(vd)) {
+    message("  --outward: no walked termini for event ", a$event, " side ", side_n,
+            " (side not called in any contrast?); no panel E")
+  } else {
+    st$anchor <- pad3(st$anchor); vd$anchor <- pad3(vd$anchor)
+    if (nzchar(a$terminus)) {
+      ta <- pad3(a$terminus)
+      if (!ta %in% st$anchor[st$anchor_kind == "terminus_self"])
+        stop("--terminus ", a$terminus, " is not a terminus of event ", a$event, " side ", side_n,
+             "; termini: ", paste0("E", unique(st$anchor[st$anchor_kind == "terminus_self"]), collapse = ","))
+    } else {
+      cand <- vd
+      if (!is.null(a$feature_contrast) && a$feature_contrast %in% cand$contrast)
+        cand <- cand[cand$contrast == a$feature_contrast, , drop = FALSE]
+      if (any(cand$walk == "walk_stops")) cand <- cand[cand$walk == "walk_stops", , drop = FALSE]
+      dp <- abs(num(cand$part_dpi)); dp[is.na(dp)] <- -1
+      ta <- cand$anchor[which.max(dp)]
+    }
+    ev_self <- st$synth_event[st$anchor == ta & st$anchor_kind == "terminus_self"][1]
+    ev_out  <- st$synth_event[st$anchor == ta & st$anchor_kind == "terminus"][1]
+    tf <- Sys.glob(file.path(od, "test", "test_outward.*.annotated.txt"))
+    tf <- tf[!grepl("mincomb|fisher", tf)][1]
+    tr <- rd_gene(tf, col = 2)      # exontest output: contrast is column 1, gene column 2
+    cr <- rd_gene(Sys.glob(file.path(od, "*.cnt.combined.txt"))[1])
+    ## group pi from the unit's own test rows; per-sample pi from the counts it was tested on
+    unit_pi <- function(ev) {
+      if (is.na(ev)) return(NULL)
+      r <- tr[tr$event == ev, , drop = FALSE]
+      c_ <- cr[cr$event == ev, , drop = FALSE]
+      dd <- num(c_$diff1); rr <- num(c_$ref)
+      smp <- data.frame(g = match(c_$groups, conds) - 1,
+                        pi = ifelse(dd + rr > 0, dd / (dd + rr), NA_real_), n = dd + rr)
+      smp <- smp[!is.na(smp$g) & !is.na(smp$pi), , drop = FALSE]
+      pv <- list()
+      for (i in seq_len(nrow(r))) {
+        cc <- r$contrast[i]; if (!grepl("_vs_", cc)) next
+        pit <- num(r$pi_trt[i]); pir <- num(r$pi_ctrl[i]); if (is.na(pit) || is.na(pir)) next
+        pv[[sub("_vs_.*$", "", cc)]] <- pit; pv[[sub("^.*?_vs_", "", cc)]] <- pir
+      }
+      ## a group in no tested contrast falls back to its mean per-sample pi
+      for (c_n in setdiff(conds, names(pv))) {
+        v <- smp$pi[smp$g == match(c_n, conds) - 1]
+        pv[[c_n]] <- if (length(v)) mean(v) else NA_real_
+      }
+      if (!nrow(smp) && !nrow(r)) return(NULL)
+      list(pi = pv, ps = if (nrow(smp)) smp else NULL, rows = r)
+    }
+    self <- unit_pi(ev_self)
+    if (is.null(self) || any(is.na(unlist(self$pi[conds])))) {
+      message("  --outward: terminus E", ta, " has no test rows or counts; no panel E")
+    } else {
+      vt <- vd[vd$anchor == ta, , drop = FALSE]
+      kind_lbl <- switch(st$kind[st$anchor == ta][1], "5prime" = "TSS", "3prime" = "3' end", "terminus")
+      TM <- list(anchor = ta, part = paste0("E", ta), kind = kind_lbl,
+                 pi = self$pi, ps = self$ps,
+                 rows = self$rows[self$rows$contrast %in% vt$contrast, , drop = FALSE],
+                 sig = vt$contrast[vt$part_called == "TRUE"],
+                 out = unit_pi(ev_out),
+                 out_unit = st$unit_id[st$anchor == ta & st$anchor_kind == "terminus"][1],
+                 verdict = vt)
+      message(sprintf("  terminus mode: panel E plots E%s (%s), %s; called in %d contrast(s)",
+                      ta, kind_lbl, if (nzchar(a$terminus)) "as requested" else "strongest by |delta_pi|",
+                      length(TM$sig)))
+    }
+  }
+}
 
 ## bipartition stack
 bkey <- function(s, d1, d2)
@@ -403,7 +506,11 @@ if (ext == "pdf") {
 
 ## --d_width below 3.1 (the full width beside the text block) narrows panel D and
 ## leaves the freed width blank at the right, so the text block keeps its size
-if (a$d_width < 3.1) {
+if (!is.null(TM)) {
+  ## terminus mode: D | E (terminus) | text block, D and E the same width
+  layout(matrix(c(1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 5, 6), nrow = 4, byrow = TRUE),
+         heights = c(ratio_A, ratio_B, ratio_E, ratio_CD), widths = c(a$d_width, a$d_width, 1.3))
+} else if (a$d_width < 3.1) {
   layout(matrix(c(1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 5, 6), nrow = 4, byrow = TRUE),
          heights = c(ratio_A, ratio_B, ratio_E, ratio_CD), widths = c(a$d_width, 1, 3.1 - a$d_width))
 } else {
@@ -430,6 +537,8 @@ if (nzchar(a$mark_parts)) for (tok in strsplit(a$mark_parts, ",")[[1]]) {
   pn <- trimws(kv[1]); lb <- trimws(paste(kv[-1], collapse = ":"))
   if (pn %in% names(idx)) mark[[lb]] <- c(mark[[lb]], pn)
 }
+if (!is.null(TM) && TM$part %in% names(idx))
+  mark[[sprintf("panel E: %s %s", TM$kind, TM$part)]] <- TM$part
 if (length(mark)) top <- max(top, EH + 0.66 + 0.30)
 par(mai = A_MAI)
 plot(NA, xlim = c(-0.6, NX), ylim = c(-0.34, top), axes = FALSE, xlab = "", ylab = "")
@@ -455,7 +564,11 @@ if (length(mark)) {
     lo <- min(idx[pp]); hi <- max(idx[pp]) + 0.86
     segments(lo, y0, hi, y0, col = "#333333", lwd = 1.0, lend = "butt")
     segments(c(lo, hi), y0 - 0.05, c(lo, hi), y0, col = "#333333", lwd = 1.0)
-    text((lo + hi) / 2, y0 + 0.03, lb, cex = 0.62, font = 2, col = "#222222", adj = c(0.5, 0))
+    ## a bracket near either end of the gene would push a centred label off the
+    ## panel, so anchor it to the bracket's inner end there
+    lx <- (lo + hi) / 2; ladj <- 0.5
+    if (lx < 0.12 * NX) { lx <- lo; ladj <- 0 } else if (lx > 0.88 * NX) { lx <- hi; ladj <- 1 }
+    text(lx, y0 + 0.03, lb, cex = 0.62, font = 2, col = "#222222", adj = c(ladj, 0))
   }
   mtext("brackets: named annotation regions", side = 1, line = 0.1, adj = 0.012,
         cex = 0.53, col = "#555555")
@@ -594,11 +707,98 @@ if (is.null(matched)) {
           side = 1, line = 2.6, cex = 0.52, col = "#555555")
 }
 
-## ---- D: path proportion across conditions --------------------------------
-par(mai = c(0.80, 0.78, TOP, 0.15))
-vals <- vapply(conds, function(c_) pivals[[c_]], numeric(1))
-## per-sample pi of the tested distinct set, from the same counts the test used
-ps <- NULL
+## ---- D (and E): path proportion across conditions -------------------------
+## One drawing routine for both panels, so the terminus panel is read exactly like
+## D: group pi as the coloured line, samples as grey dots, median reads under each
+## group, and brackets from that panel's OWN test (never the other panel's).
+draw_pi_panel <- function(vals, ps, rowsP, sigP, out_vals, ylab, title, depth_on, out_unit = NULL) {
+  par(mai = c(0.80, 0.78, TOP, 0.15))
+  yr <- c(vals, if (!is.null(ps)) ps$pi, out_vals[!is.na(out_vals)])
+  span <- max(yr) - min(yr); pad <- max(span, 0.05)
+  ## --sig_brackets: one bracket per called contrast, joining its two groups, stacked
+  ## so that brackets sharing an x range sit on different levels
+  brk <- NULL
+  if (isTRUE(a$sig_brackets) && length(sigP)) {
+    brk <- data.frame(contrast = sigP,
+                      x1 = match(sub("_vs_.*$", "", sigP), conds) - 1,
+                      x2 = match(sub("^.*?_vs_", "", sigP), conds) - 1)
+    brk <- brk[!is.na(brk$x1) & !is.na(brk$x2), , drop = FALSE]
+    brk$lo <- pmin(brk$x1, brk$x2); brk$hi <- pmax(brk$x1, brk$x2)
+    brk$padj <- num(rowsP$padj[match(brk$contrast, rowsP$contrast)])
+    brk <- brk[order(brk$hi - brk$lo, brk$lo), , drop = FALSE]
+    brk$level <- 0L
+    for (i in seq_len(nrow(brk))) {
+      lv <- 1L
+      while (any(brk$level[seq_len(i - 1)] == lv &
+                 brk$lo[seq_len(i - 1)] <= brk$hi[i] & brk$hi[seq_len(i - 1)] >= brk$lo[i])) lv <- lv + 1L
+      brk$level[i] <- lv
+    }
+    if (!nrow(brk)) brk <- NULL
+  }
+  ## each bracket level takes a fixed share of the panel height, so the labels
+  ## clear the bracket above whatever the data range
+  ylo <- min(yr) - pad * 0.30
+  brk_base <- max(yr) + pad * 0.22
+  brk_frac <- 0.09
+  brk_step <- if (is.null(brk)) 0 else
+    brk_frac * (brk_base + pad * 0.05 - ylo) / (1 - brk_frac * max(brk$level))
+  ytop <- if (is.null(brk)) max(yr) + pad * 0.30 else brk_base + max(brk$level) * brk_step + pad * 0.05
+  plot(seq_along(conds) - 1, vals, type = "n", axes = FALSE, xlab = "", ylab = "",
+       xlim = c(-0.4, length(conds) - 0.6), ylim = c(ylo, ytop))
+  ## each group's median reads goes under its label: per-sample pi is noisy where
+  ## depth is low, and the dots alone do not show which groups those are
+  use_depth <- !is.null(ps)
+  if (!is.null(ps)) {
+    set.seed(1)
+    points(ps$g + runif(nrow(ps), -0.04, 0.04), ps$pi, pch = 16, cex = 0.55,
+           col = adjustcolor("#555555", 0.55))
+  }
+  if (!is.null(out_vals) && any(!is.na(out_vals))) {
+    ## the unit just outward of the terminus: flat here is what makes the terminus a stop
+    lines(seq_along(conds) - 1, out_vals, lwd = 1.2, lty = 2, col = "#888888")
+    points(seq_along(conds) - 1, out_vals, pch = 24, bg = "#BBBBBB", col = "white", cex = 0.8)
+    li <- max(which(!is.na(out_vals)))
+    text(li - 1, out_vals[li], " outward", adj = c(0, 0.5), cex = 0.5, col = "#666666", xpd = NA)
+  }
+  lines(seq_along(conds) - 1, vals, lwd = 2, col = CB[["D2"]])
+  points(seq_along(conds) - 1, vals, pch = 21, bg = CB[["D2"]], col = "white", cex = 1.1, lwd = 1.2)
+  text(seq_along(conds) - 1, vals + pad * 0.11, sprintf("%.3f", vals), cex = 0.65)
+  if (!is.null(brk)) {
+    tick <- brk_step * 0.15
+    for (i in seq_len(nrow(brk))) {
+      yb <- brk_base + (brk$level[i] - 1) * brk_step
+      segments(c(brk$lo[i], brk$lo[i], brk$hi[i]), c(yb - tick, yb, yb - tick),
+               c(brk$lo[i], brk$hi[i], brk$hi[i]), c(yb, yb, yb), lwd = 0.9, xpd = NA)
+      pl <- if (is.na(brk$padj[i])) "" else if (brk$padj[i] == 0) "padj < 1e-300" else
+        sprintf("padj %s", formatC(brk$padj[i], format = "e", digits = 0))
+      text((brk$lo[i] + brk$hi[i]) / 2, yb, pl, pos = 3, offset = 0.1, cex = 0.55, xpd = NA)
+    }
+  }
+  axis(1, at = seq_along(conds) - 1, labels = sub("\\.CLASSIC", "", conds),
+       cex.axis = 0.72, tick = FALSE, line = -0.4)
+  if (use_depth) {
+    med_n <- vapply(seq_along(conds) - 1, function(i) {
+      v <- ps$n[ps$g == i]; if (length(v)) median(v) else NA_real_ }, numeric(1))
+    med_lab <- vapply(med_n, function(m) if (is.na(m)) "0" else
+      prettyNum(m, big.mark = ","), character(1))
+    mtext(med_lab, side = 1, at = seq_along(conds) - 1, line = 1.3, cex = 0.5, col = "#555555")
+    mtext("median reads", side = 1, at = -0.45, adj = 1, line = 1.3, cex = 0.5, col = "#555555")
+  }
+  axis(2, las = 1, cex.axis = 0.7)
+  mtext(ylab, side = 2, line = 2.6, cex = 0.68)
+  mtext(title, side = 3, line = 0.2, adj = 0, cex = 0.78)
+  if (!is.null(ps))
+    mtext(sprintf("grey dots: samples (%s)\ncoloured: group pi%s%s",
+                  paste(sprintf("%s n=%d", sub("\\.CLASSIC", "", conds),
+                                vapply(seq_along(conds) - 1, function(i) sum(ps$g == i), integer(1))), collapse = ", "),
+                  if (use_depth) sprintf("; reads = per-sample reads on %s + S", depth_on) else "",
+                  if (!is.null(out_unit)) sprintf("; dashed: outward unit %s", out_unit) else ""),
+          side = 1, line = if (use_depth) 3.3 else 2.5, cex = 0.55, col = "#555555",
+          at = -0.4, adj = 0, xpd = NA)
+}
+
+## D: the tested distinct set, per-sample pi from the same counts the test used
+ps_D <- NULL
 if (!is.null(cnt_tb)) {
   tb_s <- cnt_tb[cnt_tb$event == as.character(a$event), , drop = FALSE]
   dcol <- if (which_D == "D1") "diff1" else "diff2"
@@ -606,89 +806,28 @@ if (!is.null(cnt_tb)) {
     dd <- num(tb_s[[dcol]]); rr <- num(tb_s$ref)
     pi_s <- ifelse(!is.na(dd) & !is.na(rr) & dd + rr > 0, dd / (dd + rr), NA_real_)
     if (pb_used) pi_s <- pi_perbase(pi_s, len_D, len_S)
-    ps <- data.frame(g = match(tb_s$groups, conds) - 1, pi = pi_s, n = dd + rr)
-    ps <- ps[!is.na(ps$g) & !is.na(ps$pi), , drop = FALSE]
-    if (!nrow(ps)) ps <- NULL
+    ps_D <- data.frame(g = match(tb_s$groups, conds) - 1, pi = pi_s, n = dd + rr)
+    ps_D <- ps_D[!is.na(ps_D$g) & !is.na(ps_D$pi), , drop = FALSE]
+    if (!nrow(ps_D)) ps_D <- NULL
   }
 }
-yr <- c(vals, if (!is.null(ps)) ps$pi)
-span <- max(yr) - min(yr); pad <- max(span, 0.05)
-## --sig_brackets: one bracket per called contrast, joining its two groups, stacked
-## so that brackets sharing an x range sit on different levels
-brk <- NULL
-if (isTRUE(a$sig_brackets) && nsig) {
-  brk <- data.frame(contrast = sig_contrasts,
-                    x1 = match(sub("_vs_.*$", "", sig_contrasts), conds) - 1,
-                    x2 = match(sub("^.*?_vs_", "", sig_contrasts), conds) - 1)
-  brk <- brk[!is.na(brk$x1) & !is.na(brk$x2), , drop = FALSE]
-  brk$lo <- pmin(brk$x1, brk$x2); brk$hi <- pmax(brk$x1, brk$x2)
-  brk$padj <- num(rows$padj[match(brk$contrast, rows$contrast)])
-  brk <- brk[order(brk$hi - brk$lo, brk$lo), , drop = FALSE]
-  brk$level <- 0L
-  for (i in seq_len(nrow(brk))) {
-    lv <- 1L
-    while (any(brk$level[seq_len(i - 1)] == lv &
-               brk$lo[seq_len(i - 1)] <= brk$hi[i] & brk$hi[seq_len(i - 1)] >= brk$lo[i])) lv <- lv + 1L
-    brk$level[i] <- lv
-  }
-  if (!nrow(brk)) brk <- NULL
+draw_pi_panel(vals = vapply(conds, function(c_) pivals[[c_]], numeric(1)), ps = ps_D,
+              rowsP = rows, sigP = sig_contrasts, out_vals = NULL,
+              ylab = if (!is.null(a$ylab)) a$ylab else
+                sprintf("%s path proportion pi\nof distinct %s", if (perbase) "per-base" else "raw", which_D),
+              title = "D   Path proportion across conditions", depth_on = which_D)
+
+## E (terminus mode only): the strongest terminus, from the outward walk's own
+## test and counts -- group pi, sample dots and brackets all come from the terminus
+if (!is.null(TM)) {
+  out_vals <- if (!is.null(TM$out))
+    vapply(conds, function(c_) { v <- TM$out$pi[[c_]]; if (is.null(v)) NA_real_ else v }, numeric(1)) else NULL
+  draw_pi_panel(vals = vapply(conds, function(c_) TM$pi[[c_]], numeric(1)), ps = TM$ps,
+                rowsP = TM$rows, sigP = TM$sig, out_vals = out_vals,
+                ylab = sprintf("raw proportion of %s %s\nvs shared S of %s", TM$kind, TM$part, which_D),
+                title = sprintf("E   Strongest terminus of %s: %s %s (outward walk)", which_D, TM$kind, TM$part),
+                depth_on = TM$part, out_unit = if (!is.null(out_vals)) TM$out_unit else NULL)
 }
-## each bracket level takes a fixed share of the panel height, so the labels
-## clear the bracket above whatever the data range
-ylo <- min(yr) - pad * 0.30
-brk_base <- max(yr) + pad * 0.22
-brk_frac <- 0.09
-brk_step <- if (is.null(brk)) 0 else
-  brk_frac * (brk_base + pad * 0.05 - ylo) / (1 - brk_frac * max(brk$level))
-ytop <- if (is.null(brk)) max(yr) + pad * 0.30 else brk_base + max(brk$level) * brk_step + pad * 0.05
-plot(seq_along(conds) - 1, vals, type = "n", axes = FALSE, xlab = "", ylab = "",
-     xlim = c(-0.4, length(conds) - 0.6),
-     ylim = c(ylo, ytop))
-## each group's median reads on D + S goes under its label: per-sample pi is
-## noisy where depth is low, and the dots alone do not show which groups those are
-use_depth <- !is.null(ps)
-if (!is.null(ps)) {
-  set.seed(1)
-  points(ps$g + runif(nrow(ps), -0.04, 0.04), ps$pi, pch = 16, cex = 0.55,
-         col = adjustcolor("#555555", 0.55))
-}
-lines(seq_along(conds) - 1, vals, lwd = 2, col = CB[["D2"]])
-points(seq_along(conds) - 1, vals, pch = 21, bg = CB[["D2"]], col = "white", cex = 1.1, lwd = 1.2)
-text(seq_along(conds) - 1, vals + pad * 0.11, sprintf("%.3f", vals), cex = 0.65)
-if (!is.null(brk)) {
-  tick <- brk_step * 0.15
-  for (i in seq_len(nrow(brk))) {
-    yb <- brk_base + (brk$level[i] - 1) * brk_step
-    segments(c(brk$lo[i], brk$lo[i], brk$hi[i]), c(yb - tick, yb, yb - tick),
-             c(brk$lo[i], brk$hi[i], brk$hi[i]), c(yb, yb, yb), lwd = 0.9, xpd = NA)
-    pl <- if (is.na(brk$padj[i])) "" else if (brk$padj[i] == 0) "padj < 1e-300" else
-      sprintf("padj %s", formatC(brk$padj[i], format = "e", digits = 0))
-    text((brk$lo[i] + brk$hi[i]) / 2, yb, pl, pos = 3, offset = 0.1, cex = 0.55, xpd = NA)
-  }
-}
-axis(1, at = seq_along(conds) - 1, labels = sub("\\.CLASSIC", "", conds),
-     cex.axis = 0.72, tick = FALSE, line = -0.4)
-if (use_depth) {
-  med_n <- vapply(seq_along(conds) - 1, function(i) {
-    v <- ps$n[ps$g == i]; if (length(v)) median(v) else NA_real_ }, numeric(1))
-  med_lab <- vapply(med_n, function(m) if (is.na(m)) "0" else
-    prettyNum(m, big.mark = ","), character(1))
-  mtext(med_lab, side = 1, at = seq_along(conds) - 1, line = 1.3, cex = 0.5, col = "#555555")
-  mtext("median reads", side = 1, at = -0.45, adj = 1, line = 1.3, cex = 0.5, col = "#555555")
-}
-axis(2, las = 1, cex.axis = 0.7)
-yl <- if (!is.null(a$ylab)) a$ylab else
-  sprintf("%s path proportion pi\nof distinct %s",
-          if (perbase) "per-base" else "raw", which_D)
-mtext(yl, side = 2, line = 2.6, cex = 0.68)
-mtext("D   Path proportion across conditions", side = 3, line = 0.2, adj = 0, cex = 0.78)
-if (!is.null(ps))
-  mtext(sprintf("grey dots: samples (%s)\ncoloured: group pi%s",
-                paste(sprintf("%s n=%d", sub("\\.CLASSIC", "", conds),
-                              vapply(seq_along(conds) - 1, function(i) sum(ps$g == i), integer(1))), collapse = ", "),
-                if (use_depth) sprintf("; reads = per-sample reads on %s + S", which_D) else ""),
-        side = 1, line = if (use_depth) 3.3 else 2.5, cex = 0.55, col = "#555555",
-        at = -0.4, adj = 0, xpd = NA)
 
 ## ---- D text block --------------------------------------------------------
 par(mai = c(0.45, 0.10, TOP, 0.10))
@@ -697,6 +836,14 @@ text(0, 0.95, paste0(sym, if (nzchar(a$note)) paste0("\n(", a$note, ")") else ""
      adj = c(0, 1), cex = 0.72)
 desc <- if (!is.null(a$desc)) a$desc else
   sprintf("distinct %s %s\nagainst shared S %s", which_D, tested_D, S)
+if (!is.null(TM)) {
+  ## which terminus panel E shows, and what the walk said about it per contrast
+  wv <- TM$verdict[order(-abs(num(TM$verdict$part_dpi))), , drop = FALSE]
+  wl <- head(sprintf("%s: %s (dpi %+.2f)", gsub("_vs_", " vs ", wv$contrast), wv$walk,
+                     num(wv$part_dpi)), 3)
+  desc <- paste0(desc, sprintf("\npanel E: %s %s (strongest terminus)\n%s", TM$kind, TM$part,
+                               paste(wl, collapse = "\n")))
+}
 text(0, 0.64, desc, adj = c(0, 1), cex = 0.65)
 if (nsig) {
   shown <- NULL

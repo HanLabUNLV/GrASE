@@ -291,7 +291,12 @@ Rscript Rpkg/scripts/plot_test_results.R \
 ```
 
 It applies no thresholds of its own; it reads the `significant` column
-`exontest.R` wrote, so the figure and the tables cannot disagree. `--out` picks
+`exontest.R` wrote, so the figure and the tables cannot disagree.
+For a terminal event, `--outward <outward_walk workdir>` adds a panel E beside D:
+the side's strongest terminus (the largest |delta_pi| among its `walk_stops` termini),
+with the unit just outward of it dashed, so a start or
+end that the change stops at is visible; `--terminus E074` picks one. Pass
+`--model` when the results were written by a model other than `betabinom_EBmap`. `--out` picks
 the format from the extension, so `.pdf`, `.png` and `.eps` all work. Add
 `--sjcounts` when a side is junction-sourced, so its junctions are drawn as
 arcs, and `--max_stack N` to cap a dense locus.
