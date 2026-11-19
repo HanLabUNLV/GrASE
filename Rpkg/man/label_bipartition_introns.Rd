@@ -58,11 +58,19 @@ rule: measured over 2,272 sides, the two agree on 95.8\% overall and on
 distinct set). Every disagreement is a transcript in \code{transcripts1}
 whose route through the bubble is not among the listed \code{path1} routes.
 
-AGGREGATION. A side's distinct introns are grouped BY ROUTE and each route
-contributes one molecule-equivalent: sum_sj_counts() averages within a group
-before summing across groups. Junction ids are emitted route-grouped, "|"
-within a route and "," between routes. A group of one averages to itself, so
-ungrouped input behaves as a plain sum.
+AGGREGATION. A side's junction distinct set is the INTERSECTION over its
+routes: the distinct introns that EVERY route of the side crosses, as the
+exonic distinct set is the parts every transcript of the side uses. Each
+molecule of the side then crosses each junction of the set exactly once, so
+any one of them counts the side's molecules, and their mean
+(sum_sj_counts() averages a "|" group) does so with lower variance. A side
+whose routes have no distinct intron in common gets NA and is not
+substituted: no junction count measures all of its molecules.
+
+The previous form, one "|" group per route summed across routes, counted a
+junction once per route that crosses it. Routes of a side often share
+distinct introns (most multi-route terminal sides in DICE list the same
+introns on every route), so it multiplied those sides' counts.
 
 This replaced two earlier forms, both removed. Summing every distinct intron
 on the side multiply-counted molecules: 83.8\% of junction-substituted TSS/TTS
@@ -71,8 +79,10 @@ the summed introns, and the inflation is composition-weighted so it does not
 cancel in the between-condition contrast. Taking one intron per route fixed
 that but discarded the route's other k-1 measurements and always picked the
 most 5' junction, which carries lower coverage under 3' bias. The per-route
-mean has that expectation with roughly 1/k the variance and no position bias.
+sum that followed, the mean of each route's junctions summed across routes,
+avoided the position bias but is the form described above that multiplied
+shared junctions.
 
 Routes with no distinct intron at all are counted in uncovered1 / uncovered2;
-a side with uncovered > 0 is only partly represented by its junction measure.
+a side with uncovered > 0 has an empty intersection, so its distinct set is NA.
 }

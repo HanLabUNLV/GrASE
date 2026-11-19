@@ -147,3 +147,45 @@ test_that("distinct sets are NA without routes, never an ungrouped sum", {
   expect_true(is.na(res$distinct2))
   ## (shared is NA here only because this fixture has no intron on both sides)
 })
+
+## --- intersection over routes -----------------------------------------------
+## Bubble 1 -> 5. Side 1 has two routes, 1-2-4-5 and 1-3-4-5; side 2 is the skip
+## 1-5. Every edge is an intron. Side 1's routes share only the intron 4-5.
+make_ge2 <- function() {
+  list(
+    ex_or_in   = rep("in", 6),
+    vx_sg_from = c(1L, 2L, 1L, 3L, 4L, 1L),
+    vx_sg_to   = c(2L, 4L, 3L, 4L, 5L, 5L),
+    from_pos   = c(100L, 200L, 110L, 210L, 300L, 100L),
+    to_pos     = c(150L, 250L, 160L, 260L, 350L, 500L)
+  )
+}
+lab2 <- function(r1, r2 = "1-5") {
+  label_bipartition_introns(make_ge2(), "t1", "t2", "chr1", 1:5,
+    route_node_pairs(r1), route_node_pairs(r2),
+    routes1 = route_node_pairs_by_route(r1), routes2 = route_node_pairs_by_route(r2))
+}
+
+test_that("the junction distinct set is the introns every route crosses", {
+  res <- lab2("1-2-4-5,1-3-4-5")
+  expect_equal(res$distinct1, "chr1:300:350")      # 4-5 only, counted once
+})
+
+test_that("routes with identical distinct introns give one group, not one per route", {
+  res <- lab2("1-2-4-5,1-2-4-5")
+  expect_length(strsplit(res$distinct1, ",")[[1]], 1)
+  expect_length(strsplit(res$distinct1, "|", fixed = TRUE)[[1]], 3)
+})
+
+test_that("routes with no distinct intron in common give NA", {
+  res <- lab2("1-2-4,1-3-4")
+  expect_true(is.na(res$distinct1))
+})
+
+test_that("a shared junction is not counted once per route", {
+  ## two routes, molecules f_A = 10 and f_B = 30; the shared junction carries 40
+  m <- matrix(c(10, 40, 30), nrow = 3, ncol = 1,
+              dimnames = list(c("chr1:1:2", "chr1:3:4", "chr1:5:6"), "s1"))
+  res_ids <- "chr1:3:4"                             # the intersection of the two routes
+  expect_equal(unname(sum_sj_counts(res_ids, m)[1]), 40)
+})

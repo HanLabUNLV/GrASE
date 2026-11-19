@@ -90,11 +90,19 @@ route_node_pairs <- function(field) {
 #' distinct set). Every disagreement is a transcript in \code{transcripts1}
 #' whose route through the bubble is not among the listed \code{path1} routes.
 #'
-#' AGGREGATION. A side's distinct introns are grouped BY ROUTE and each route
-#' contributes one molecule-equivalent: sum_sj_counts() averages within a group
-#' before summing across groups. Junction ids are emitted route-grouped, "|"
-#' within a route and "," between routes. A group of one averages to itself, so
-#' ungrouped input behaves as a plain sum.
+#' AGGREGATION. A side's junction distinct set is the INTERSECTION over its
+#' routes: the distinct introns that EVERY route of the side crosses, as the
+#' exonic distinct set is the parts every transcript of the side uses. Each
+#' molecule of the side then crosses each junction of the set exactly once, so
+#' any one of them counts the side's molecules, and their mean
+#' (sum_sj_counts() averages a "|" group) does so with lower variance. A side
+#' whose routes have no distinct intron in common gets NA and is not
+#' substituted: no junction count measures all of its molecules.
+#'
+#' The previous form, one "|" group per route summed across routes, counted a
+#' junction once per route that crosses it. Routes of a side often share
+#' distinct introns (most multi-route terminal sides in DICE list the same
+#' introns on every route), so it multiplied those sides' counts.
 #'
 #' This replaced two earlier forms, both removed. Summing every distinct intron
 #' on the side multiply-counted molecules: 83.8% of junction-substituted TSS/TTS
@@ -103,10 +111,12 @@ route_node_pairs <- function(field) {
 #' cancel in the between-condition contrast. Taking one intron per route fixed
 #' that but discarded the route's other k-1 measurements and always picked the
 #' most 5' junction, which carries lower coverage under 3' bias. The per-route
-#' mean has that expectation with roughly 1/k the variance and no position bias.
+#' sum that followed, the mean of each route's junctions summed across routes,
+#' avoided the position bias but is the form described above that multiplied
+#' shared junctions.
 #'
 #' Routes with no distinct intron at all are counted in uncovered1 / uncovered2;
-#' a side with uncovered > 0 is only partly represented by its junction measure.
+#' a side with uncovered > 0 has an empty intersection, so its distinct set is NA.
 #'
 #' @param ge  Precomputed gene graph list from \code{precompute_gene_graph}.
 #' @param tx1_set Character vector of transcript IDs in path1.
@@ -168,20 +178,12 @@ label_bipartition_introns <- function(ge, tx1_set, tx2_set, chr, bubble_verts = 
     paste(sort(unique(jids)), collapse=",")
   }
 
-  ## CUT RULE -- one intron per route.
-  ## A side's molecules all enter at the bubble source and leave at the sink,
-  ## so summing over every distinct intron counts a molecule once per intron it
-  ## crosses. Taking the FIRST distinct intron along each route instead gives a
-  ## cut: every route contributes exactly one junction, so the sum is
-  ## molecule-proportional and comparable to the exonic (intersection) set.
-  ## `uncovered` counts routes with no distinct intron at all -- those
-  ## molecules are invisible to the junction measure and the side should not be
-  ## substituted on its strength.
-  ## Every distinct intron on a route, kept grouped. sum_sj_counts() averages
-  ## within the group and sums across groups, so each route contributes one
-  ## molecule-equivalent. Using all k of a route's junctions rather than one
-  ## gives roughly 1/k the variance and avoids the 5' position bias that taking
-  ## only the first would introduce.
+  ## The distinct introns on each route of a side, one group per route.
+  ## common() below intersects the groups, so the side's junction set is the
+  ## introns every route crosses, as its exonic distinct set is the parts every
+  ## transcript uses. `uncovered` counts routes with no distinct intron at all;
+  ## those molecules are invisible to the junction measure, so such a side's
+  ## intersection is empty and it is not substituted.
   routes_distinct_introns <- function(routes, keep) {
     if (is.null(routes) || !length(routes))
       return(list(sel = integer(0), groups = list(), unc = NA_integer_))
@@ -203,9 +205,9 @@ label_bipartition_introns <- function(ge, tx1_set, tx2_set, chr, bubble_verts = 
     list(sel = unique(sel), groups = groups, unc = unc)
   }
 
-  ## Route-grouped junction ids: "|" separates junctions WITHIN a route, ","
-  ## separates routes. sum_sj_counts() averages within a group and sums across
-  ## groups, so a group of one reduces exactly to the old behaviour.
+  ## Junction ids, "|" within a group and "," between groups. sum_sj_counts()
+  ## averages within a group and sums across groups; the distinct sets below
+  ## are always ONE group (the intersection), so the count is its mean.
   make_junction_groups <- function(groups) {
     if (!length(groups)) return(NA_character_)
     out <- character(0)
@@ -235,11 +237,18 @@ label_bipartition_introns <- function(ge, tx1_set, tx2_set, chr, bubble_verts = 
                 uncovered1 = NA_integer_, uncovered2 = NA_integer_))
   }
 
+  ## the junctions every route crosses; empty when a route has none (uncovered)
+  ## or when the routes have no distinct intron in common
+  common <- function(cc) {
+    if (!length(cc$groups) || is.na(cc$unc) || cc$unc > 0L) return(list())
+    g <- Reduce(intersect, cc$groups)
+    if (length(g)) list(g) else list()
+  }
   c1 <- routes_distinct_introns(routes1, d1)
   c2 <- routes_distinct_introns(routes2, d2)
   list(
-    distinct1  = make_junction_groups(c1$groups),
-    distinct2  = make_junction_groups(c2$groups),
+    distinct1  = make_junction_groups(common(c1)),
+    distinct2  = make_junction_groups(common(c2)),
     shared     = make_junctions(in_idx[in_tx1 & in_tx2]),
     uncovered1 = c1$unc,
     uncovered2 = c2$unc
