@@ -103,26 +103,42 @@ gene_gff_path <- function(gff_dir, gene) {
 #' Annotate a results table with per-base pi
 #'
 #' Adds \code{len_D}, \code{len_S}, \code{pi_ctrl_perbase},
-#' \code{pi_trt_perbase} and \code{delta_pi_perbase}. Rows whose distinct set
-#' is a JUNCTION rather than exonic parts are left NA: a junction is a point
-#' feature with no length, so a per-base reading is undefined for it.
+#' \code{pi_trt_perbase} and \code{delta_pi_perbase}.
 #'
 #' \code{len_D} and \code{len_S} are effective lengths: each exonic part counts
 #' \code{L + read_length - 1}, the number of read start positions that overlap
 #' it, summed over the parts of the set.
+#'
+#' A side whose distinct set is a JUNCTION (split-read count; empty exonic
+#' set) has no width, but it has an effective length on the same footing: a
+#' read is counted on a junction only if it spans it with at least
+#' \code{sj_overhang} bases on each side, which \code{read_length - 2 *
+#' sj_overhang + 1} start positions do. A junction distinct set is the junctions
+#' every route of the side crosses, and its count is their mean, so it is one
+#' junction's worth of coverage and takes one junction's effective length.
+#' Without \code{sj_overhang} such rows are left NA.
 #'
 #' @param res Results data frame with pi_ctrl, pi_trt, ref_ex_part, setdiff1,
 #'   setdiff2, comparison, gene.
 #' @param gff_dir Directory of per-gene \code{<gene>.dexseq.gff} files.
 #' @param read_length Read length of the counted reads (the mate length for
 #'   paired-end data). NULL uses plain part lengths, with a warning.
+#' @param sj_overhang Minimum overhang on each side of a junction that the
+#'   aligner required to count a read on an annotated junction (STAR
+#'   \code{--alignSJDBoverhangMin}). NULL leaves junction-sourced sides NA.
+#'   Needs \code{read_length}.
 #' @return \code{res} with the new columns appended.
 #' @export
-annotate_pi_perbase <- function(res, gff_dir, read_length = NULL) {
+annotate_pi_perbase <- function(res, gff_dir, read_length = NULL, sj_overhang = NULL) {
   if (is.null(read_length))
     warning("read_length not given: per-base pi uses plain part lengths, not effective lengths",
             call. = FALSE)
   else stopifnot(is.numeric(read_length), length(read_length) == 1L, read_length >= 1)
+  if (!is.null(sj_overhang)) {
+    if (is.null(read_length)) stop("sj_overhang needs read_length", call. = FALSE)
+    stopifnot(is.numeric(sj_overhang), length(sj_overhang) == 1L, sj_overhang >= 1,
+              read_length - 2 * sj_overhang + 1 >= 1)
+  }
   extra <- if (is.null(read_length)) 0 else read_length - 1
   side <- ifelse(grepl("^diff1", res$comparison), 1L, 2L)
   sd   <- ifelse(side == 1L, res$setdiff1, res$setdiff2)
@@ -147,6 +163,11 @@ annotate_pi_perbase <- function(res, gff_dir, read_length = NULL) {
     res$len_D[i] <- vapply(sd[i], feature_length, numeric(1), lens = lens)
     res$len_S[i] <- vapply(res$ref_ex_part[i], feature_length, numeric(1),
                            lens = lens)
+  }
+  ## junction-sourced sides: empty exonic distinct set, as is_significant() reads it
+  if (!is.null(sj_overhang)) {
+    sj <- is.na(sd) | sd %in% c("NA", "")
+    res$len_D[sj] <- read_length - 2 * sj_overhang + 1
   }
   if (length(unresolved))
     warning(sprintf(paste0("no DEXSeq GFF found for %d of %d genes under '%s' ",

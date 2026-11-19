@@ -4,7 +4,7 @@
 \alias{annotate_pi_perbase}
 \title{Annotate a results table with per-base pi}
 \usage{
-annotate_pi_perbase(res, gff_dir, read_length = NULL)
+annotate_pi_perbase(res, gff_dir, read_length = NULL, sj_overhang = NULL)
 }
 \arguments{
 \item{res}{Results data frame with pi_ctrl, pi_trt, ref_ex_part, setdiff1,
@@ -14,18 +14,30 @@ setdiff2, comparison, gene.}
 
 \item{read_length}{Read length of the counted reads (the mate length for
 paired-end data). NULL uses plain part lengths, with a warning.}
+
+\item{sj_overhang}{Minimum overhang on each side of a junction that the
+aligner required to count a read on an annotated junction (STAR
+\code{--alignSJDBoverhangMin}). NULL leaves junction-sourced sides NA.
+Needs \code{read_length}.}
 }
 \value{
 \code{res} with the new columns appended.
 }
 \description{
 Adds \code{len_D}, \code{len_S}, \code{pi_ctrl_perbase},
-\code{pi_trt_perbase} and \code{delta_pi_perbase}. Rows whose distinct set
-is a JUNCTION rather than exonic parts are left NA: a junction is a point
-feature with no length, so a per-base reading is undefined for it.
+\code{pi_trt_perbase} and \code{delta_pi_perbase}.
 }
 \details{
 \code{len_D} and \code{len_S} are effective lengths: each exonic part counts
 \code{L + read_length - 1}, the number of read start positions that overlap
 it, summed over the parts of the set.
+
+A side whose distinct set is a JUNCTION (split-read count; empty exonic
+set) has no width, but it has an effective length on the same footing: a
+read is counted on a junction only if it spans it with at least
+\code{sj_overhang} bases on each side, which \code{read_length - 2 *
+sj_overhang + 1} start positions do. A junction distinct set is the junctions
+every route of the side crosses, and its count is their mean, so it is one
+junction's worth of coverage and takes one junction's effective length.
+Without \code{sj_overhang} such rows are left NA.
 }

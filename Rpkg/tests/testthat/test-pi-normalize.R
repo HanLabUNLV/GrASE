@@ -81,3 +81,20 @@ test_that("annotate_pi_perbase uses effective lengths L + read_length - 1", {
   expect_warning(r0 <- annotate_pi_perbase(res, d), "plain part lengths")
   expect_equal(r0$len_D, 10)
 })
+
+test_that("sj_overhang gives a junction-sourced side the effective length read_length - 2a + 1", {
+  d <- tempfile(); dir.create(d)
+  writeLines(c(
+    'chr1\tdexseq\texonic_part\t1\t10\t.\t+\t.\ttranscripts "t1"; exonic_part_number "001"; gene_id "G1"',
+    'chr1\tdexseq\texonic_part\t101\t400\t.\t+\t.\ttranscripts "t1"; exonic_part_number "002"; gene_id "G1"'),
+    file.path(d, "G1.dexseq.gff"))
+  res <- data.frame(gene = "G1", comparison = c("diff1_vs_ref", "diff2_vs_ref"),
+                    setdiff1 = "E001", setdiff2 = NA_character_,
+                    ref_ex_part = "E002", pi_ctrl = 0.2, pi_trt = 0.4, stringsAsFactors = FALSE)
+  r0 <- annotate_pi_perbase(res, d, read_length = 50)
+  expect_true(is.na(r0$delta_pi_perbase[2]))          # undefined without the overhang
+  r <- annotate_pi_perbase(res, d, read_length = 50, sj_overhang = 1)
+  expect_equal(r$len_D, c(10 + 49, 50 - 2 + 1))        # exonic side unchanged
+  expect_equal(r$pi_ctrl_perbase[2], pi_perbase(0.2, 49, 349))
+  expect_error(annotate_pi_perbase(res, d, sj_overhang = 1), "needs read_length")
+})
