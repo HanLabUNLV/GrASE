@@ -4,12 +4,7 @@
 \alias{adjust_pvalues}
 \title{Apply p-value adjustment with optional independent filtering}
 \usage{
-adjust_pvalues(
-  res,
-  independentFiltering = FALSE,
-  alpha = 0.05,
-  method = "nested_BH"
-)
+adjust_pvalues(res, independentFiltering = FALSE, alpha = 0.05, method = "BH")
 }
 \arguments{
 \item{res}{Data frame with columns \code{gene}, \code{pvalue}, and (when
@@ -20,8 +15,8 @@ adjustment.}
 
 \item{alpha}{Numeric. FDR level (default 0.05).}
 
-\item{method}{Character. Adjustment method: \code{"nested_BH"} (default) or
-any method accepted by \code{p.adjust} (e.g. \code{"BH"}).}
+\item{method}{Character. Adjustment method: \code{"BH"} (default) or any other
+method accepted by \code{p.adjust}, or \code{"nested_BH"}.}
 }
 \value{
 \code{res} with \code{padj} added (and \code{padj_gene} for

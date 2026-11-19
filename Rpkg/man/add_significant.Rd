@@ -8,8 +8,8 @@ add_significant(
   res,
   padj_thr,
   delta,
-  min_dpi = 0.05,
-  min_dpi_sj = 0.05,
+  min_dpi = 0,
+  min_dpi_sj = 0,
   min_reads = 10,
   omnibus_pairs = NULL,
   use_perbase = "both",
@@ -28,7 +28,8 @@ deliberate: \code{lfc_diff_net = abs(lfc_diff) - abs(lfc_ref)}, so the
 magnitudes are already inside the quantity and it is positive when the
 distinct set moved more than the shared reference. Do not wrap in abs().}
 
-\item{min_dpi}{minimum \code{abs(delta_pi)} for exon-sourced sides.}
+\item{min_dpi}{minimum \code{abs(delta_pi)} for exon-sourced sides; 0, the
+default, drops the condition.}
 
 \item{min_dpi_sj}{minimum \code{abs(delta_pi)} for sides whose distinct set
 came from split reads. DEFAULTS TO \code{min_dpi} (a uniform gate). Set it
@@ -67,10 +68,9 @@ required, not optional: a junction-substituted side has a point feature as
 its distinct set, so it has no length and no per-base pi.}
 
 \item{min_effect}{minimum \code{abs(effect_size)}, the log odds ratio of the
-fitted model; 0 or a missing column drops the condition. Required together
-with the \code{delta_pi} gate: the log odds ratio does not depend on the
-lengths of the distinct set and the reference, while \code{delta_pi} keeps
-the absolute size of the shift, so a side must clear both.}
+fitted model; 0 or a missing column drops the condition. The default gate:
+the log odds ratio does not depend on the lengths of the distinct set and
+the reference, so one threshold means the same thing on every side.}
 }
 \value{
 \code{res} with a logical \code{significant} column.

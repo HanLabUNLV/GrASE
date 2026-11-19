@@ -287,21 +287,21 @@ test_that("use_perbase can also promote a side the raw value failed", {
   expect_true(is_significant(r, 0.01, 0, min_dpi = 0.1, use_perbase = TRUE))
 })
 
-test_that("the default needs raw and per-base delta_pi >= 0.05 and |effect_size| >= 0.5", {
+test_that("the default gates on |effect_size| >= 0.5 only, not on delta_pi", {
   r <- mk_res(dpi = 0.06, pb = 0.07); r$effect_size <- 0.6
   expect_true(is_significant(r, 0.01, 0))
   r$effect_size <- 0.4                       # log odds ratio too small
   expect_false(is_significant(r, 0.01, 0))
-  r <- mk_res(dpi = 0.03, pb = 0.06); r$effect_size <- 2
-  expect_false(is_significant(r, 0.01, 0))   # raw too small
-  r <- mk_res(dpi = 0.08, pb = 0.04); r$effect_size <- 2
-  expect_false(is_significant(r, 0.01, 0))   # per-base too small
-  r <- mk_res(dpi = 0.06, pb = NA_real_, sd = NA_character_); r$effect_size <- 2
-  expect_true(is_significant(r, 0.01, 0))    # junction side: raw against min_dpi_sj
-  r$effect_size <- NA_real_                  # a missing effect_size passes, as delta_pi does
+  r <- mk_res(dpi = 0.01, pb = 0.005); r$effect_size <- 2
+  expect_true(is_significant(r, 0.01, 0))    # small delta_pi does not fail a side
+  r <- mk_res(dpi = NA_real_, pb = NA_real_, sd = NA_character_); r$effect_size <- 2
+  expect_true(is_significant(r, 0.01, 0))
+  r$effect_size <- NA_real_                  # a missing effect_size passes
   expect_true(is_significant(r, 0.01, 0))
   r$effect_size <- 0.1
   expect_true(is_significant(r, 0.01, 0, min_effect = 0))   # 0 drops the condition
+  r <- mk_res(dpi = 0.03, pb = 0.06); r$effect_size <- 2
+  expect_false(is_significant(r, 0.01, 0, min_dpi = 0.05))  # the dpi gate is still available
 })
 
 test_that("a junction side with no per-base value falls back to raw, not NA", {
@@ -333,8 +333,9 @@ test_that("add_significant threads use_perbase through", {
 })
 
 ## --- a group with no reads on one side ---------------------------------------
-## Its log odds are infinite, which used to fail the whole fit and drop every
-## contrast. It is now left out: the other contrasts match a fit without it.
+## Its log odds are infinite, so it is left out of the fit: the contrasts that do
+## not need it match a fit without it. A contrast that needs it is tested by
+## boundary_lrt() at the same fixed dispersion instead of being dropped.
 
 mk_dd <- function(groups, y, n) {
   data.frame(gene = "G", event = 1L, groups = factor(groups), y = y, n = n,
@@ -346,24 +347,45 @@ mk_L <- function(trt, ref, lev) {
   C
 }
 
-test_that("an empty group drops only the contrasts that need it", {
+test_that("an empty group is left out of the Wald fit and its contrast gets the boundary test", {
   set.seed(1)
   g <- rep(c("A", "B", "C"), each = 6)
   n <- rep(100L, 18)
   y <- c(rbinom(6, 100, 0.3), rbinom(6, 100, 0.6), rep(0L, 6))
   L <- list(A_vs_B = mk_L("A", "B", c("A", "B", "C")), A_vs_C = mk_L("A", "C", c("A", "B", "C")))
   r <- test_model_glmmTMB_EB(mk_dd(g, y, n), L)
-  expect_equal(r$contrast, "A_vs_B")
+  expect_equal(r$contrast, c("A_vs_B", "A_vs_C"))
+  expect_equal(r$test, c("wald", "boundary_lrt"))
   k <- g != "C"
   r2 <- test_model_glmmTMB_EB(mk_dd(g[k], y[k], n[k]), L["A_vs_B"])
-  expect_equal(r$p.value, r2$p.value, tolerance = 1e-6)
-  expect_equal(r$effect_size, r2$effect_size, tolerance = 1e-6)
+  expect_equal(r$p.value[1], r2$p.value, tolerance = 1e-6)
+  expect_equal(r$effect_size[1], r2$effect_size, tolerance = 1e-6)
+  b <- boundary_lrt(y[g == "A"], n[g == "A"] - y[g == "A"], y[g == "C"], n[g == "C"] - y[g == "C"], 20)
+  expect_equal(r$p.value[2], b$p)
+  expect_equal(r$effect_size[2], Inf)
+  expect_lt(r$p.value[2], 1e-10)
 })
 
-test_that("a group with every read on the distinct set is left out too", {
+test_that("a group with every read on the distinct set gets the boundary test too", {
   g <- rep(c("A", "B", "C"), each = 4)
   y <- c(30L, 35L, 28L, 33L, 60L, 55L, 62L, 58L, 100L, 100L, 100L, 100L)
   L <- list(A_vs_B = mk_L("A", "B", c("A", "B", "C")), C_vs_B = mk_L("C", "B", c("A", "B", "C")))
   r <- test_model_glmmTMB_EB(mk_dd(g, y, rep(100L, 12)), L)
-  expect_equal(r$contrast, "A_vs_B")
+  expect_equal(r$test, c("wald", "boundary_lrt"))
+  expect_equal(r$effect_size[2], Inf)
+})
+
+test_that("a side with no reads to test still gets one row per contrast, untested", {
+  g <- rep(c("A", "B"), each = 4)
+  L <- list(A_vs_B = mk_L("A", "B", c("A", "B")))
+  r <- test_model_glmmTMB_EB(mk_dd(g, rep(0L, 8), rep(50L, 8)), L)   # no distinct reads anywhere
+  expect_equal(r$test, "untestable"); expect_true(is.na(r$p.value))
+  r <- test_model_glmmTMB_EB(mk_dd(g, c(5L, 6L, 4L, 5L, 0L, 0L, 0L, 0L), c(50L, 50L, 50L, 50L, 0L, 0L, 0L, 0L)), L)
+  expect_equal(r$test, "untestable")                                 # B has no sample with reads
+})
+
+test_that("boundary_lrt is zero with no difference and sign follows the empty group", {
+  b <- boundary_lrt(c(10, 12), c(90, 88), c(10, 12), c(90, 88), 20)
+  expect_equal(b$stat, 0, tolerance = 1e-6); expect_equal(b$effect_size, 0, tolerance = 1e-4)
+  expect_equal(boundary_lrt(c(0, 0), c(90, 88), c(10, 12), c(90, 88), 20)$effect_size, -Inf)
 })

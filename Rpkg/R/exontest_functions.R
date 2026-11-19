@@ -736,62 +736,110 @@ test_model_glmmTMB_EB <- function(dd, L, model_label = "betabinom_EBapprox") {
     gene  <- unique(dd$gene)
     event <- unique(dd$event)
     dd <- dd[dd$n > 0, ]
-    if (nrow(dd) < 2 || length(unique(dd$groups)) < 2) return(NULL)
-    if (mean(dd$y) == 0) return(NULL)
+    target_log_phi <- if (nrow(dd)) dd$z_mod[1] else NA_real_
 
-    target_log_phi <- dd$z_mod[1]
-    if (is.na(target_log_phi)) return(NULL)
+    ## Every contrast of the side gets a row, so the universe is every side of
+    ## the count table. `test` says how it was tested:
+    ##   wald          both contrasted groups have reads on the distinct set and
+    ##                 on the reference: Wald test on the fitted contrast
+    ##   boundary_lrt  a contrasted group has no reads on the distinct set (or
+    ##                 none on the reference): likelihood ratio test at the fixed
+    ##                 dispersion (boundary_lrt()), effect_size +/-Inf
+    ##   untestable    a contrasted group has no sample with reads, or the two
+    ##                 together have none on the distinct set or none on the
+    ##                 reference: p.value NA
+    ##   not_fitted    the Wald fit failed: p.value NA
+    ## A group with no reads on one side has a log odds of -Inf (+Inf), which makes
+    ## the covariance matrix non-finite and fails the whole fit, so it is left out
+    ## of the fit. With the dispersion fixed the likelihood separates by group, so
+    ## the other groups' coefficients are what a fit of them alone would give.
+    grp <- as.character(dd$groups)
+    ys <- tapply(dd$y, grp, sum); rs <- tapply(dd$n - dd$y, grp, sum)
+    keep <- names(ys)[ys > 0 & rs > 0]
 
-    ## A group with no reads on the distinct set (or none on the reference) has
-    ## a log odds of -Inf (+Inf), which makes the covariance matrix non-finite and
-    ## fails the whole fit -- losing every contrast of the event, including those
-    ## that do not involve that group. Leave such groups out. With the dispersion
-    ## fixed, the likelihood separates by group, so every other group's
-    ## coefficient and every contrast between them are exactly what a fit of
-    ## those groups alone would give; a contrast that needs a dropped group is
-    ## skipped below, as for a group with no samples.
-    ys <- tapply(dd$y, dd$groups, sum); ns <- tapply(dd$n - dd$y, dd$groups, sum)
-    keep <- names(ys)[!is.na(ys) & ys > 0 & ns > 0]
-    dd <- dd[dd$groups %in% keep, ]
-    if (length(keep) < 2) return(NULL)
+    fit <- NULL
+    if (length(keep) >= 2 && !is.na(target_log_phi)) {
+      df_fit <- dd[grp %in% keep, ]
+      df_fit$groups <- droplevels(factor(df_fit$groups))
+      m1 <- tryCatch(
+        glmmTMB(cbind(y, n - y) ~ 0 + groups,
+          data = df_fit,
+          family = glmmTMB::betabinomial(link = "logit"),
+          start = list(betadisp = target_log_phi),
+          map = list(betadisp = factor(NA))),
+        error = function(e) NULL
+      )
+      if (!is.null(m1) && !is.na(logLik(m1)))
+        fit <- list(beta = fixef(m1)$cond, V = vcov(m1)$cond, phi = sigma(m1))
+    }
 
-    dd$groups <- droplevels(dd$groups)
-    m1 <- tryCatch(
-      glmmTMB(cbind(y, n - y) ~ 0 + groups,
-        data = dd,
-        family = glmmTMB::betabinomial(link = "logit"),
-        start = list(betadisp = target_log_phi),
-        map = list(betadisp = factor(NA))),
-      error = function(e) NULL
-    )
-    if (is.null(m1) || is.na(logLik(m1))) return(NULL)
-
-    beta     <- fixef(m1)$cond
-    V        <- vcov(m1)$cond
-    coef_nms <- names(beta)
-    phi_val  <- sigma(m1)
+    out <- function(ctr_name, test, stat = NA_real_, p = NA_real_, df = NA_real_,
+                    phi = NA_real_, est = NA_real_)
+      data.frame(gene = gene, event = event, contrast = ctr_name,
+                 LRT = stat, p.value = p, df = df,
+                 model = model_label, phi = phi, effect_size = est, test = test,
+                 stringsAsFactors = FALSE)
 
     ## L is a named list of contrast MATRICES: 1 row for a pairwise trt-vs-ref
     ## contrast, K-1 rows for a K-group omnibus. A 1-row matrix reproduces the
-    ## former (est/se)^2 with df = 1 exactly, so pairwise output is unchanged.
-    ## effect_size is the contrast estimate for a pair and NA for an omnibus,
-    ## which has no single direction -- the pairwise effect sizes of its
-    ## constituent pairs carry that information instead.
+    ## former (est/se)^2 with df = 1 exactly. effect_size is the contrast estimate
+    ## for a pair and NA for an omnibus, which has no single direction.
     results <- lapply(names(L), function(ctr_name) {
-      C       <- L[[ctr_name]]
+      C <- L[[ctr_name]]
       if (is.null(dim(C))) C <- matrix(C, nrow = 1L, dimnames = list(NULL, names(C)))
-      needed  <- colnames(C)[apply(C != 0, 2, any)]
-      if (!all(needed %in% coef_nms)) return(NULL)
-      C_use   <- C[, coef_nms, drop = FALSE]
-      w       <- wald_contrast(beta, V, C_use)
-      if (is.null(w) || !is.finite(w$stat)) return(NULL)
-      est     <- if (nrow(C_use) == 1L) as.numeric(C_use %*% beta[coef_nms]) else NA_real_
-      data.frame(gene = gene, event = event, contrast = ctr_name,
-                 LRT = w$stat, p.value = w$p, df = w$df,
-                 model = model_label, phi = phi_val, effect_size = est,
-                 stringsAsFactors = FALSE)
+      needed <- colnames(C)[apply(C != 0, 2, any)]
+      g <- sub("^groups", "", needed)
+      if (!all(g %in% names(ys))) return(out(ctr_name, "untestable"))
+      if (all(g %in% keep)) {
+        if (is.null(fit) || !all(needed %in% names(fit$beta))) return(out(ctr_name, "not_fitted"))
+        nms   <- names(fit$beta)
+        C_use <- C[, nms, drop = FALSE]
+        w     <- wald_contrast(fit$beta, fit$V, C_use)
+        if (is.null(w) || !is.finite(w$stat)) return(out(ctr_name, "not_fitted"))
+        est <- if (nrow(C_use) == 1L) as.numeric(C_use %*% fit$beta[nms]) else NA_real_
+        return(out(ctr_name, "wald", w$stat, w$p, w$df, fit$phi, est))
+      }
+      ## a contrasted group lacks reads on one side: pairwise only
+      if (nrow(C) != 1L || is.na(target_log_phi) || sum(ys[g]) == 0 || sum(rs[g]) == 0)
+        return(out(ctr_name, "untestable"))
+      trt <- sub("^groups", "", needed[C[1, needed] > 0])
+      ref <- sub("^groups", "", needed[C[1, needed] < 0])
+      phi <- exp(target_log_phi)
+      b <- boundary_lrt(dd$y[grp == trt], dd$n[grp == trt] - dd$y[grp == trt],
+                        dd$y[grp == ref], dd$n[grp == ref] - dd$y[grp == ref], phi)
+      out(ctr_name, "boundary_lrt", b$stat, b$p, 1, phi, b$effect_size)
     })
-    bind_rows(Filter(Negate(is.null), results))
+    bind_rows(results)
+}
+
+#' Likelihood ratio test of one pairwise contrast at a fixed beta-binomial dispersion
+#'
+#' Used where a contrasted group has no reads on the distinct set (or none on the
+#' reference), so its log odds is infinite and a Wald test does not exist. With
+#' the dispersion fixed at \code{phi} the likelihood separates by group: the
+#' alternative maximizes each group's proportion on its own (0 or 1 for a group
+#' with no reads on one side), the null shares one proportion between the two.
+#' The beta-binomial is glmmTMB's, shape1 = p * phi, shape2 = (1 - p) * phi; the
+#' binomial coefficient cancels in the ratio.
+#'
+#' @param y_trt,r_trt per-sample distinct-set and reference counts, treatment group
+#' @param y_ref,r_ref the same for the reference group
+#' @param phi beta-binomial dispersion (exp of the moderated log phi)
+#' @return list(stat, p, effect_size): LRT on 1 df, its p-value, and the
+#'   difference in log odds treatment minus reference (+/-Inf at the boundary)
+#' @export
+boundary_lrt <- function(y_trt, r_trt, y_ref, r_ref, phi) {
+  bb_ll <- function(p, y, r) sum(lbeta(y + p * phi, r + (1 - p) * phi) - lbeta(p * phi, (1 - p) * phi))
+  max_ll <- function(y, r) {
+    if (sum(y) == 0 || sum(r) == 0) return(list(ll = 0, p = as.numeric(sum(y) > 0)))
+    o <- stats::optimize(function(t) -bb_ll(stats::plogis(t), y, r), c(-30, 30))
+    list(ll = -o$objective, p = stats::plogis(o$minimum))
+  }
+  ft <- max_ll(y_trt, r_trt); fr <- max_ll(y_ref, r_ref)
+  f0 <- max_ll(c(y_trt, y_ref), c(r_trt, r_ref))
+  stat <- max(0, 2 * (ft$ll + fr$ll - f0$ll))
+  list(stat = stat, p = stats::pchisq(stat, 1, lower.tail = FALSE),
+       effect_size = stats::qlogis(ft$p) - stats::qlogis(fr$p))
 }
 
 
@@ -1053,9 +1101,10 @@ posthoc_lfc_summary <- function(results, lfc_summary) {
 #'
 #' The single authoritative definition of "significant". A call requires an
 #' adjusted p-value below \code{padj_thr}, a net log fold change above
-#' \code{delta}, an absolute path-proportion shift of at least the dpi
-#' threshold, and an absolute log odds ratio (\code{effect_size}) of at least
-#' \code{min_effect}. Returns a logical vector so callers sweeping a threshold grid
+#' \code{delta}, and an absolute log odds ratio (\code{effect_size}) of at least
+#' \code{min_effect}. A \code{delta_pi} gate is available but off by default
+#' (\code{min_dpi = 0}); \code{delta_pi} and \code{delta_pi_perbase} are
+#' reported, not gated on. Returns a logical vector so callers sweeping a threshold grid
 #' (PR curves, ROC, metric tables) use the same rule as the tool itself
 #' instead of re-implementing it.
 #'
@@ -1081,12 +1130,12 @@ posthoc_lfc_summary <- function(results, lfc_summary) {
 #'   sides whose distinct set and reference differ in length. The fallback is
 #'   required, not optional: a junction-substituted side has a point feature as
 #'   its distinct set, so it has no length and no per-base pi.
-#' @param min_dpi minimum \code{abs(delta_pi)} for exon-sourced sides.
+#' @param min_dpi minimum \code{abs(delta_pi)} for exon-sourced sides; 0, the
+#'   default, drops the condition.
 #' @param min_effect minimum \code{abs(effect_size)}, the log odds ratio of the
-#'   fitted model; 0 or a missing column drops the condition. Required together
-#'   with the \code{delta_pi} gate: the log odds ratio does not depend on the
-#'   lengths of the distinct set and the reference, while \code{delta_pi} keeps
-#'   the absolute size of the shift, so a side must clear both.
+#'   fitted model; 0 or a missing column drops the condition. The default gate:
+#'   the log odds ratio does not depend on the lengths of the distinct set and
+#'   the reference, so one threshold means the same thing on every side.
 #' @param min_dpi_sj minimum \code{abs(delta_pi)} for sides whose distinct set
 #'   came from split reads. DEFAULTS TO \code{min_dpi} (a uniform gate). Set it
 #'   lower for a scale-fair gate: split-read distinct counts sit on a lower pi
@@ -1115,7 +1164,7 @@ posthoc_lfc_summary <- function(results, lfc_summary) {
 #'   passes. This is the tool's long-standing convention and is preserved here;
 #'   on the current simulation no row has either NA, so it is latent.
 #' @export
-is_significant <- function(res, padj_thr, delta = 0, min_dpi = 0.05,
+is_significant <- function(res, padj_thr, delta = 0, min_dpi = 0,
                            min_dpi_sj = min_dpi, min_reads = 0, padj = NULL,
                            omnibus_pairs = NULL, use_perbase = "both",
                            min_effect = 0.5) {
@@ -1123,12 +1172,14 @@ is_significant <- function(res, padj_thr, delta = 0, min_dpi = 0.05,
   ## positional calls must keep working.
   pv <- if (is.null(padj)) res$padj else padj
   n  <- nrow(res)
+  stopifnot(length(use_perbase) == 1L, !is.na(use_perbase),
+            is.logical(use_perbase) || identical(use_perbase, "both"))
 
   lfc_ok <- if ("lfc_diff_net" %in% names(res)) {
     (res$lfc_diff_net > delta) | is.na(res$lfc_diff_net)
   } else TRUE
 
-  dpi_ok <- if ("delta_pi" %in% names(res)) {
+  dpi_ok <- if ("delta_pi" %in% names(res) && (min_dpi > 0 || min_dpi_sj > 0)) {
     thr <- rep(min_dpi, n)
     if (!identical(min_dpi_sj, min_dpi) &&
         all(c("comparison", "setdiff1", "setdiff2") %in% names(res))) {
@@ -1151,8 +1202,6 @@ is_significant <- function(res, padj_thr, delta = 0, min_dpi = 0.05,
     ## value when the distinct set is much shorter than the reference, and at
     ## transcript ends, where coverage is not uniform, that enlargement is not
     ## an effect.
-    stopifnot(length(use_perbase) == 1L, !is.na(use_perbase),
-              is.logical(use_perbase) || identical(use_perbase, "both"))
     dpi <- abs(res$delta_pi)
     if (!isFALSE(use_perbase) && "delta_pi_perbase" %in% names(res)) {
       pb <- abs(res$delta_pi_perbase)
@@ -1224,7 +1273,7 @@ is_significant <- function(res, padj_thr, delta = 0, min_dpi = 0.05,
 #' @inheritParams is_significant
 #' @return \code{res} with a logical \code{significant} column.
 #' @export
-add_significant <- function(res, padj_thr, delta, min_dpi = 0.05, min_dpi_sj = 0.05,
+add_significant <- function(res, padj_thr, delta, min_dpi = 0, min_dpi_sj = 0,
                             min_reads = 10, omnibus_pairs = NULL,
                             use_perbase = "both", min_effect = 0.5) {
   res$significant <- is_significant(res, padj_thr, delta, min_dpi, min_dpi_sj,
