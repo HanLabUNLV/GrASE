@@ -31,13 +31,13 @@ if [ -s "$LIN/intronparts_manifest.tsv" ]; then
   n=0
   while IFS=$'\t' read -r bam cond smp; do
     f=$LIN/counts/${cond}_${smp}_counts.txt
-    [ -s "$f" ] && { ln -s "$(realpath "$f")" "$W/intronparts/counts/"; n=$((n+1)); }
+    [ -s "$f" ] && { ln -sr "$(realpath "$f")" "$W/intronparts/counts/"; n=$((n+1)); }
   done < "$W/samples.tsv"
   echo "linked $n of $(wc -l < "$W/samples.tsv") intronic count files from $LIN"
 fi
 
 bash $R/outward_walk.sh --workdir "$W" --results "$RES" --terminal_counts "$TCNT" \
-  --split_dir bipartition.filtered --graphml_dir graphml.v34 \
+  --split_dir "$SPLIT_DIR" --graphml_dir "$GRAPHML_DIR" \
   --gff_dir "$DEXSEQ_GFF_DIR" --read_length "$READ_LEN" \
   --exon_counts count_files --samples "$W/samples.tsv" --contrasts "$CTR" \
   --python "$PY" --cores "$CORES" --padj "$PVAL"

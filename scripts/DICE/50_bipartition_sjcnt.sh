@@ -15,8 +15,8 @@ esac
 [ ! -e $OUT ] || { echo "$OUT already exists; move it aside or delete it first" >&2; exit 1; }
 
 Rscript $R/bipartition_sjcnt.R \
-  --inputdir   $DICE/bipartition.filtered \
-  --graphmldir $DICE/graphml.v34 \
+  --inputdir   $DICE/$SPLIT_DIR \
+  --graphmldir $DICE/$GRAPHML_DIR \
   --gff        $DICE/ref/gencode.v34.dexseq.aggregate.gff \
   --sjdir      $DICE/sj \
   --conditions "$ALL13" \

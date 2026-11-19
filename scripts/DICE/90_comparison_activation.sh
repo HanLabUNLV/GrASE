@@ -33,7 +33,7 @@ for CT in $CTS; do
   for C in internal terminal; do
     GF=$G.${C}_betabinom_EBmap.annotated.txt
     [ -s "$OUT/map.$C/combined.dexseq.SE.mapped.txt" ] ||
-      Rscript $R/map_rmats_bipartitions.R --graphdir graphml.v34 --splitdir bipartition.filtered \
+      Rscript $R/map_rmats_bipartitions.R --graphdir "$GRAPHML_DIR" --splitdir "$SPLIT_DIR" \
         --class "$C" --rmatsdir "$RM" --outdir "$OUT/map.$C" --mc_cores "$CORES" &> "$OUT/map.$C.log"
     Rscript $R/compare_rmats_grase.R --grase "$GF" --rmats_dir "$RM" --map_dir "$OUT/map.$C/" \
       --contrast "$CTR" --rmats_sample1 "$CT" --pval "$PVAL" --output "$OUT/grase_vs_rmats.$C.txt" &> "$OUT/grase_vs_rmats.$C.log"
@@ -45,7 +45,7 @@ for CT in $CTS; do
 
   mkdir -p "$OUT/map.graph"
   [ -s "$OUT/map.graph/combined.dexseq.SE.mapped.txt" ] ||
-    Rscript $R/map_rmats_graph.R graphml.v34 "$RM" "$OUT/map.graph" &> "$OUT/map.graph.log"
+    Rscript $R/map_rmats_graph.R "$GRAPHML_DIR" "$RM" "$OUT/map.graph" &> "$OUT/map.graph.log"
 
   Rscript $R/compare_rmats_dexseq.R --map_dir "$OUT/map.graph" --outdir "$OUT/rmats_vs_saturn" \
     --rmats_dir "$RM" --exon_results "$SAT" --pval "$PVAL" &> "$OUT/rmats_vs_saturn.log"

@@ -21,7 +21,7 @@ for T in internal terminal; do
     D=$DICE/counts_${N}/bipartition.ex.${T}.counts
     mkdir -p "$D"
     find $SRC/bipartition.ex.${T}.counts -maxdepth 1 -name '*.bipartition*.txt' \
-      -exec ln -sft "$D" {} + 2>/dev/null || true
+      -exec ln -srft "$D" {} + 2>/dev/null || true
   done
   awk -v FS='\t' -v OFS='\t' \
       -v a="$A_SET" -v b="$B_SET" -v c="$C_SET" \
