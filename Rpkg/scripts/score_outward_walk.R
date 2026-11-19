@@ -47,8 +47,9 @@
 ##      the padj cutoff; t_k scrapes under it and U_k does not, although U_k moves
 ##      as much (NLRC5 on HDAC1 knockdown: terminus dpi +0.30 padj 0.019, outward
 ##      dpi +0.26 padj 0.066). 20-34% of walk_stops looked like this. Now a tested
-##      uncalled flank is a drop only if its effect is weak: |dpi_U| < --min_dpi,
-##      or opposite in sign to dpi_t, or |dpi_U| < --max_outward_frac * |dpi_t|.
+##      uncalled flank is a drop only if its effect is weak: |eff_U| < --min_effect,
+##      or opposite in sign to eff_t, or |eff_U| < --max_outward_frac * |eff_t|,
+##      eff being the effect_size (log odds ratio) the call is gated on.
 ##      Otherwise -> "outward uncalled, comparable effect", not judgeable.
 ##   2. THIN BUT NOT A DROP. A flank with 1 <= d_support < floor is untestable;
 ##      that is a drop only if coverage actually falls there:
@@ -134,15 +135,15 @@ opt_list <- list(
               help = "read floor on d_support [default %default]"),
   make_option("--padj",        type = "double", default = 0.05,
               help = "adjusted p cutoff of grase::is_significant(), the exontest.R --padj_threshold default [default %default]"),
-  make_option("--min_dpi",     type = "double", default = 0.05,
-              help = "|delta_pi| of grase::is_significant(), per-base with --dpi_gate perbase [default %default]"),
+  make_option("--min_dpi",     type = "double", default = 0,
+              help = "|delta_pi| of grase::is_significant(), per-base with --dpi_gate perbase; 0, the default, is no delta_pi gate [default %default]"),
   make_option("--min_effect",  type = "double", default = 0.5,
               help = "|effect_size| of grase::is_significant() [default %default]"),
   make_option("--dpi_gate",    type = "character", default = "both",
               help = "both, raw or perbase, as exontest.R [default %default]"),
   make_option("--max_outward_frac", type = "double", default = 0.5,
-              help = paste("a tested, uncalled outward unit is a drop only if |dpi_U| < --min_dpi,",
-                           "dpi_U is opposite in sign to dpi_t, or |dpi_U| < this fraction of |dpi_t|;",
+              help = paste("a tested, uncalled outward unit is a drop only if |effect_size_U| < --min_effect,",
+                           "it is opposite in sign to the terminus's, or |effect_size_U| < this fraction of |effect_size_t|;",
                            "Inf disables the guard [default %default]")),
   make_option("--max_flank_cov", type = "double", default = 0.2,
               help = paste("a below-floor (untestable) outward unit with d_support >= 1 is a drop only if",
@@ -361,7 +362,7 @@ allu <- as.data.table(grase::add_support(as.data.frame(allu), d_grp, CTR))
 ## the treatment lineage scores a hit from a transcript exclusive to the
 ## reference lineage, which dilutes a real effect toward the null. The sign of
 ## delta_pi says which lineage the call claims the terminus is used in.
-u <- merge(u, res[, .(gene, synth_event = event, contrast, called, tested, delta_pi)],
+u <- merge(u, res[, .(gene, synth_event = event, contrast, called, tested, delta_pi, effect_size)],
            by = c("gene", "synth_event", "contrast"), all.x = TRUE)
 u <- merge(u, allu[, .(gene, synth_event = event, contrast, d_support)],
            by = c("gene", "synth_event", "contrast"), all.x = TRUE)
@@ -395,12 +396,12 @@ u <- merge(u, unique(cl[, .(gene, event, side, contrast)]),
 ## ---- assemble t_i beside U_i on rank -------------------------------------
 ts <- u[anchor_kind == "terminus_self"]
 w <- merge(ts[, .(gene, event, side, contrast, rank, anchor, gene_edge,
-                  part_called = called, part_dpi = delta_pi,
+                  part_called = called, part_eff = effect_size,
                   part_min_read_support = min_read_support,
                   part_tested = tested, part_zero = zero_count, part_ds = d_support)],
            u[anchor_kind == "terminus",
              .(gene, event, side, contrast, rank, flank_called = called,
-               flank_dpi = delta_pi,
+               flank_eff = effect_size,
                flank_min_read_support = min_read_support, flank_present = TRUE,
                flank_tested = tested, flank_zero = zero_count, flank_ds = d_support,
                flank_unit = unit_id)],
@@ -467,10 +468,10 @@ w[, flank_thin_nodrop := !is.na(flank_ds) & flank_ds >= 1 &
                          !(!is.na(part_ds) & flank_ds <= a$max_flank_cov * part_ds)]
 ## COMPARABLE: tested and uncalled, but moving the same way at a non-trivial size.
 w[, flank_comparable := isTRUE_v(flank_tested) & !isTRUE_v(flank_called) &
-                        !is.na(flank_dpi) & !is.na(part_dpi) &
-                        abs(flank_dpi) >= a$min_dpi &
-                        sign(flank_dpi) == sign(part_dpi) &
-                        abs(flank_dpi) >= a$max_outward_frac * abs(part_dpi)]
+                        !is.na(flank_eff) & !is.na(part_eff) &
+                        abs(flank_eff) >= a$min_effect &
+                        sign(flank_eff) == sign(part_eff) &
+                        abs(flank_eff) >= a$max_outward_frac * abs(part_eff)]
 w[, u_dead := fcase(
     ## CANNOT BE MEASURED. A flank completely covered by a neighbouring gene's bin
     ## reads 0 whatever is transcribed there, because every read touching it

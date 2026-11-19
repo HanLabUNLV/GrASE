@@ -20,6 +20,9 @@
 ## within --feature_contrast if given; --terminus Exxx picks one explicitly. The
 ## terminus is raw pi (the outward test is run without per-base lengths). Panels
 ## A-D still describe the bipartition; panel A brackets the terminus.
+##
+## --no_stack leaves out panel B, the stack of every bipartition at the locus; the
+## panels after it are lettered B, C, D instead of C, D, E.
 suppressPackageStartupMessages({ library(igraph); library(optparse) })
 
 CB <- c(S = "#4477AA", D1 = "#CCBB44", D2 = "#EE6677", other = "#DDDDDD")
@@ -40,6 +43,8 @@ opt_list <- list(
   make_option("--sjcounts", type = "character", default = ""),
   make_option("--stack_kinds", type = "character", default = "internal,terminal"),
   make_option("--max_stack", type = "integer", default = 0L),
+  make_option("--no_stack", action = "store_true", default = FALSE,
+              help = "leave out panel B (every bipartition at the locus); the later panels move up a letter"),
   make_option("--feature_contrast", type = "character", default = NULL),
   make_option("--mark_parts", type = "character", default = ""),
   make_option("--symbol", type = "character", default = NULL),
@@ -460,6 +465,8 @@ if (!is.null(matched)) {
 }
 
 ratio_A <- 0.42; ratio_B <- 2.05; ratio_CD <- 1.15
+## panel letters: without the stack (--no_stack) the panels after B move up one
+PL <- if (a$no_stack) c(C = "B", D = "C", E = "D") else c(C = "C", D = "D", E = "E")
 A_MAI <- c(0.34, 0.55, 0.24, 0.25)   # panel A margins, inches
 
 ## panel C needs to know whether a junction caption will be printed before the
@@ -488,7 +495,7 @@ ratio_E <- (per_unit_h * ratio_E + C_MAI_B + 0.24) / per_unit_h
 ## D_MAI_TB inches, stay fixed); the page grows to fit, the other panels keep their size
 D_MAI_TB <- 0.80 + 0.26
 ratio_CD <- ((per_unit_h * ratio_CD - D_MAI_TB) * a$d_height + D_MAI_TB) / per_unit_h
-fig_h <- per_unit_h * (ratio_A + ratio_B + ratio_E + ratio_CD)
+fig_h <- per_unit_h * (ratio_A + (if (a$no_stack) 0 else ratio_B) + ratio_E + ratio_CD)
 sym <- if (!is.null(a$symbol)) a$symbol else gv
 
 out <- path.expand(a$out)
@@ -506,16 +513,22 @@ if (ext == "pdf") {
 
 ## --d_width below 3.1 (the full width beside the text block) narrows panel D and
 ## leaves the freed width blank at the right, so the text block keeps its size
+## rows A, B, C, D; --no_stack drops row B and renumbers the cells after it
+panel_layout <- function(m, widths) {
+  h <- c(ratio_A, ratio_B, ratio_E, ratio_CD)
+  if (a$no_stack) { m <- m[-2, , drop = FALSE]; m[m > 2] <- m[m > 2] - 1; h <- h[-2] }
+  layout(m, heights = h, widths = widths)
+}
 if (!is.null(TM)) {
   ## terminus mode: D | E (terminus) | text block, D and E the same width
-  layout(matrix(c(1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 5, 6), nrow = 4, byrow = TRUE),
-         heights = c(ratio_A, ratio_B, ratio_E, ratio_CD), widths = c(a$d_width, a$d_width, 1.3))
+  panel_layout(matrix(c(1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 5, 6), nrow = 4, byrow = TRUE),
+               widths = c(a$d_width, a$d_width, 1.3))
 } else if (a$d_width < 3.1) {
-  layout(matrix(c(1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 5, 6), nrow = 4, byrow = TRUE),
-         heights = c(ratio_A, ratio_B, ratio_E, ratio_CD), widths = c(a$d_width, 1, 3.1 - a$d_width))
+  panel_layout(matrix(c(1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 5, 6), nrow = 4, byrow = TRUE),
+               widths = c(a$d_width, 1, 3.1 - a$d_width))
 } else {
-  layout(matrix(c(1, 1, 2, 2, 3, 3, 4, 5), nrow = 4, byrow = TRUE),
-         heights = c(ratio_A, ratio_B, ratio_E, ratio_CD), widths = c(a$d_width, 1))
+  panel_layout(matrix(c(1, 1, 2, 2, 3, 3, 4, 5), nrow = 4, byrow = TRUE),
+               widths = c(a$d_width, 1))
 }
 par(xaxs = "i", yaxs = "i")
 ## Margins in inches. matplotlib puts the title and the x-label in the
@@ -538,7 +551,7 @@ if (nzchar(a$mark_parts)) for (tok in strsplit(a$mark_parts, ",")[[1]]) {
   if (pn %in% names(idx)) mark[[lb]] <- c(mark[[lb]], pn)
 }
 if (!is.null(TM) && TM$part %in% names(idx))
-  mark[[sprintf("panel E: %s %s", TM$kind, TM$part)]] <- TM$part
+  mark[[sprintf("panel %s: %s %s", PL[["E"]], TM$kind, TM$part)]] <- TM$part
 if (length(mark)) top <- max(top, EH + 0.66 + 0.30)
 par(mai = A_MAI)
 plot(NA, xlim = c(-0.6, NX), ylim = c(-0.34, top), axes = FALSE, xlab = "", ylab = "")
@@ -593,6 +606,7 @@ legend(x = -0.6, y = -0.06, horiz = TRUE, bty = "n", cex = 0.85, xpd = NA, x.int
                   "not in this test"))
 
 ## ---- B: every bipartition at the locus -----------------------------------
+if (!a$no_stack) {
 mai_panel(0.60)
 plot(NA, xlim = c(-0.6, NX), ylim = c(0.2, length(stack) + 1.1), axes = FALSE,
      xlab = "", ylab = "")
@@ -626,12 +640,13 @@ mtext(sprintf(paste0("each row = one tested bipartition; rows nest where spans a
                      "contrast [%d of %d drawn; %d of %d tested]"), n_marked, length(stack),
                      n_marked_all, n_tested),
       side = 1, line = 2.1, adj = 0, cex = 0.55, col = "#555555")
+}
 
 ## ---- C (panel 3): the tested bipartition as graph routes -----------------
 mai_panel(C_MAI_B)
 if (is.null(matched)) {
   plot(NA, xlim = c(0, 1), ylim = c(0, 1), axes = FALSE, xlab = "", ylab = "")
-  text(0.02, 0.5, "no matching bipartition row found for panel C", adj = 0,
+  text(0.02, 0.5, paste("no matching bipartition row found for panel", PL[["C"]]), adj = 0,
        cex = 0.65, col = "#888888")
 } else {
   plot(NA, xlim = c(-0.6, NX), ylim = c(0.2, e_n_rows + 0.9), axes = FALSE,
@@ -693,7 +708,7 @@ if (is.null(matched)) {
   }
   n_d1 <- sum(vapply(e_groups, function(g) g[[1]] == "D1", logical(1)))
   n_d2 <- sum(vapply(e_groups, function(g) g[[1]] == "D2", logical(1)))
-  mtext(sprintf(paste0("C   Tested bipartition %s-%s as graph routes along the exons: ",
+  mtext(sprintf(paste0(PL[["C"]], "   Tested bipartition %s-%s as graph routes along the exons: ",
                        "source (blue) diverges into D1 vs D2 routes"),
                 matched$source, matched$sink), side = 3, line = 0.2, adj = 0, cex = 0.78)
   xlab <- sprintf(paste0("exonic parts, genomic order  ->   (D1: %d route(s), %d transcript(s) ",
@@ -815,7 +830,7 @@ draw_pi_panel(vals = vapply(conds, function(c_) pivals[[c_]], numeric(1)), ps = 
               rowsP = rows, sigP = sig_contrasts, out_vals = NULL,
               ylab = if (!is.null(a$ylab)) a$ylab else
                 sprintf("%s path proportion pi\nof distinct %s", if (perbase) "per-base" else "raw", which_D),
-              title = "D   Path proportion across conditions", depth_on = which_D)
+              title = paste0(PL[["D"]], "   Path proportion across conditions"), depth_on = which_D)
 
 ## E (terminus mode only): the strongest terminus, from the outward walk's own
 ## test and counts -- group pi, sample dots and brackets all come from the terminus
@@ -825,7 +840,7 @@ if (!is.null(TM)) {
   draw_pi_panel(vals = vapply(conds, function(c_) TM$pi[[c_]], numeric(1)), ps = TM$ps,
                 rowsP = TM$rows, sigP = TM$sig, out_vals = out_vals,
                 ylab = sprintf("raw proportion of %s %s\nvs shared S of %s", TM$kind, TM$part, which_D),
-                title = sprintf("E   Strongest terminus of %s: %s %s (outward walk)", which_D, TM$kind, TM$part),
+                title = sprintf(paste0(PL[["E"]], "   Strongest terminus of %s: %s %s (outward walk)"), which_D, TM$kind, TM$part),
                 depth_on = TM$part, out_unit = if (!is.null(out_vals)) TM$out_unit else NULL)
 }
 
@@ -841,7 +856,7 @@ if (!is.null(TM)) {
   wv <- TM$verdict[order(-abs(num(TM$verdict$part_dpi))), , drop = FALSE]
   wl <- head(sprintf("%s: %s (dpi %+.2f)", gsub("_vs_", " vs ", wv$contrast), wv$walk,
                      num(wv$part_dpi)), 3)
-  desc <- paste0(desc, sprintf("\npanel E: %s %s (strongest terminus)\n%s", TM$kind, TM$part,
+  desc <- paste0(desc, sprintf("\npanel %s: %s %s (strongest terminus)\n%s", PL[["E"]], TM$kind, TM$part,
                                paste(wl, collapse = "\n")))
 }
 text(0, 0.64, desc, adj = c(0, 1), cex = 0.65)

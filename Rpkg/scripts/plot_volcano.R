@@ -22,8 +22,8 @@ o <- parse_args(OptionParser(option_list = list(
   make_option("--read_length", type = "integer", default = NULL, help = "read length, for the effective lengths with --gff_dir"),
   make_option("--out",        type = "character", help = "output prefix"),
   make_option("--pval",       type = "double", default = 0.01, help = "adjusted p cutoff [%default]"),
-  make_option("--min_dpi",    type = "double", default = 0.05, help = "|delta_pi| of is_significant(), per-base where defined [%default]"),
-  make_option("--min_dpi_sj", type = "double", default = 0.05, help = "|delta_pi| for a junction-sourced side [%default]"),
+  make_option("--min_dpi",    type = "double", default = 0, help = "|delta_pi| of is_significant(), per-base where defined [%default]"),
+  make_option("--min_dpi_sj", type = "double", default = 0, help = "|delta_pi| for a junction-sourced side [%default]"),
   make_option("--min_reads",  type = "double", default = 10,   help = "reads on the distinct set in a group [%default]"),
   make_option("--min_effect", type = "double", default = 0.5,  help = "|effect_size| of is_significant() [%default]"),
   make_option("--xmax_effect", type = "double", default = 10,  help = "|effect_size| beyond this is drawn at the edge [%default]"),
@@ -70,7 +70,7 @@ L[, Call := factor(called, c(FALSE, TRUE), c("not called", "called"))]
 n_pb <- D[, sum(!is.na(delta_pi_perbase)), by = class]
 cat("rows with per-base delta_pi:", paste(n_pb$class, n_pb$V1, collapse = ", "), "\n")
 
-V <- data.table(measure = factor(meas, meas), v = c(o$min_dpi, o$min_dpi, o$min_effect))
+V <- data.table(measure = factor(meas, meas), v = c(o$min_dpi, o$min_dpi, o$min_effect))[v > 0]   # 0 = no gate, no line
 p <- ggplot(L[order(called)], aes(x, y, colour = Call)) +
   ggrastr::rasterise(geom_point(size = 0.35, alpha = 0.5), dpi = 300) +
   (if (o$y == "padj") geom_hline(yintercept = -log10(o$pval), linetype = 2, linewidth = 0.3)) +

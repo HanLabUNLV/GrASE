@@ -41,6 +41,12 @@ if (length(exon_files) == 0L)
 cat(sprintf("Found %d exon count files\n", length(exon_files)))
 
 n_genes_merged <- 0L
+## the junctions each substituted side is measured on, written once at the end
+## to <output>/measured_junctions.txt: gene, event, comparison, junctions.
+## comparison names the side as the exontest.R results do (diff1_vs_ref /
+## diff2_vs_ref), so the table joins to them on (gene, event, comparison);
+## junctions are chr:start:end joined by "|", whose counts were averaged.
+measured <- list()
 n_subst1_total <- 0L
 n_subst2_total <- 0L
 
@@ -145,11 +151,21 @@ for (f in exon_files) {
   }
 
   write.table(ex, file.path(out_dir, oname), sep="\t", quote=FALSE, row.names=FALSE)
+  measured[[length(measured) + 1L]] <- bind_rows(
+    event_flags %>% filter(event %in% subst1_events) %>%
+      transmute(gene, event, comparison = "diff1_vs_ref", junctions = as.character(intron_distinct1)),
+    event_flags %>% filter(event %in% subst2_events) %>%
+      transmute(gene, event, comparison = "diff2_vs_ref", junctions = as.character(intron_distinct2)))
 
   n_genes_merged  <- n_genes_merged  + 1L
   n_subst1_total  <- n_subst1_total  + length(subst1_events)
   n_subst2_total  <- n_subst2_total  + length(subst2_events)
 }
+
+measured <- bind_rows(measured)
+if (nrow(measured)) measured <- arrange(measured, gene, event, comparison)
+write.table(measured, file.path(out_dir, "measured_junctions.txt"), sep="\t", quote=FALSE, row.names=FALSE)
+cat(sprintf("Junction-sourced sides: %d -> %s\n", nrow(measured), file.path(out_dir, "measured_junctions.txt")))
 
 cat(sprintf("Genes with SJ data: %d\n",       n_genes_merged))
 cat(sprintf("Events with diff1 from SJ: %d\n", n_subst1_total))

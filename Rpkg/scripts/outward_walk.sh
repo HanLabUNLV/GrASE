@@ -31,10 +31,10 @@
 #   --read_length      read length of the counted reads; required with --dpi_gate perbase
 #   --padj, --min_dpi, --min_effect, --min_reads
 #                      unit call thresholds of grase::is_significant(), the same as the
-#                      side calls; exontest.R defaults [0.05, 0.05, 0.5, 10]
+#                      side calls; exontest.R defaults [0.05, 0, 0.5, 10]
 #   --dpi_gate         both, raw or perbase delta_pi for the unit call [both]
 #   --max_outward_frac a tested, uncalled outward unit counts as a drop only if its
-#                      |delta_pi| is below --min_dpi, opposite in sign to the
+#                      |effect_size| is below --min_effect, opposite in sign to the
 #                      terminus's, or below this fraction of the terminus's [0.5]
 #   --max_flank_cov    an untestable (below-floor) outward unit counts as a drop only
 #                      if its read support is at most this fraction of the
@@ -55,7 +55,7 @@
 set -euo pipefail
 
 FLAGS="--format bam --paired no --stranded reverse --order pos -a 10"
-PY=python3; CORES=8; PADJ=0.05; MIN_DPI=0.05; MIN_EFFECT=0.5; MIN_READS=10; DPI_GATE=both
+PY=python3; CORES=8; PADJ=0.05; MIN_DPI=0; MIN_EFFECT=0.5; MIN_READS=10; DPI_GATE=both
 MAX_OUTWARD_FRAC=0.5; MAX_FLANK_COV=0.2
 READ_LEN=; SUBSET=0; SAMTOOLS=samtools
 while [ $# -gt 0 ]; do
@@ -150,9 +150,9 @@ MC_CORES=$CORES Rscript "$S/build_outward_counts.R" --units "$W/outward_units.ts
 
 echo "=== 5 test  $(date '+%F %T')"
 mkdir -p "$T/run"
-ln -sf "$W/$COMBINED" "$T/run/$COMBINED"
+ln -sfr "$W/$COMBINED" "$T/run/$COMBINED"
 find "$(dirname "$(realpath "$TCNT")")" -maxdepth 1 -name '*.bipartition.txt' \
-  -exec ln -sf -t "$T/run" {} +
+  -exec ln -sfr -t "$T/run" {} +
 Rscript "$S/exontest.R" --file="$COMBINED" --outdir="$T" --countdir="$T/run/" \
   --splittype=bipartition --phi=phi.outward.txt --model=betabinom_EBmap \
   --mc_cores="$CORES" --min_reads="$MIN_READS" --contrasts="$CTR" &> "$T/test.log"

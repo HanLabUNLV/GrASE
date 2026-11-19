@@ -64,9 +64,9 @@ o <- parse_args(OptionParser(option_list = list(
   make_option("--pval",      type = "double", default = 0.05, help = "adjusted p cutoff for all three tools [%default]"),
   make_option("--min_dpsi",  type = "double", default = 0.1,  help = "rMATS |IncLevelDifference| [%default]"),
   make_option("--min_l2fc",  type = "double", default = 0.5,  help = "DEXSeq |log2 fold change| [%default]"),
-  make_option("--min_dpi",   type = "double", default = 0.05, help = "GrASE |delta_pi|, per-base where defined [%default]"),
+  make_option("--min_dpi",   type = "double", default = 0, help = "GrASE |delta_pi|, per-base where defined [%default]"),
   make_option("--min_effect", type = "double", default = 0.5, help = "GrASE |effect_size| (log odds ratio) [%default]"),
-  make_option("--min_dpi_sj", type = "double", default = 0.05, help = "GrASE |delta_pi| for a junction-sourced side [%default]"),
+  make_option("--min_dpi_sj", type = "double", default = 0, help = "GrASE |delta_pi| for a junction-sourced side [%default]"),
   make_option("--class",    type = "character", default = NULL, help = "GrASE class of each --grase file, comma separated [internal,terminal]"),
   make_option("--font",     type = "character", default = "Arial", help = "font of every plot, embedded in the PDFs [%default]"),
   make_option("--ymax",     type = "double", default = NULL, help = "bar axis limit of the stacked plots, to share a scale across runs [per plot]"),
@@ -75,7 +75,9 @@ o <- parse_args(OptionParser(option_list = list(
   make_option("--setmax_tested_by_all", type = "double", default = NULL, help = "set size axis limit of the tested_by_all plots [per plot]"),
   make_option("--count",    action = "store_true", default = FALSE, help = "count and write the tables only, drawing nothing"),
   make_option("--draw",     type = "character", default = NULL, help = "per-part tables written earlier, comma separated: draw them on one scale, each into its directory, reading no tool results"),
-  make_option("--min_reads", type = "double", default = 10,   help = "GrASE reads on the distinct set in a group [%default]"))))
+  make_option("--min_reads", type = "double", default = 10,   help = "GrASE reads on the distinct set in a group [%default]"),
+  make_option("--dex_name", type = "character", default = "DEXSeq",
+              help = "set name of the --dexseq tool in the plots, e.g. satuRn for a satuRn table [%default]"))))
 if (is.null(o$draw)) for (r in c("grase", "map_dirs", "rmats_dir", "outdir"))
   if (is.null(o[[r]])) stop("--", r, " is required", call. = FALSE)
 split <- function(x) trimws(strsplit(x, ",")[[1]])
@@ -93,7 +95,7 @@ cat_of <- function(D) apply(as.matrix(D), 1, function(r) { x <- names(D)[r]; if 
 ## DEXSeq; the classes are read off the per-part table's grase_<class>_called columns
 make_cmp <- function(P) {
   cls <- sub("^grase_(.*)_called$", "\\1", grep("^grase_.+_called$", names(P), value = TRUE))
-  dx <- if ("dex_called" %in% names(P)) "dex_called"; dn <- if (length(dx)) "DEXSeq"
+  dx <- if ("dex_called" %in% names(P)) "dex_called"; dn <- if (length(dx)) o$dex_name
   cmp <- list(all = setNames(P[, c("grase_called", "rmats_called", dx), with = FALSE], c("GrASE", "rMATS", dn)))
   if (length(cls) > 1)
     cmp$by_class <- setNames(P[, c(paste0("grase_", cls, "_called"), "rmats_called", dx), with = FALSE],
