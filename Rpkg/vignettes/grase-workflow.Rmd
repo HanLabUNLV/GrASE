@@ -355,11 +355,12 @@ For those sides only, the distinct set becomes the intron edges inside the bubbl
 that are exclusive to that side, counted from split reads. The shared reference is
 never changed. In the published run this applied to 28.5% of tests.
 
-Counts for the introns are averaged per route and then summed across routes. A
-route is one path through the side, so a side carried by three routes contributes
-the mean of each route's junction counts. Averaging within a route and summing
-across them keeps a side with many routes from being inflated by counting the same
-molecules repeatedly.
+The junction set of a side is the introns that every route of the side crosses,
+as the exonic distinct set is the parts every transcript of the side uses. A
+route is one path through the side. Every molecule of the side then crosses each
+junction of the set once, so the side's count is the mean of their counts. A side
+whose routes share no distinct intron is not substituted and is not tested: no
+junction count measures all of its molecules.
 
 ```bash
 # Count split reads on the intronic edges of each bipartition.
@@ -392,6 +393,13 @@ junction-sourced side has its `setdiff` left NA in the output, which is how
 `exontest.R` recognises it and applies `--min_dpi_sj` rather than `--min_dpi`.
 Length-normalized pi is undefined for such a side, since a junction is a point
 feature with no length.
+
+`merge_exon_sj_counts.R` writes the junctions each substituted side was measured
+on to `measured_junctions.txt` in its `--output` directory, one row per
+junction-sourced side: `gene`, `event`, `comparison` and `junctions`. It joins
+to the test results on `gene`, `event` and `comparison`. Each junction is
+`chr:start:end`, and the junctions of one side are joined by `|`; they are the
+junctions every route of the side crosses, and their counts are averaged.
 
 ---
 
@@ -475,7 +483,7 @@ For more than two groups, replace `--cond1`/`--cond2` with `--contrasts` in
 | `--min_reads` | 10 | Mean reads on the distinct set, in at least one group, required to call a side |
 | `--delta` | 0 | `lfc_diff_net` must exceed this; the post-hoc filter on reference movement |
 | `--use_phi_loess` | TRUE | Loess trend log(phi) ~ log(baseMean) as the shrinkage target instead of the global median; turn off with `--no_phi_loess` |
-| `--independent_filtering` | FALSE | Turn on DESeq2-style filtering on baseMean before correction. The filter runs on the event rows before the nested stages, choosing its cutoff by a plain BH, which is not the procedure applied afterwards |
+| `--independent_filtering` | TRUE | DESeq2-style filtering on baseMean before correction, on top of the `--min_reads` floor; `--no_independent_filtering` turns it off. Under `--padj_method nested_BH` the filter runs on the event rows before the nested stages, choosing its cutoff by a plain BH, which is not the procedure applied afterwards |
 | `--readjust` | FALSE | With a reused results file, recompute `padj_gene` and `padj` from the stored p-values under the current `--padj_threshold`, `--padj_method` and filtering setting, without refitting |
 | `--pseudocount` | | Added to ref reads when ref == 0, for all-or-nothing switches |
 | `--mc_cores` | | Cores for the per-event fits |
@@ -906,7 +914,7 @@ bash 20_unpack_star_sj.sh
 bash 30_exoncnt.sh
 bash 40_bipartition_sjcnt.sh
 bash 50_merge_exon_sj.sh
-bash 60_exontest.sh                 # betabinom_EBmap, --gff_dir, --dpi_gate=both, --padj_threshold=0.05, --independent_filtering
+bash 60_exontest.sh                 # betabinom_EBmap, --gff_dir, --dpi_gate=both, --padj_threshold=0.05
 bash 70_outward_walk.sh             # needs 60; stops if outward_walk/ exists
 bash 75_volcano.sh                  # needs 60; comparison/volcano/volcano.{png,pdf}
 ```
