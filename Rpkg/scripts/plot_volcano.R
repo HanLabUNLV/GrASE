@@ -1,5 +1,5 @@
 #!/usr/bin/env Rscript
-## Volcano plots of GrASE bipartition results on three effect scales, one panel each:
+## Volcano plots of GrASE bipartition results, one panel per effect scale (--measures; default effect_size only):
 ##   delta_pi          raw-count path proportion difference (pi_trt - pi_ctrl)
 ##   delta_pi_perbase  the same after length normalization (grase::pi_perbase)
 ##   effect_size       log odds ratio of the fitted model
@@ -7,7 +7,8 @@
 ## --ymax; a value of 0 is drawn at the largest finite one. padj is NA for tests in genes not selected at
 ## the gene level, so --y padj drops those rows. Rows are the input files (e.g. internal, terminal); only
 ## rows with the chosen value are drawn. Colour is the call of grase::is_significant() at --pval with --min_dpi/--min_dpi_sj/--min_effect/--min_reads.
-## Dashed lines: the padj cutoff (--y padj only), +/- --min_dpi on the two delta_pi scales and +/- --min_effect on effect_size.
+## Dashed lines: the padj cutoff (--y padj only), +/- --min_effect on effect_size, and +/- --min_dpi on a
+## delta_pi scale that --dpi_gate gates on.
 ## Per-base delta_pi already in the input (e.g. from add_perbase_calls.R) is used as is; otherwise it is computed
 ## when --gff_dir is given.
 ## Usage: Rscript plot_volcano.R --grase <internal.annotated.txt>,<terminal.annotated.txt> --labels internal,terminal
@@ -26,6 +27,10 @@ o <- parse_args(OptionParser(option_list = list(
   make_option("--min_dpi_sj", type = "double", default = 0, help = "|delta_pi| for a junction-sourced side [%default]"),
   make_option("--min_reads",  type = "double", default = 10,   help = "reads on the distinct set in a group [%default]"),
   make_option("--min_effect", type = "double", default = 0.5,  help = "|effect_size| of is_significant() [%default]"),
+  make_option("--dpi_gate", type = "character", default = "both",
+              help = "delta_pi gate as in exontest.R: both (raw and per-base), raw or perbase [%default]"),
+  make_option("--measures",   type = "character", default = "effect_size",
+              help = "x axes, comma separated: effect_size, delta_pi, delta_pi_perbase [%default]"),
   make_option("--xmax_effect", type = "double", default = 10,  help = "|effect_size| beyond this is drawn at the edge [%default]"),
   make_option("--y",          type = "character", default = "p.value", help = "p.value or padj [%default]"),
   make_option("--ymax",       type = "double", default = Inf,  help = "-log10(padj) beyond this is drawn at the edge [no cap]"),
@@ -47,7 +52,8 @@ D <- rbindlist(lapply(seq_along(files), function(i) {
     d <- as.data.table(annotate_pi_perbase(as.data.frame(d), path.expand(o$gff_dir), o$read_length))
   if (!"delta_pi_perbase" %in% names(d)) d[, delta_pi_perbase := NA_real_]
   ## the call reads delta_pi_perbase, so it is made after the column exists
-  d[, called := is_significant(d, o$pval, 0, o$min_dpi, o$min_dpi_sj, o$min_reads, min_effect = o$min_effect)]
+  d[, called := is_significant(d, o$pval, 0, o$min_dpi, o$min_dpi_sj, o$min_reads, min_effect = o$min_effect,
+  use_perbase = switch(match.arg(o$dpi_gate, c("both", "raw", "perbase")), both = "both", raw = FALSE, perbase = TRUE))]
   d <- d[!is.na(get(o$y))]
   d[, class := labs[i]]
   d
@@ -55,6 +61,9 @@ D <- rbindlist(lapply(seq_along(files), function(i) {
 cat(sprintf("%s: %d rows with %s, %d called\n", labs, D[, .N, by = class]$N, o$y, D[, sum(called), by = class]$V1), sep = "")
 
 meas <- c(delta_pi = "delta_pi", delta_pi_perbase = "per-base delta_pi", effect_size = "log odds ratio (effect_size)")
+pick <- trimws(strsplit(o$measures, ",")[[1]])
+if (!all(pick %in% names(meas))) stop("--measures takes effect_size, delta_pi, delta_pi_perbase")
+meas <- meas[pick]
 L <- rbindlist(lapply(names(meas), function(m)
   D[, .(class, called, x = get(m), y = -log10(get(o$y)), measure = meas[[m]])]))
 ## a p of 0 underflowed: draw it at the largest finite value
@@ -70,7 +79,11 @@ L[, Call := factor(called, c(FALSE, TRUE), c("not called", "called"))]
 n_pb <- D[, sum(!is.na(delta_pi_perbase)), by = class]
 cat("rows with per-base delta_pi:", paste(n_pb$class, n_pb$V1, collapse = ", "), "\n")
 
-V <- data.table(measure = factor(meas, meas), v = c(o$min_dpi, o$min_dpi, o$min_effect))[v > 0]   # 0 = no gate, no line
+## a line where a gate applies: effect_size always, a delta_pi scale only if --dpi_gate gates on it
+gate <- c(delta_pi = if (o$dpi_gate %in% c("both", "raw")) o$min_dpi else 0,
+          delta_pi_perbase = if (o$dpi_gate %in% c("both", "perbase")) o$min_dpi else 0,
+          effect_size = o$min_effect)
+V <- data.table(measure = factor(meas, meas), v = gate[names(meas)])[v > 0]   # 0 = no gate, no line
 p <- ggplot(L[order(called)], aes(x, y, colour = Call)) +
   ggrastr::rasterise(geom_point(size = 0.35, alpha = 0.5), dpi = 300) +
   (if (o$y == "padj") geom_hline(yintercept = -log10(o$pval), linetype = 2, linewidth = 0.3)) +
@@ -85,6 +98,7 @@ p <- ggplot(L[order(called)], aes(x, y, colour = Call)) +
   theme_bw(base_size = 11, base_family = o$font) +
   theme(legend.position = "bottom", panel.grid.minor = element_blank(), strip.background = element_rect(fill = "grey95"))
 h <- 1.2 + 2.8 * length(labs)
-ggsave(paste0(o$out, ".png"), p, width = 10, height = h, dpi = 200, device = ragg::agg_png)
-ggsave(paste0(o$out, ".pdf"), p, width = 10, height = h, device = cairo_pdf)
+w <- 1 + 3 * length(meas)
+ggsave(paste0(o$out, ".png"), p, width = w, height = h, dpi = 200, device = ragg::agg_png)
+ggsave(paste0(o$out, ".pdf"), p, width = w, height = h, device = cairo_pdf)
 cat("wrote", paste0(o$out, c(".png", ".pdf")), "\n")

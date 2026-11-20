@@ -1,6 +1,6 @@
 #!/bin/bash
-# Volcano plots of the activation-panel GrASE results, one per contrast, on three effect scales:
-# raw delta_pi, per-base delta_pi and the log odds ratio (plot_volcano.R). Rows are internal and
+# Volcano plots of the activation-panel GrASE results, one per contrast, on the log odds ratio
+# (plot_volcano.R; --measures adds delta_pi or per-base delta_pi panels). Rows are internal and
 # terminal sides; colour is the significant call.
 # Usage: bash 85_volcano_activation.sh [CD4|CD8]   (default: both)
 # Output: $DICE/comparison/volcano/volcano.<celltype>.{png,pdf}
