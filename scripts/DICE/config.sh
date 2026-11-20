@@ -15,7 +15,7 @@ PVAL=${PVAL:-0.01}
 PY=${PY:-/mnt/data1/home/jaquino/miniconda3/bin/python3}
 # Filtered bipartitions (stage 20 output, per gene internal/terminal) and the
 # per-gene splice graphs, under $DICE
-SPLIT_DIR=${SPLIT_DIR:-bipartition.filtered.v34}
+SPLIT_DIR=${SPLIT_DIR:-bipartition.filtered}
 GRAPHML_DIR=${GRAPHML_DIR:-graphml}
 # Per-gene DEXSeq GFFs of the v34 annotation (outward walk part geometry)
 DEXSEQ_GFF_DIR=${DEXSEQ_GFF_DIR:-$DICE/dexseq.gff}

@@ -15,14 +15,15 @@ driver.
 
 ## Stages, in order
 
-The bipartitions in `bipartition.v34/` come from `bubble_path_split.R`
+Stage 10 writes the bipartitions to `bipartition.v34/` with `bubble_path_split.R`
 (`--split=bipartition`, GENCODE v34 graphs). Stage 20 writes the filtered
-bipartitions to `$SPLIT_DIR` (default `bipartition.filtered.v34`); later stages
+bipartitions to `$SPLIT_DIR` (default `bipartition.filtered`); later stages
 read them there and the splice graphs from `$GRAPHML_DIR` (default `graphml`).
 Each stage stops if its output already exists.
 
 | Script | What it does |
 |---|---|
+| `10_split_bipartition.sh` | Bipartitions of every bubble, separated by exonic parts and intronic edges (`bubble_path_split.R`); resumable |
 | `20_filter_terminal.sh` | Splits each gene's bipartitions into internal and terminal (`filterTerminal.R`) |
 | `30_exoncnt_all13.sh` | Exonic-part counts for all 13 cell types (`exoncnt.R`) |
 | `40_presplit_counts.sh` | Cuts the all-13 counts into the CD4v2, activation and lineage panels |
