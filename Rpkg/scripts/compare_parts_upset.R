@@ -66,6 +66,8 @@ o <- parse_args(OptionParser(option_list = list(
   make_option("--min_l2fc",  type = "double", default = 0.5,  help = "DEXSeq |log2 fold change| [%default]"),
   make_option("--min_dpi",   type = "double", default = 0, help = "GrASE |delta_pi|, per-base where defined [%default]"),
   make_option("--min_effect", type = "double", default = 0.5, help = "GrASE |effect_size| (log odds ratio) [%default]"),
+  make_option("--dpi_gate", type = "character", default = "both",
+              help = "delta_pi gate as in exontest.R: both (raw and per-base), raw or perbase [%default]"),
   make_option("--min_dpi_sj", type = "double", default = 0, help = "GrASE |delta_pi| for a junction-sourced side [%default]"),
   make_option("--class",    type = "character", default = NULL, help = "GrASE class of each --grase file, comma separated [internal,terminal]"),
   make_option("--font",     type = "character", default = "Arial", help = "font of every plot, embedded in the PDFs [%default]"),
@@ -142,7 +144,8 @@ if (is.null(o$draw)) {
     g <- fread(gfiles[k], colClasses = list(character = c("gene", "setdiff1", "setdiff2")))
     if (!is.null(o$contrast)) g <- g[contrast == o$contrast]
     if (!nrow(g)) stop("no rows for --contrast ", o$contrast, "; the file has: ", paste(unique(fread(gfiles[k], select = "contrast")$contrast), collapse = " "))
-    g[, call := is_significant(g, o$pval, 0, o$min_dpi, o$min_dpi_sj, o$min_reads, min_effect = o$min_effect)]
+    g[, call := is_significant(g, o$pval, 0, o$min_dpi, o$min_dpi_sj, o$min_reads, min_effect = o$min_effect,
+  use_perbase = switch(match.arg(o$dpi_gate, c("both", "raw", "perbase")), both = "both", raw = FALSE, perbase = TRUE))]
     ## tested = has a p-value; padj is NA for tests in genes not selected at the gene level
     g <- g[!is.na(p.value)]
     ## each row (one side of a bipartition) spreads over both distinct sets of its bipartition

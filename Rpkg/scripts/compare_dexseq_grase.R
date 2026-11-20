@@ -36,6 +36,8 @@ option_list <- list(
               help = "GrASE |delta_pi| gate of is_significant(), per-base where defined [default= %default]"),
   make_option("--min_effect", type = "double", default = 0.5,
               help = "GrASE |effect_size| (log odds ratio) gate of is_significant() [default= %default]"),
+  make_option("--dpi_gate", type = "character", default = "both",
+              help = "delta_pi gate as in exontest.R: both (raw and per-base), raw or perbase [%default]"),
   make_option("--min_dpi_sj", type = "double", default = 0,
               help = "the same for a junction-sourced side [default= %default]"),
   make_option("--min_l2fc", type = "double", default = 0.5,
@@ -101,7 +103,8 @@ if (is.null(opt$contrast)) {
   if (!nrow(g)) stop("no rows for --contrast ", opt$contrast, "; the files have: ", paste(cts, collapse = " "))
 }
 g <- g[!is.na(p.value)]
-g[, grase_call := is_significant(g, opt$pval, 0, opt$min_dpi, opt$min_dpi_sj, opt$min_reads, min_effect = opt$min_effect)]
+g[, grase_call := is_significant(g, opt$pval, 0, opt$min_dpi, opt$min_dpi_sj, opt$min_reads, min_effect = opt$min_effect,
+  use_perbase = switch(match.arg(opt$dpi_gate, c("both", "raw", "perbase")), both = "both", raw = FALSE, perbase = TRUE))]
 ## a bipartition is called if either side is; its parts are those of both distinct sets
 g[, grase_call := any(grase_call), by = .(cls, gene, event, contrast)]
 g[, side := fifelse(grepl("diff1", comparison), 1L, 2L)]
