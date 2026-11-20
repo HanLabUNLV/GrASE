@@ -86,6 +86,13 @@ find_reference_exonic_part <- function(source, sink, ex_part1_set, ex_part2_set,
 }
 
 #' Find differential and reference exonic parts for binary splits
+#'
+#' Besides the exonic distinct sets written to the row, the intronic distinct sets
+#' are computed by the same rule on the routes' intron ("in") edges: introns on
+#' every route of one side and on no route of the other, as
+#' \code{label_bipartition_introns} defines the junction set. They are not written
+#' to the row; \code{has_distinct} reports whether either side has an exonic or an
+#' intronic distinct set, so a split whose sides differ only by junctions is kept.
 #' @param g An `igraph` directed acyclic graph representing a gene splicing graph.
 #' @param source Character string. Name of the bubble source vertex.
 #' @param sink Character string. Name of the bubble sink vertex.
@@ -157,6 +164,14 @@ find_diff_and_ref_exparts_for_split <- function(g, source, sink, split, parsed_p
       setdiff1 <- intersect_stream(setdiff1)
       setdiff2 <- intersect_stream(setdiff2)
 
+      ## intronic distinct sets, by the same rule as the exonic ones
+      in1 <- lapply(epath1, function(x) x[grepl(":in$", x)])
+      in2 <- lapply(epath2, function(x) x[grepl(":in$", x)])
+      in_setdiff1 <- intersect_stream(lapply(in1, setdiff, unique(unlist(in2))))
+      in_setdiff2 <- intersect_stream(lapply(in2, setdiff, unique(unlist(in1))))
+      has_distinct <- length(setdiff1) > 0 || length(setdiff2) > 0 ||
+        length(in_setdiff1) > 0 || length(in_setdiff2) > 0
+
       frag1 <- sort(as.numeric(dexseq_frag[setdiff1]))
       frag2 <- sort(as.numeric(dexseq_frag[setdiff2]))
       setdiff1ID <- if (length(frag1) > 0) paste0("E", paste(sprintf("%03d", frag1), collapse=",E")) else ""
@@ -195,7 +210,9 @@ find_diff_and_ref_exparts_for_split <- function(g, source, sink, split, parsed_p
       )
       log_debug(new_row)
       bipartitions_df <- rbind(bipartitions_df, new_row)
-  return(list(bipartitions_df = bipartitions_df, new_row = new_row))
+  return(list(bipartitions_df = bipartitions_df, new_row = new_row, has_distinct = has_distinct,
+              in_setdiff1 = paste(sort(in_setdiff1), collapse = ","),
+              in_setdiff2 = paste(sort(in_setdiff2), collapse = ",")))
 }
 
 #' Compute diff exons from graph and splicing structure for specific transcripts
@@ -364,6 +381,7 @@ diff_exons_gene_ovr <- function(gene, g, outdir) {
 bipartition_paths <- function(gene, g, outdir, max_path = 15, max_span = Inf, collapse_bubbles=FALSE) {
 
   bipartitions_df <- data.frame()
+  in_distinct1 <- character(0); in_distinct2 <- character(0)   # intron sets of the kept rows
   g <- grase::set_edge_names(g)
 
   txpaths <- grase::txpath_from_edgeattr(g)
@@ -428,8 +446,16 @@ bipartition_paths <- function(gene, g, outdir, max_path = 15, max_span = Inf, co
 
     names(ex_part_paths)  = 1:length(ex_part_paths) 
 
+    ## the subset relation is over exonic parts AND intron edges: a route that differs
+    ## from the others only by its junctions (an exon skip, an alternative splice site
+    ## with no exonic part of its own) is then not a subset of them, so the splits that
+    ## isolate it are enumerated
+    route_features <- mapply(function(p, e) c(p, e[grepl(":in$", e)]), ex_part_paths, epaths,
+                             SIMPLIFY = FALSE)
+    names(route_features) <- names(ex_part_paths)
+
     log_debug(paste("ex_part_paths len:", length(ex_part_paths)))
-    contain_dag <- grase::path_subset_relation(ex_part_paths) 
+    contain_dag <- grase::path_subset_relation(route_features) 
     log_debug(paste("contain_dag len:", length(igraph::E(contain_dag))))
 
     int_splits <- grase::valid_partitions_idx(contain_dag)
@@ -451,9 +477,11 @@ bipartition_paths <- function(gene, g, outdir, max_path = 15, max_span = Inf, co
         ex_or_in_gexpart=gd$ex_or_in_gexpart, dexseq_frag=gd$dexseq_frag
       )
       new_row <- retval$new_row
-      # Early filter: skip if both setdiff columns are empty
-      if (new_row$setdiff1 == "" && new_row$setdiff2 == "") next
+      # Early filter: skip if neither side has an exonic or an intronic distinct set
+      if (!retval$has_distinct) next
       bipartitions_df = retval$bipartitions_df
+      in_distinct1 <- c(in_distinct1, retval$in_setdiff1)
+      in_distinct2 <- c(in_distinct2, retval$in_setdiff2)
     }
 
     if (collapse_bubbles) {
@@ -519,9 +547,14 @@ bipartition_paths <- function(gene, g, outdir, max_path = 15, max_span = Inf, co
     ## lists them, but a bubble anchored there is bounded at that end. Not counting
     ## them capped every terminal bubble at one reference part against an internal
     ## event's two, so "fewest ref parts" was biased toward terminal bubbles.
+    ## a side is measured by its exonic distinct set, or by its intron set when that is
+    ## empty (the merged exon+junction count), so events are keyed on that: two splits
+    ## whose sides differ only by junctions are different events, not duplicates
     bipartitions_df <- bipartitions_df %>% dplyr::mutate(
       ref_part_cnt = sapply(ref_ex_part, count_items) + (source == "R") + (sink == "L"),
-      .terminal    = source == "R" | sink == "L")
+      .terminal    = source == "R" | sink == "L",
+      .key1 = ifelse(setdiff1 != "", setdiff1, paste0("in:", in_distinct1)),
+      .key2 = ifelse(setdiff2 != "", setdiff2, paste0("in:", in_distinct2)))
     # deduplicate exact events (same ref_ex_part + setdiff1 + setdiff2 from different graph paths),
     # then among remaining rows with same (setdiff1, setdiff2) keep the ref_ex_part closest (by
     # exon number) to the setdiff exons, then break remaining ties by fewest ref parts.
@@ -531,8 +564,8 @@ bipartition_paths <- function(gene, g, outdir, max_path = 15, max_span = Inf, co
     # R and L now also count as reference parts (above), and a tie on both filters goes to
     # the internal row.
     bipartitions_filtered <- bipartitions_df %>%
-      dplyr::distinct(ref_ex_part, setdiff1, setdiff2, .keep_all = TRUE) %>%
-      dplyr::group_by(setdiff1, setdiff2) %>%
+      dplyr::distinct(ref_ex_part, .key1, .key2, .keep_all = TRUE) %>%
+      dplyr::group_by(.key1, .key2) %>%
       dplyr::mutate(.prox = mapply(ref_proximity_to_setdiffs,
                                    ref_ex_part, setdiff1, setdiff2)) %>%
       dplyr::filter(.prox == min(.prox, na.rm = TRUE)) %>%
@@ -542,7 +575,8 @@ bipartition_paths <- function(gene, g, outdir, max_path = 15, max_span = Inf, co
       dplyr::arrange(.terminal, .by_group = TRUE) %>%
       dplyr::slice(1) %>%
       dplyr::ungroup() %>%
-      dplyr::select(-ref_part_cnt, -.prox, -.terminal)
+      dplyr::select(-ref_part_cnt, -.prox, -.terminal, -.key1, -.key2)
+    bipartitions_df <- dplyr::select(bipartitions_df, -.key1, -.key2)
   } else {
     bipartitions_filtered <- bipartitions_df
   }

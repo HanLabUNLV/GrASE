@@ -49,7 +49,12 @@ path indices forming one side of the binary partition.}
 \item{dexseq_frag}{Optional named character vector of DEXSeq fragment labels on \code{g_expart}.}
 }
 \description{
-Find differential and reference exonic parts for binary splits
+Besides the exonic distinct sets written to the row, the intronic distinct sets
+are computed by the same rule on the routes' intron ("in") edges: introns on
+every route of one side and on no route of the other, as
+\code{label_bipartition_introns} defines the junction set. They are not written
+to the row; \code{has_distinct} reports whether either side has an exonic or an
+intronic distinct set, so a split whose sides differ only by junctions is kept.
 }
 \examples{
 \dontrun{
