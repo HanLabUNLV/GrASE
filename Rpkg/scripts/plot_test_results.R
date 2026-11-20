@@ -8,7 +8,11 @@
 ## call rule (the `significant` column exontest.R wrote, never re-derived here).
 ##
 ## Usage: Rscript scripts/plot_test_results.R --gene ENSG... --event 11 \
-##          --kind terminal --analysis <dir> --conditions A,B,C --out fig.pdf
+##          --kind terminal --analysis <dir> --graphmldir <dir> --conditions A,B,C --out fig.pdf
+##
+## Inputs are the exontest.R results under --analysis and the gene's splice graph
+## under --graphmldir. Exonic part coordinates and the strand come from the graph's
+## ex_part edges; the bipartitions in panels B and C come from the results rows.
 ##
 ## TERMINUS MODE (--kind terminal --outward <outward_walk workdir>). A terminal call
 ## says the side's distinct set D changes; it does not say which annotated start or
@@ -37,9 +41,7 @@ opt_list <- list(
               help = "model in the results file name, as exontest.R --model [default %default]"),
   make_option("--conditions", type = "character"),
   make_option("--comparison", type = "character", default = NULL),
-  make_option("--gffdir", type = "character", default = "~/DICE/dexseq.gff"),
-  make_option("--bipdir", type = "character", default = "~/DICE/bipartition.filtered"),
-  make_option("--graphmldir", type = "character", default = "~/DICE/graphml.v34"),
+  make_option("--graphmldir", type = "character", default = "~/DICE/graphml"),
   make_option("--sjcounts", type = "character", default = ""),
   make_option("--stack_kinds", type = "character", default = "internal,terminal"),
   make_option("--max_stack", type = "integer", default = 0L),
@@ -95,42 +97,39 @@ read_tsv <- function(p) read.table(p, header = TRUE, sep = "\t", quote = "",
                                    stringsAsFactors = FALSE, comment.char = "",
                                    colClasses = "character")
 
-## graph: node name -> genomic position, and the COARSE edge type per node pair.
-## An ex_part edge must never overwrite a coarse ex/in/R/L edge, because vertex
-## path hops are always coarse.
-read_graph_attrs <- function(path) {
-  g <- igraph::read_graph(path, format = "graphml")
+## graph: node name -> genomic position, the COARSE edge type per node pair, and
+## the exonic parts. An ex_part edge must never overwrite a coarse ex/in/R/L edge,
+## because vertex path hops are always coarse. Vertex positions are boundaries, so
+## a part runs from the lower endpoint position to the higher one minus 1.
+read_graph_attrs <- function(g) {
   nm <- igraph::V(g)$name; ps <- igraph::V(g)$position
   pos <- setNames(as.list(ps), nm)
   el <- igraph::as_edgelist(g, names = TRUE)
   et <- igraph::E(g)$ex_or_in
   keep <- et != "ex_part"
   edge_type <- setNames(as.list(et[keep]), paste(el[keep, 1], el[keep, 2], sep = "\r"))
-  list(pos = pos, edge_type = edge_type)
+  k <- which(et == "ex_part")
+  p1 <- as.integer(unlist(pos[el[k, 1]])); p2 <- as.integer(unlist(pos[el[k, 2]]))
+  coords <- setNames(lapply(seq_along(k), function(i) c(min(p1[i], p2[i]), max(p1[i], p2[i]) - 1L)),
+                     paste0("E", igraph::E(g)$dexseq_fragment[k]))
+  list(pos = pos, edge_type = edge_type, coords = coords)
 }
 etype <- function(ET, u, v) { k <- paste(u, v, sep = "\r"); if (!is.null(ET[[k]])) ET[[k]] else NA_character_ }
 
-gffdir <- path.expand(a$gffdir); bipdir <- path.expand(a$bipdir)
 graphmldir <- path.expand(a$graphmldir); andir <- path.expand(a$analysis)
 base_id <- sub("\\..*$", "", a$gene)
 
-hits <- sort(Sys.glob(file.path(gffdir, paste0(base_id, "*.dexseq.gff"))))
-if (!length(hits)) stop("no dexseq gff for ", base_id, " in ", gffdir)
-gff <- hits[1]; gv <- sub("\\.dexseq.*$", "", basename(gff))
-
-## exonic part coordinates and strand
-gl <- readLines(gff); gl <- gl[grepl("\texonic_part\t", gl)]
-f <- strsplit(gl, "\t")
-pn <- vapply(f, function(x) sub('".*$', "", sub('^.*exonic_part_number "', "", x[9])), "")
-coords <- setNames(lapply(f, function(x) as.integer(c(x[4], x[5]))), paste0("E", pn))
-strand <- f[[1]][7]
+hits <- sort(Sys.glob(file.path(graphmldir, paste0(base_id, ".*graphml"))))
+if (!length(hits)) stop("no graphml for ", base_id, " in ", graphmldir)
+gr <- igraph::read_graph(hits[1], format = "graphml")
+gv <- sub("\\.graphml$", "", basename(hits[1]))
+G <- read_graph_attrs(gr)
+coords <- G$coords
+if (!length(coords)) stop("no ex_part edges in ", hits[1])
+strand <- igraph::graph_attr(gr, "strand")
 names_e <- names(coords)[order(as.integer(sub("^E", "", names(coords))))]
 idx <- setNames(seq_along(names_e) - 1L, names_e)
 conds <- trimws(strsplit(a$conditions, ",")[[1]])
-
-G <- list(pos = list(), edge_type = list())
-gpath <- file.path(graphmldir, paste0(gv, ".graphml"))
-if (file.exists(gpath)) G <- read_graph_attrs(gpath)
 
 boundary_x <- new.env(parent = emptyenv())
 for (e in names_e) {
@@ -256,7 +255,7 @@ perbase <- !isTRUE(a$raw)
 pb_used <- FALSE
 ## exontest.R already wrote the lengths behind per-base pi: len_D and len_S are
 ## EFFECTIVE lengths (each part's L + read_length - 1, summed over the set), so take
-## them from the row rather than re-measuring the GFF here -- re-measuring gives plain
+## them from the row rather than re-measuring the graph here -- re-measuring gives plain
 ## lengths and the panel then disagrees with the call it is drawing. NA for a junction
 ## side is carried through as before, and only a results file written without the
 ## columns falls back to measuring.
@@ -268,7 +267,7 @@ if (all(c("len_D", "len_S") %in% names(focal))) {
 if (perbase && (is.na(len_D) || is.na(len_S))) {
   message("  per-base pi undefined: ",
           if (is.na(len_D)) "distinct set is a junction (no length)"
-          else "reference set did not resolve against the GFF",
+          else "reference set did not resolve against the graph",
           "; plotting the raw ratio")
   perbase <- FALSE
 }
@@ -376,20 +375,23 @@ bkey <- function(s, d1, d2)
   paste(paste(sort(parts(s)), collapse = "|"), paste(sort(parts(d1)), collapse = "|"),
         paste(sort(parts(d2)), collapse = "|"), sep = "~")
 focal_key <- bkey(S, D1, D2)
-## only bipartitions with a row in the results are drawn: the bipartition file
-## also holds rows exontest.R never tested
+## the bipartitions are read from the results rows, keeping only those with a
+## p-value in at least one contrast: the results also hold rows for sides that
+## were not tested (no reads in a group, or under the read floor)
 read_bips <- function(kinds) {
   out <- NULL
   for (k in kinds) {
-    p <- file.path(bipdir, sprintf("%s.bipartition.%s.txt", gv, k))
-    if (!file.exists(p)) next
-    tb <- read_tsv(p); tb$`_kind` <- k
     rs <- all_rows[[k]]
-    tested <- if (is.null(rs)) character(0) else unique(mapply(bkey, rs$ref_ex_part, rs$setdiff1, rs$setdiff2))
-    keep <- mapply(bkey, tb$ref_ex_part, tb$setdiff1, tb$setdiff2) %in% tested
-    if (any(!keep)) message(sprintf("  panel B: %d of %d %s bipartitions have no test results, not drawn",
-                                    sum(!keep), nrow(tb), k))
-    tb <- tb[keep, , drop = FALSE]
+    if (is.null(rs) || !nrow(rs)) next
+    keys <- mapply(bkey, rs$ref_ex_part, rs$setdiff1, rs$setdiff2)
+    tested <- unique(keys[!is.na(num(rs$p.value))])
+    n_all <- length(unique(keys))
+    if (n_all > length(tested)) message(sprintf("  panel B: %d of %d %s bipartitions have no p-value in any contrast, not drawn",
+                                                n_all - length(tested), n_all, k))
+    tb <- rs[!duplicated(keys) & keys %in% tested,
+             c("source", "sink", "ref_ex_part", "setdiff1", "setdiff2",
+               "transcripts1", "transcripts2", "path1", "path2"), drop = FALSE]
+    tb$`_kind` <- k
     out <- if (is.null(out)) tb else rbind(out, tb)
   }
   out

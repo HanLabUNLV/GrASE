@@ -283,7 +283,6 @@ Rscript Rpkg/scripts/plot_test_results.R \
     --gene ENSG00000198218 --event 4 --kind terminal --unit exsj \
     --analysis ${WD}/grase_covid_exsj \
     --sjcounts ${WD}/bipartition.exsj.terminal.counts \
-    --gffdir ${WD}/dexseq.gff --bipdir ${WD}/bipartition.filtered \
     --graphmldir ${WD}/graphml \
     --conditions Control,COVID19 \
     --symbol QRICH1 \

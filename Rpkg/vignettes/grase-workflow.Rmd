@@ -674,7 +674,6 @@ Rscript scripts/plot_test_results.R \
     --gene ENSG00000198218 --event 4 --kind terminal --unit exsj \
     --analysis ${WD}/grase_covid_exsj \
     --sjcounts ${WD}/bipartition.exsj.terminal.counts \
-    --gffdir ${WD}/dexseq.gff --bipdir ${WD}/bipartition.filtered \
     --graphmldir ${WD}/graphml \
     --conditions Control,COVID19 \
     --symbol QRICH1 \
@@ -685,6 +684,7 @@ Rscript scripts/plot_test_results.R \
 |--------|-------------|
 | `--gene`, `--event`, `--kind` | The bipartition to draw; `--kind` is `internal` or `terminal` |
 | `--analysis` | Directory of `exontest.R` results |
+| `--graphmldir` | Per-gene splice graphs; exonic part coordinates and strand come from here |
 | `--sjcounts` | Merged count directory, needed when a side is junction-sourced |
 | `--conditions` | Comma-separated, in the order to plot |
 | `--comparison` | `diff1_vs_ref` or `diff2_vs_ref`; by default the called side |
