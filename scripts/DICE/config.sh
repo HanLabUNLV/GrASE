@@ -16,6 +16,7 @@ PY=${PY:-/mnt/data1/home/jaquino/miniconda3/bin/python3}
 # Filtered bipartitions (stage 20 output, per gene internal/terminal) and the
 # per-gene splice graphs, under $DICE
 SPLIT_DIR=${SPLIT_DIR:-bipartition.filtered}
+COUNT_DIR=${COUNT_DIR:-counts_sig}          # stage 30: signature counts of every side, all 13 cell types
 GRAPHML_DIR=${GRAPHML_DIR:-graphml}
 # Per-gene DEXSeq GFFs of the v34 annotation (outward walk part geometry)
 DEXSEQ_GFF_DIR=${DEXSEQ_GFF_DIR:-$DICE/dexseq.gff}

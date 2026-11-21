@@ -16,7 +16,9 @@
 #   <bam_list>  one BAM per line, "<path>" or "<path>\t<sample>". The sample
 #               name must match the `sample` column of the exonic counts; the
 #               monocyte BAMs need it (MONO_CLASSIC_* vs MONO.CLASSIC_*).
-#   output      <outdir>/<sample>_counts.txt; existing ones are skipped
+#   output      <outdir>/<sample>_counts.txt; existing ones are skipped. With
+#               DEXSEQ_COUNT=<grase>/inst/python/dexseq_count_sig.py also
+#               <sample>_counts.txt.sig, the read signatures scripts/sigcnt.py counts
 set -eu
 . "$(dirname "$0")/config.sh"
 cd "$DICE"
@@ -123,10 +125,10 @@ count () {
     bam=${spec%%$'\t'*}
     if [ "$spec" != "$bam" ]; then s=${spec##*$'\t'}; else s=$(basename "$bam" .bam); fi
     local out="$outdir/${s}_counts.txt"
-    [ -s "$out" ] && return 0                   # resumable
-    [ -s "$bam.bai" ] || samtools index "$bam"
+    [ -s "$out" ] && return 0                   # resumable; the counter streams the BAM, no index needed
     "$py" "$dc" --format bam --paired no --stranded reverse --order pos -a 10 \
         "$gff" "$bam" "$out.part" || { echo "FAILED: $s" >&2; rm -f "$out.part"; return 1; }
+    [ ! -e "$out.part.sig" ] || mv "$out.part.sig" "$out.sig"   # dexseq_count_sig.py's signatures
     mv "$out.part" "$out"
   }
   export -f one
