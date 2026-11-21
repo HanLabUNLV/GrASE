@@ -39,7 +39,8 @@ map_mats2dex <- function(file_path, event_type) {
 }
 
 # Function to get all necessary results files
-get_results_files <- function(map_dir, out_dir, rmats_directory, dexseq_results) {
+## rMATS events failing the count/PSI gate get FDR 1 (grase::rmats_gated_fdr); they stay in the tables
+get_results_files <- function(map_dir, out_dir, rmats_directory, dexseq_results, rmats_min_reads = 10, rmats_min_psi = 0.05) {
   results <- list()
 
   # Load rMATS results if specified
@@ -48,15 +49,19 @@ get_results_files <- function(map_dir, out_dir, rmats_directory, dexseq_results)
 
   JCEC <- readr::read_tsv(rmats_files[str_ends(rmats_files, "A3SS.MATS.JCEC.txt")], col_types = cols(.default = "c")) 
   colnames(JCEC)[1] <- "ID"
+  JCEC$FDR <- as.character(grase::rmats_gated_fdr(JCEC, rmats_min_reads, rmats_min_psi))
   results$A3SS_JCEC <- JCEC %>% mutate(ID = paste("A3SS", ID, sep = "_"))
   JCEC <- readr::read_tsv(rmats_files[str_ends(rmats_files, "A5SS.MATS.JCEC.txt")], col_types = cols(.default = "c")) 
   colnames(JCEC)[1] <- "ID"
+  JCEC$FDR <- as.character(grase::rmats_gated_fdr(JCEC, rmats_min_reads, rmats_min_psi))
   results$A5SS_JCEC <- JCEC %>% mutate(ID = paste("A5SS", ID, sep = "_"))
   JCEC <- readr::read_tsv(rmats_files[str_ends(rmats_files, "SE.MATS.JCEC.txt")], col_types = cols(.default = "c")) 
   colnames(JCEC)[1] <- "ID"
+  JCEC$FDR <- as.character(grase::rmats_gated_fdr(JCEC, rmats_min_reads, rmats_min_psi))
   results$SE_JCEC <- JCEC %>% mutate(ID = paste("SE", ID, sep = "_"))
   JCEC <- readr::read_tsv(rmats_files[str_ends(rmats_files, "RI.MATS.JCEC.txt")], col_types = cols(.default = "c")) 
   colnames(JCEC)[1] <- "ID"
+  JCEC$FDR <- as.character(grase::rmats_gated_fdr(JCEC, rmats_min_reads, rmats_min_psi))
   results$RI_JCEC <- JCEC %>% mutate(ID = paste("RI", ID, sep = "_"))
   
   results$output_dir <- fs::path(out_dir)
@@ -155,9 +160,10 @@ filter_df_rMATS_minpval <- function(input_df, type, level, ...) {
 
 
 ## pval, min_dpsi and min_l2fc are read as .env$ in the filters: a satuRn table has its own pval column
-integrate_rMATS_DEXSeq_results <- function(map_dir, out_dir, rmats_directory, dexseq_results, pval = 0.05, min_dpsi = 0.1, min_l2fc = 0.5) {
+integrate_rMATS_DEXSeq_results <- function(map_dir, out_dir, rmats_directory, dexseq_results, pval = 0.05, min_dpsi = 0.1, min_l2fc = 0.5,
+                                           rmats_min_reads = 10, rmats_min_psi = 0.05) {
 
-  files <- get_results_files(map_dir, out_dir, rmats_directory, dexseq_results) 
+  files <- get_results_files(map_dir, out_dir, rmats_directory, dexseq_results, rmats_min_reads, rmats_min_psi)
   
   # Create output directories if they don't exist
   fs::dir_create(files$output_dir, "SplicingEvents", recurse = TRUE)
@@ -408,9 +414,14 @@ if (sys.nframe() == 0L) {
     make_option("--min_l2fc", type = "double", default = 0.5,
                 help = "DEXSeq |log2 fold change| (satuRn |estimate|) a call needs [default: %default]"),
     make_option("--pval", type = "double", default = 0.05,
-                help = "cutoff on the DEXSeq padj and the rMATS FDR [default: %default]"))))
+                help = "cutoff on the DEXSeq padj and the rMATS FDR [default: %default]"),
+    make_option("--rmats_min_reads", type = "double", default = 10,
+                help = "rMATS mean IJC+SJC each group needs, else FDR is set to 1; 0 = off [default: %default]"),
+    make_option("--rmats_min_psi", type = "double", default = 0.05,
+                help = "rMATS mean PSI of each group within [x, 1-x], else FDR is set to 1; 0 = off [default: %default]"))))
   for (r in c("map_dir", "outdir", "rmats_dir", "exon_results"))
     if (is.null(opt[[r]])) stop("--", r, " is required")
   integrate_rMATS_DEXSeq_results(opt$map_dir, opt$outdir,
-                                 opt$rmats_dir, opt$exon_results, opt$pval, opt$min_dpsi, opt$min_l2fc)
+                                 opt$rmats_dir, opt$exon_results, opt$pval, opt$min_dpsi, opt$min_l2fc,
+                                 opt$rmats_min_reads, opt$rmats_min_psi)
 }

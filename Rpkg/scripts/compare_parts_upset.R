@@ -19,7 +19,8 @@
 ##                   pval as its p-value threshold (--min_dpi, --min_dpi_sj, --min_effect, --min_reads). A
 ##                   junction-sourced side has no exonic part.
 ##   rMATS   called  in the distinct set of an event matched to a bipartition, with
-##                   FDR < pval and |IncLevelDifference| >= --min_dpsi
+##                   FDR < pval and |IncLevelDifference| >= --min_dpsi; FDR is set to 1 for an event
+##                   failing the count/PSI gate (grase::rmats_gated_fdr, --rmats_min_reads, --rmats_min_psi)
 ## A part is tested when the tool gave it a p-value: DEXSeq a padj, GrASE a bipartition with a p-value
 ## whose distinct sets hold it, rMATS a matched event whose distinct set holds it.
 ##
@@ -63,6 +64,8 @@ o <- parse_args(OptionParser(option_list = list(
   make_option("--etypes",    type = "character", default = "SE,A3SS,A5SS,RI", help = "rMATS event types [%default]"),
   make_option("--pval",      type = "double", default = 0.05, help = "adjusted p cutoff for all three tools [%default]"),
   make_option("--min_dpsi",  type = "double", default = 0.1,  help = "rMATS |IncLevelDifference| [%default]"),
+  make_option("--rmats_min_reads", type = "double", default = 10, help = "rMATS mean IJC+SJC per group, else FDR 1; 0 = off [%default]"),
+  make_option("--rmats_min_psi",   type = "double", default = 0.05, help = "rMATS mean PSI per group in [x, 1-x], else FDR 1; 0 = off [%default]"),
   make_option("--min_l2fc",  type = "double", default = 0.5,  help = "DEXSeq |log2 fold change| [%default]"),
   make_option("--min_dpi",   type = "double", default = 0, help = "GrASE |delta_pi|, per-base where defined [%default]"),
   make_option("--min_effect", type = "double", default = 0.4, help = "GrASE |effect_size| (log odds ratio) [%default]"),
@@ -89,7 +92,8 @@ font_used <- systemfonts::match_fonts(o$font)$path
 if (!grepl(o$font, basename(font_used), ignore.case = TRUE))
   warning(sprintf("font %s is not installed; plots use %s", o$font, basename(font_used)), call. = FALSE)
 has_dex <- !is.null(o$dexseq)            # (with --draw, set from the tables below)
-if (is.null(o$draw)) cat(sprintf("pval %g | rMATS |dPSI| >= %g | %sGrASE reads >= %g\n", o$pval, o$min_dpsi,
+if (is.null(o$draw)) cat(sprintf("pval %g | rMATS |dPSI| >= %g, reads >= %g, PSI in [%g, %g] | %sGrASE reads >= %g\n",
+                                 o$pval, o$min_dpsi, o$rmats_min_reads, o$rmats_min_psi, 1 - o$rmats_min_psi,
                                  if (has_dex) sprintf("DEXSeq |log2FC| >= %g | ", o$min_l2fc) else "no DEXSeq | ", o$min_reads))
 
 cat_of <- function(D) apply(as.matrix(D), 1, function(r) { x <- names(D)[r]; if (length(x)) paste(x, collapse = "+") else "none" })
@@ -161,7 +165,8 @@ if (is.null(o$draw)) {
 
   ## rMATS: parts of the events' distinct sets, over every mapping given (the same map may be given per class)
   rt <- unique(rbindlist(lapply(unique(mdirs), function(md) rbindlist(lapply(et, function(t) {
-    m <- fread(file.path(o$rmats_dir, paste0(t, ".MATS.JCEC.txt")), select = c("ID", "FDR", "IncLevelDifference"))
+    m <- fread(file.path(o$rmats_dir, paste0(t, ".MATS.JCEC.txt")))
+    m[, FDR := rmats_gated_fdr(m, o$rmats_min_reads, o$rmats_min_psi)]
     m[, tag := paste0(t, "_", ID)]
     x <- fread(file.path(md, sprintf("combined.dexseq.%s.mapped.txt", t)), colClasses = "character")
     setnames(x, 1:3, c("GeneID", "DexseqFragment", "ids"))

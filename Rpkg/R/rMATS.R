@@ -308,3 +308,45 @@ match_rmats_bipartitions <- function(ge, bip, etype, ev) {
   }
   structure(out, ncand = ncand, incl_side = incl_side)
 }
+
+#' Force the FDR of rMATS events that fail the count/PSI gate to 1
+#'
+#' The gate the simulation benchmark applies to rMATS: the group means of
+#' IJC+SJC are both at least \code{min_reads}, and the group means of
+#' IncLevel are both within [\code{min_psi}, 1 - \code{min_psi}]. An event
+#' failing it is a negative call, not a dropped event: its FDR becomes 1 and
+#' it stays in the table. Group means skip the NA entries of the
+#' comma-separated per-sample columns.
+#'
+#' @param d a table read from a <type>.MATS.JCEC.txt (or JC) file, with FDR,
+#'   IJC_SAMPLE_1/2, SJC_SAMPLE_1/2 and IncLevel1/2
+#' @param min_reads read floor per group; 0 turns the read gate off
+#' @param min_psi PSI bound; 0 turns the PSI gate off
+#' @return the FDR column, numeric, with failing events set to 1
+#' @export
+#' @examples
+#' d <- data.frame(FDR = c(0.001, 0.001), IJC_SAMPLE_1 = c("20,30", "2,3"),
+#'                 SJC_SAMPLE_1 = c("5,5", "1,0"), IJC_SAMPLE_2 = c("10,10", "1,1"),
+#'                 SJC_SAMPLE_2 = c("10,12", "0,1"), IncLevel1 = c("0.6,0.7", "0.8,NA"),
+#'                 IncLevel2 = c("0.3,0.3", "0.5,0.5"))
+#' grase::rmats_gated_fdr(d)   # 0.001 1
+rmats_gated_fdr <- function(d, min_reads = 10, min_psi = 0.05) {
+  csv_mean <- function(x) vapply(strsplit(as.character(x), ",", fixed = TRUE), function(v) {
+    v <- suppressWarnings(as.numeric(v))
+    if (all(is.na(v))) NA_real_ else mean(v, na.rm = TRUE)
+  }, numeric(1))
+  fdr <- suppressWarnings(as.numeric(d$FDR))
+  ok <- rep(TRUE, length(fdr))
+  if (min_reads > 0) {
+    c1 <- csv_mean(d$IJC_SAMPLE_1) + csv_mean(d$SJC_SAMPLE_1)
+    c2 <- csv_mean(d$IJC_SAMPLE_2) + csv_mean(d$SJC_SAMPLE_2)
+    ok <- ok & !is.na(c1) & c1 >= min_reads & !is.na(c2) & c2 >= min_reads
+  }
+  if (min_psi > 0) {
+    p1 <- csv_mean(d$IncLevel1); p2 <- csv_mean(d$IncLevel2)
+    ok <- ok & !is.na(p1) & p1 >= min_psi & p1 <= 1 - min_psi &
+      !is.na(p2) & p2 >= min_psi & p2 <= 1 - min_psi
+  }
+  fdr[!ok] <- 1
+  fdr
+}

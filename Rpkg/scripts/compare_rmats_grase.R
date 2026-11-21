@@ -32,6 +32,10 @@ option_list <- list(
               help = "rMATS |IncLevelDifference| a call needs [default= %default]"),
   make_option("--min_reads", type = "double", default = 10,
               help = "GrASE reads on the distinct set in a group [default= %default]"),
+  make_option("--rmats_min_reads", type = "double", default = 10,
+              help = "rMATS mean IJC+SJC each group needs, else FDR is set to 1; 0 = off [default= %default]"),
+  make_option("--rmats_min_psi", type = "double", default = 0.05,
+              help = "rMATS mean PSI of each group within [x, 1-x], else FDR is set to 1; 0 = off [default= %default]"),
   make_option("--pval", type = "double", default = 0.05,
               help = "cutoff on the adjusted p of GrASE (is_significant) and rMATS FDR [default= %default]"),
   make_option("--rmats_sample1", type = "character", default = NULL,
@@ -147,6 +151,7 @@ for (etype in event_types) {
   # Load rMATS
   rmats_dt <- fread(rmats_path)
   names(rmats_dt) <- make.unique(names(rmats_dt))
+  rmats_dt[, FDR := rmats_gated_fdr(rmats_dt, opt$rmats_min_reads, opt$rmats_min_psi)]
   
   # rMATS ID column is usually "ID"
   rmats_clean <- rmats_dt %>%
@@ -205,7 +210,8 @@ if (!eff_col %in% colnames(full_data)) {
 }
 
 # Create classification BEFORE correlations so we can filter.
-# Calls: GrASE is_significant() at --pval, rMATS FDR < --pval with |IncLevelDifference| >= --min_dpsi; correlations and plots use the unadjusted ones.
+# Calls: GrASE is_significant() at --pval, rMATS FDR < --pval with |IncLevelDifference| >= --min_dpsi,
+# FDR set to 1 by rmats_gated_fdr() when the event fails the count/PSI gate; correlations and plots use the unadjusted ones.
 SIG_CUTOFF <- opt$pval
 full_data <- full_data %>%
   mutate(
@@ -289,7 +295,8 @@ print(stats_filtered)
 rm_all <- rbindlist(lapply(event_types, function(et) {
   f <- file.path(rmats_dir, paste0(et, ".MATS.JCEC.txt"))
   if (!file.exists(f)) return(NULL)
-  x <- fread(f, select = c("ID", "FDR", "IncLevelDifference")); x[, tag := paste0(et, "_", ID)]
+  x <- fread(f); x[, FDR := rmats_gated_fdr(x, opt$rmats_min_reads, opt$rmats_min_psi)]
+  x <- x[, .(ID, FDR, IncLevelDifference)]; x[, tag := paste0(et, "_", ID)]
   x[, call := !is.na(FDR) & FDR < opt$pval & abs(IncLevelDifference) >= opt$min_dpsi]; x
 }))
 matched_tag <- unique(paste0(full_data$rMATS_EventType, "_", full_data$ID))
