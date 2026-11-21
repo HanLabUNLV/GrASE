@@ -11,6 +11,6 @@ G=$WD/grase_covid_exsj/test_bipartition.exsj
 OUT=$WD/comparison/volcano
 mkdir -p "$OUT"
 Rscript $R/plot_volcano.R --grase "$G.internal_betabinom_EBmap.annotated.txt,$G.terminal_betabinom_EBmap.annotated.txt" \
-  --labels internal,terminal --contrast "${CTR/:/_vs_}" --gff_dir "$WD/dexseq.gff" --read_length "$READ_LEN" --pval "$PVAL" \
+  --labels internal,terminal --contrast "${CTR/:/_vs_}" --gff_dir "$WD/dexseq.gff" --read_length "$READ_LEN" --count_per_part --pval "$PVAL" \
   --out "$OUT/volcano" &> "$OUT/volcano.log"
 echo "=== $OUT/volcano.png"

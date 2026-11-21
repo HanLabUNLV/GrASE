@@ -19,7 +19,7 @@ without a fixed event taxonomy.
 
 **Statistical models.** Differential path usage is tested with a beta-binomial model (via glmmTMB), with the per-test overdispersion (phi) regularised by Empirical Bayes shrinkage. Two variants are recommended and differ only in how the moderated phi is obtained: `betabinom_EBapprox` (closed form) and `betabinom_EBmap` (MAP).
 
-**Workflow.** The pipeline goes from per-gene splicing graphs (GraphML) -> bubble enumeration -> event-type filtering -> DEXSeq count aggregation -> optional junction substitution where a distinct set is empty -> statistical testing. The DEXSeq helper scripts for preparing the annotation and counting reads are bundled, so the only external input is aligned BAM files. Results can be compared against rMATS or DEXSeq output.
+**Workflow.** The pipeline goes from per-gene splicing graphs (GraphML) -> bubble enumeration -> event-type filtering -> read counting, each read once per set from per-read signatures, with a side that has no distinct exonic part counted on its distinct introns -> statistical testing. The DEXSeq helper scripts for preparing the annotation and counting reads, and the extended counter that writes the read signatures, are bundled, so the only external input is aligned BAM files. Results can be compared against rMATS or DEXSeq output.
 
 * Container used for running GrASE can be found here: [GrASE Container](https://drive.google.com/drive/folders/10H6NxN0T1cP0O68VwhCh55KVVb08Iqzb)
 
@@ -49,8 +49,8 @@ Python packages (only for the bundled DEXSeq helpers):
 * htseq   (0.13.5)
 
 Optional:
-* STAR  (2.7.10b)  alignment, and the `SJ.out.tab` files Stage 2b reads
-* rMATS (4.1.1)    only for the rMATS comparison scripts
+* STAR  (2.7.10b)  alignment; the per-part alternative to Stage 2 also reads its `SJ.out.tab` files
+* rMATS (4.2.0)    only for the rMATS comparison scripts
 * samtools        only for the outward walk with `--subset_called`
 
 ## Installation
@@ -77,7 +77,7 @@ GrASE starts from **coordinate-sorted BAM files**, one per sample, under
 `${WD}/bam/<condition>/`. Align however you prefer; the published results used
 two-pass STAR, and the alignment scripts are in the
 [GrASE_simulation](https://github.com/HanLabUNLV/GrASE_simulation) repository
-(`STAR/`). If you plan to run Stage 2b, keep STAR's `SJ.out.tab` files too.
+(`STAR/`). The per-part alternative to Stage 2 also needs STAR's `SJ.out.tab` files.
 Align against the same GENCODE release you will take the annotation files from
 in Stage 1.
 
@@ -124,8 +124,10 @@ made against a different annotation will not join: the exonic part numbers
 meaningful only relative to that GFF.
 
 ```bash
-# Resolve the bundled counter.
-DEXSEQ_COUNT=$(Rscript -e 'cat(system.file("python","dexseq_count.py",package="grase"))')
+# Resolve the bundled counter. dexseq_count_sig.py is dexseq_count.py with one
+# addition: next to the per-part counts it writes <out>.sig, each read's exonic
+# parts and the introns it crosses, from which Stage 2 counts each read once per set.
+DEXSEQ_COUNT_SIG=$(Rscript -e 'cat(system.file("python","dexseq_count_sig.py",package="grase"))')
 
 # Count reads on exonic parts, one file per sample, grouped by condition.
 # Flags are protocol-specific and fail silently if wrong: --paired no for
@@ -134,7 +136,7 @@ for cond in group1 group2; do
     mkdir -p ${WD}/DEXSeq/count_files/${cond}
     for bam in ${WD}/bam/${cond}/*.bam; do
         s=$(basename "${bam%.bam}")
-        python $DEXSEQ_COUNT --format bam --order pos \
+        python $DEXSEQ_COUNT_SIG --format bam --order pos \
             --paired yes --stranded reverse -a 10 \
             ${WD}/ref/gencode.dexseq.bygene.gff "$bam" \
             ${WD}/DEXSeq/count_files/${cond}/${s}_counts.txt
@@ -148,7 +150,7 @@ Two checks before Stage 2:
   `grep -c "^ENSG00000000003" <sample>_counts.txt` against the `exonic_part`
   lines for that gene in the GFF. A mismatch means the annotations differ.
 - Condition subdirectory names must match what you pass to `--cond1`/`--cond2`
-  or `--conditions`; `exoncnt.R` finds samples by those directory names.
+  or `--conditions`; the sample table of Stage 2 takes each sample's group from them.
 
 Expected layout after Stage 1:
 
@@ -164,7 +166,46 @@ Expected layout after Stage 1:
     `-- group2/   sample*_counts.txt
 ```
 
-### Stage 2. Aggregate DEXSeq read counts onto split exonic parts
+### Stage 2. Count the reads on each side
+
+Each side's distinct set and the shared reference are counted from the read
+signatures, each read once per set; summing per-part counts would count a read once
+for every part of a set it overlaps. A side with no distinct exonic part is counted on
+its distinct introns, the introns every route of the side crosses and no route of the
+other side does. A read that overlaps exonic parts of two genes on the same strand is
+counted for neither.
+
+```bash
+# junction sets of every bipartition, from the splicing graphs
+Rscript Rpkg/scripts/bipartition_junction_sets.R --inputdir ${WD}/bipartition.filtered \
+    --graphmldir ${WD}/graphml --gff ${WD}/ref/gencode.dexseq.bygene.gff \
+    --type internal --output ${WD}/junctions.internal
+
+# samples.tsv: signature file, sample, group
+for cond in group1 group2; do
+  for f in ${WD}/DEXSeq/count_files/${cond}/*_counts.txt.sig; do
+    printf "%s\t%s\t%s\n" "$f" "$(basename "$f" _counts.txt.sig)" "$cond"
+  done
+done > ${WD}/samples.tsv
+
+python3 Rpkg/scripts/sigcnt.py split --samples ${WD}/samples.tsv --outdir ${WD}/sig_buckets
+python3 Rpkg/scripts/sigcnt.py count --buckets ${WD}/sig_buckets --samples ${WD}/samples.tsv \
+    --bipartdir ${WD}/bipartition.filtered --junctiondir ${WD}/junctions.internal \
+    --type internal --outdir ${WD}/bipartition.exsj.internal.counts
+python3 Rpkg/scripts/combine_exoncnt.py ${WD}/bipartition.exsj.internal.counts \
+    ${WD}/bipartition.exsj.internal.counts/bipartition.exsj.internal.cnt.combined.txt
+```
+
+For terminal events repeat with `--type terminal` and `.terminal` names. The output
+directory holds the per-gene counts, the per-gene event annotation and
+`measured_junctions.txt` (the junctions each junction-measured side was counted on),
+all of which Stage 3 reads.
+
+### Stage 2, per-part alternative: aggregate DEXSeq counts onto split exonic parts
+
+The route used before read signatures, kept for existing count files: per-part counts
+summed over each set, with STAR junction counts where a distinct set is empty. Stage 3
+then needs `--count_per_part`, so that its effective lengths match these counts.
 
 ```bash
 Rscript Rpkg/scripts/exoncnt.R \
@@ -178,7 +219,7 @@ Rscript Rpkg/scripts/exoncnt.R \
 
 This also writes the combined master file `bipartition.ex.internal.cnt.combined.txt` into the output directory, which Stage 3 reads. For terminal events use `-a terminal` (output `bipartition.ex.terminal.cnt.combined.txt`). For more than two groups, pass `--conditions=A,B,C` instead of `--cond1/--cond2`.
 
-### Stage 2b. Substitute junction counts where a distinct set is empty (optional)
+#### Per-part alternative, continued: junction counts where a distinct set is empty
 
 Some bipartitions have no exonic part exclusive to one side, so that side cannot
 be tested on exonic coverage. For those sides only, the distinct set becomes the
@@ -226,10 +267,10 @@ do not all list their columns in the same order.
 
 ```bash
 Rscript Rpkg/scripts/exontest.R \
-    --file=bipartition.ex.internal.cnt.combined.txt \
+    --file=bipartition.exsj.internal.cnt.combined.txt \
     --outdir=${WD}/bipartition.internal.test \
-    --countdir=${WD}/bipartition.ex.internal.counts/ \
-    --gff_dir=${WD}/dexseq.gff \
+    --countdir=${WD}/bipartition.exsj.internal.counts/ \
+    --gff_dir=${WD}/dexseq.gff --read_length=<read length> --sj_overhang=<aligner minimum overhang> \
     --splittype=bipartition \
     --phi=phi.internal.txt \
     --model=betabinom_EBapprox \
@@ -238,7 +279,7 @@ Rscript Rpkg/scripts/exontest.R \
 
 The dispersion is shrunk toward a loess trend of log(phi) on log(baseMean) (`--use_phi_loess`, on by default); `--no_phi_loess` shrinks toward the global median instead, the default before 2026-11-18.
 
-`--phi` names a file inside `--outdir`. If it does not exist, phi is estimated and written there; if it does, it is reused, so use a fresh name (or outdir) whenever the counts or the bipartitions change (`event` is the row number in the per-gene bipartition file, so rebuilt bipartitions renumber events). `--gff_dir` is optional and adds length-normalized (per-base) pi columns to the annotated output.
+`--phi` names a file inside `--outdir`. If it does not exist, phi is estimated and written there; if it does, it is reused, so use a fresh name (or outdir) whenever the counts or the bipartitions change (`event` is the row number in the per-gene bipartition file, so rebuilt bipartitions renumber events). `--gff_dir` is optional and adds length-normalized (per-base) pi columns to the annotated output, using effective lengths: `--read_length` for exonic sets, and `--sj_overhang`, the minimum overhang the aligner required on annotated junctions, for sides measured on junctions. With counts from the per-part alternative to Stage 2, add `--count_per_part`.
 
 Recommended models:
 
@@ -252,13 +293,13 @@ null false positives inflate several-fold), `wilcoxon` (most conservative on
 null genes, no effect-size estimate) and `dirmult_EBplugin` (for the
 benchmark-only multinomial split).
 
-Commonly used options (defaults in brackets): `--padj_threshold` [0.05], `--min_dpi` [0.05], `--dpi_gate` [both: raw and per-base |delta_pi| must both pass; or raw, perbase; which effect size `significant` uses, see the vignette], `--min_reads` [10], `--padj_method` [BH: plain Benjamini-Hochberg over all events of a contrast; `nested_BH` selects genes by BH on each gene's Simes p-value, then BH-adjusts tests within each selected gene and multiplies them by the number of genes tested over the number selected (Benjamini-Bogomolov)], `--mc_cores` [min(detectCores(), 8)], `--contrasts=B:A,C:A` for several pairwise contrasts (or `A+B+C` for an omnibus test, betabinom models only). Independent filtering is off by default; `--independent_filtering` turns on DESeq2-style filtering on `baseMean` before correction. Run `Rscript Rpkg/scripts/exontest.R --help` for the full list.
+Commonly used options (defaults in brackets): `--padj_threshold` [0.05], `--min_effect` [0.4: minimum |effect_size|, the log odds ratio], `--min_dpi` [0: no delta_pi gate], `--dpi_gate` [both: raw and per-base |delta_pi| must both pass; or raw, perbase; which effect size `significant` uses, see the vignette], `--min_reads` [10], `--padj_method` [BH: plain Benjamini-Hochberg over all events of a contrast; `nested_BH` selects genes by BH on each gene's Simes p-value, then BH-adjusts tests within each selected gene and multiplies them by the number of genes tested over the number selected (Benjamini-Bogomolov)], `--mc_cores` [min(detectCores(), 8)], `--contrasts=B:A,C:A` for several pairwise contrasts (or `A+B+C` for an omnibus test, betabinom models only). Independent filtering, DESeq2-style filtering on `baseMean` before correction, is on by default; `--no_independent_filtering` turns it off. Run `Rscript Rpkg/scripts/exontest.R --help` for the full list.
 
 ### Reading results
 
 ```r
 results <- read.table(
-    "${WD}/bipartition.internal.test/test_bipartition.ex.internal_betabinom_EBapprox.annotated.txt",
+    "${WD}/bipartition.internal.test/test_bipartition.exsj.internal_betabinom_EBapprox.annotated.txt",
     header = TRUE, sep = "\t"
 )
 sig <- results[results$significant %in% TRUE, ]
@@ -347,7 +388,9 @@ adjusted p-value (GrASE `padj`, rMATS `FDR`, DEXSeq `padj`, satuRn empirical
 FDR); pass the same value to all of them. Each tool's call also needs an effect
 size: GrASE is called by `grase::is_significant()` at `--pval` (so `lfc_diff_net`,
 the `|delta_pi|` gates `--min_dpi` and `--min_dpi_sj`, and `--min_reads` apply), rMATS
-by `--min_dpsi` (0.1, on `|IncLevelDifference|`) and DEXSeq or satuRn by `--min_l2fc`
+by `--min_dpsi` (0.1, on `|IncLevelDifference|`), after a count and PSI filter
+(`--rmats_min_reads` 10: mean IJC+SJC at least 10 in both groups; `--rmats_min_psi` 0.05:
+mean PSI within 0.05-0.95 in both groups; an event failing it is kept with FDR 1), and DEXSeq or satuRn by `--min_l2fc`
 (0.5, on the log2 fold change or estimate). A GrASE bipartition is called if either
 side is, and its exonic parts are those of both distinct sets. A part is tested when
 its tool gave it a p-value, and the exonic-part tables keep every part either tool
@@ -445,10 +488,10 @@ in `config.sh`; output goes to `GSE188847_bipartition/` next to the clone.
 |---|---|---|
 | 00 | `00_prepare_annotation.sh` | link the v34 graphs and filtered bipartitions; rename contigs to match the BAMs; build the counter's GFF |
 | 10 | `10_dexseq_count.sh` | exonic-part counts per sample |
-| 20 | `20_unpack_star_sj.sh` | STAR `SJ.out.tab` per sample |
-| 30 | `30_exoncnt.sh` | counts aggregated onto the bipartitions (Stage 2) |
-| 40 | `40_bipartition_sjcnt.sh` | split-read counts on the intronic edges (Stage 2b) |
-| 50 | `50_merge_exon_sj.sh` | junction counts where a distinct set is empty (Stage 2b) |
+| 20 | `20_unpack_star_sj.sh` | STAR `SJ.out.tab` per sample (per-part alternative) |
+| 30 | `30_exoncnt.sh` | counts aggregated onto the bipartitions (Stage 2, per-part alternative) |
+| 40 | `40_bipartition_sjcnt.sh` | split-read counts on the intronic edges (Stage 2, per-part alternative) |
+| 50 | `50_merge_exon_sj.sh` | junction counts where a distinct set is empty (Stage 2, per-part alternative) |
 | 60 | `60_exontest.sh` | test, internal and terminal (Stage 3) |
 | 70 | `70_outward_walk.sh` | locate the terminal calls (vignette Stage 5) |
 | 80 | `80_comparison.sh` | GrASE, rMATS and DEXSeq, pairwise and three-way (needs rMATS and DEXSeq run on the same annotation) |
