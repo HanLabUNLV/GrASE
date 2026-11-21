@@ -16,6 +16,8 @@ o <- parse_args(OptionParser(option_list = list(
   make_option("--results",        type = "character", help = "annotated exontest.R results, comma separated"),
   make_option("--gff_dir",        type = "character", help = "per-gene DEXSeq GFFs (<gene>.dexseq.gff or <gene>/<gene>.dexseq.gff)"),
   make_option("--read_length",    type = "integer", help = "read length of the counted reads (mate length if paired)"),
+  make_option("--count_per_part", action = "store_true", default = FALSE,
+              help = "counts are per-part DEXSeq counts summed over a set, as exontest.R --count_per_part"),
   make_option("--sj_overhang",    type = "integer", default = NULL,
               help = "aligner's minimum junction overhang (STAR --alignSJDBoverhangMin); junction-sourced sides get effective length read_length - 2*sj_overhang + 1"),
   make_option("--padj_threshold", type = "double", default = 0.05),
@@ -39,7 +41,8 @@ for (f in strsplit(o$results, ",")[[1]]) {
                       "pi_ref_perbase", "dpi_raw_pass", "dpi_perbase_pass"), names(d))
   if (length(drop)) d[, (drop) := NULL]
   old <- d$significant %in% c(TRUE, "TRUE")
-  d <- as.data.table(annotate_pi_perbase(as.data.frame(d), path.expand(o$gff_dir), o$read_length, o$sj_overhang))
+  d <- as.data.table(annotate_pi_perbase(as.data.frame(d), path.expand(o$gff_dir), o$read_length, o$sj_overhang,
+                                            count_per_part = o$count_per_part))
   d <- as.data.table(add_significant(as.data.frame(d), o$padj_threshold, o$delta, o$min_dpi, o$min_dpi_sj,
                                      o$min_reads, use_perbase = o$use_perbase, min_effect = o$min_effect))
   ## as exontest.R: the cutoff per row is min_dpi, or min_dpi_sj where the tested distinct set is empty

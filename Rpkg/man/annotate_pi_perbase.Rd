@@ -4,7 +4,13 @@
 \alias{annotate_pi_perbase}
 \title{Annotate a results table with per-base pi}
 \usage{
-annotate_pi_perbase(res, gff_dir, read_length = NULL, sj_overhang = NULL)
+annotate_pi_perbase(
+  res,
+  gff_dir,
+  read_length = NULL,
+  sj_overhang = NULL,
+  count_per_part = FALSE
+)
 }
 \arguments{
 \item{res}{Results data frame with pi_ctrl, pi_trt, ref_ex_part, setdiff1,
@@ -19,6 +25,11 @@ paired-end data). NULL uses plain part lengths, with a warning.}
 aligner required to count a read on an annotated junction (STAR
 \code{--alignSJDBoverhangMin}). NULL leaves junction-sourced sides NA.
 Needs \code{read_length}.}
+
+\item{count_per_part}{FALSE (default) when each read is counted once per set
+(counts from \code{scripts/sigcnt.py}): a set's effective length counts each
+read start position once over runs of adjacent parts. TRUE when a set's count
+is the sum of per-part DEXSeq counts: its effective length is summed part by part.}
 }
 \value{
 \code{res} with the new columns appended.

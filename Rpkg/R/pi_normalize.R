@@ -63,6 +63,44 @@ part_lengths_from_gff <- function(gff_path) {
 }
 
 
+#' Exonic part coordinates from a per-gene DEXSeq GFF
+#'
+#' @param gff_path Path to a \code{<gene>.dexseq.gff}.
+#' @return Data frame with part (integer), start and end, or zero rows.
+#' @export
+part_coords_from_gff <- function(gff_path) {
+  if (!file.exists(gff_path)) return(data.frame(part = integer(0), start = numeric(0), end = numeric(0)))
+  x <- utils::read.delim(gff_path, header = FALSE, comment.char = "#",
+                         quote = "", stringsAsFactors = FALSE)
+  x <- x[x$V3 == "exonic_part", , drop = FALSE]
+  data.frame(part = as.integer(sub('.*exonic_part_number "([^"]+)".*', "\\1", x$V9)),
+             start = x$V4, end = x$V5)
+}
+
+
+#' Effective length of a part set when each read is counted once
+#'
+#' A read overlapping several adjacent parts of the set is one read, so the set's
+#' effective length is the number of read start positions that overlap it: over
+#' each run of adjacent parts, the run length plus \code{extra}
+#' (\code{read_length - 1}). Matches counts from \code{scripts/sigcnt.py}.
+#'
+#' @param part_str Comma-separated part ids (e.g. "E002,E003").
+#' @param coords Output of \code{part_coords_from_gff}.
+#' @param extra \code{read_length - 1}, or 0 for plain lengths.
+#' @return Numeric length, or NA if no part resolves.
+#' @export
+distinct_feature_length <- function(part_str, coords, extra) {
+  if (is.na(part_str) || part_str %in% c("", "NA")) return(NA_real_)
+  p <- as.integer(sub("^E", "", trimws(strsplit(part_str, ",")[[1]])))
+  x <- coords[coords$part %in% p, , drop = FALSE]
+  if (!nrow(x)) return(NA_real_)
+  x <- x[order(x$start), , drop = FALSE]
+  run <- cumsum(c(1L, as.integer(x$start[-1] != x$end[-nrow(x)] + 1)))
+  sum(tapply(x$end - x$start + 1, run, sum) + extra)
+}
+
+
 #' Total length of a comma-separated exonic part set
 #'
 #' @param part_str e.g. "E019,E020,E021", or NA / "" / "NA" for an empty set.
@@ -121,6 +159,10 @@ gene_gff_path <- function(gff_dir, gene) {
 #' @param res Results data frame with pi_ctrl, pi_trt, ref_ex_part, setdiff1,
 #'   setdiff2, comparison, gene.
 #' @param gff_dir Directory of per-gene \code{<gene>.dexseq.gff} files.
+#' @param count_per_part FALSE (default) when each read is counted once per set
+#'   (counts from \code{scripts/sigcnt.py}): a set's effective length counts each
+#'   read start position once over runs of adjacent parts. TRUE when a set's count
+#'   is the sum of per-part DEXSeq counts: its effective length is summed part by part.
 #' @param read_length Read length of the counted reads (the mate length for
 #'   paired-end data). NULL uses plain part lengths, with a warning.
 #' @param sj_overhang Minimum overhang on each side of a junction that the
@@ -129,7 +171,8 @@ gene_gff_path <- function(gff_dir, gene) {
 #'   Needs \code{read_length}.
 #' @return \code{res} with the new columns appended.
 #' @export
-annotate_pi_perbase <- function(res, gff_dir, read_length = NULL, sj_overhang = NULL) {
+annotate_pi_perbase <- function(res, gff_dir, read_length = NULL, sj_overhang = NULL,
+                                count_per_part = FALSE) {
   if (is.null(read_length))
     warning("read_length not given: per-base pi uses plain part lengths, not effective lengths",
             call. = FALSE)
@@ -155,14 +198,21 @@ annotate_pi_perbase <- function(res, gff_dir, read_length = NULL, sj_overhang = 
     if (is.null(lens)) {
       p <- gene_gff_path(gff_dir, g)
       if (is.na(p)) unresolved <- c(unresolved, g)
-      lens <- if (is.na(p)) numeric(0) else part_lengths_from_gff(p) + extra
-      cache[[g]] <- lens
+      lens <- if (is.na(p)) NULL else if (!count_per_part) part_coords_from_gff(p)
+              else part_lengths_from_gff(p) + extra
+      cache[[g]] <- if (is.null(lens)) numeric(0) else lens
     }
-    if (!length(lens)) next
+    if (!NROW(lens)) next
     i <- rows_by_gene[[g]]
-    res$len_D[i] <- vapply(sd[i], feature_length, numeric(1), lens = lens)
-    res$len_S[i] <- vapply(res$ref_ex_part[i], feature_length, numeric(1),
-                           lens = lens)
+    if (!count_per_part) {
+      res$len_D[i] <- vapply(sd[i], distinct_feature_length, numeric(1), coords = lens, extra = extra)
+      res$len_S[i] <- vapply(res$ref_ex_part[i], distinct_feature_length, numeric(1),
+                             coords = lens, extra = extra)
+    } else {
+      res$len_D[i] <- vapply(sd[i], feature_length, numeric(1), lens = lens)
+      res$len_S[i] <- vapply(res$ref_ex_part[i], feature_length, numeric(1),
+                             lens = lens)
+    }
   }
   ## junction-sourced sides: empty exonic distinct set, as is_significant() reads it
   if (!is.null(sj_overhang)) {

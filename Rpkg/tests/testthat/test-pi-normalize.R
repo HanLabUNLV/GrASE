@@ -98,3 +98,30 @@ test_that("sj_overhang gives a junction-sourced side the effective length read_l
   expect_equal(r$pi_ctrl_perbase[2], pi_perbase(0.2, 49, 349))
   expect_error(annotate_pi_perbase(res, d, sj_overhang = 1), "needs read_length")
 })
+
+test_that("distinct_feature_length counts each read start once over adjacent parts", {
+  co <- data.frame(part = 1:3, start = c(100, 110, 200), end = c(109, 150, 249))
+  ## parts 1 and 2 are adjacent (100-150, 51 bp): one run, 51 + 49 start positions
+  expect_equal(distinct_feature_length("E001,E002", co, 49), 100)
+  ## parts 1 and 3 are separate runs: (10 + 49) + (50 + 49)
+  expect_equal(distinct_feature_length("E001,E003", co, 49), 158)
+  ## a single part is its own run, as in the per-part rule
+  expect_equal(distinct_feature_length("E003", co, 49), 99)
+  expect_true(is.na(distinct_feature_length("NA", co, 49)))
+})
+
+test_that("annotate_pi_perbase counts adjacent parts as one run unless count_per_part", {
+  d <- tempfile(); dir.create(d)
+  writeLines(c(
+    'chr1\tdexseq\texonic_part\t100\t109\t.\t+\t.\ttranscripts "t1"; exonic_part_number "001"; gene_id "G1"',
+    'chr1\tdexseq\texonic_part\t110\t150\t.\t+\t.\ttranscripts "t1"; exonic_part_number "002"; gene_id "G1"',
+    'chr1\tdexseq\texonic_part\t200\t249\t.\t+\t.\ttranscripts "t1"; exonic_part_number "003"; gene_id "G1"'),
+    file.path(d, "G1.dexseq.gff"))
+  res <- data.frame(gene = "G1", comparison = "diff1_vs_ref", setdiff1 = "E001,E002", setdiff2 = NA_character_,
+                    ref_ex_part = "E003", pi_ctrl = 0.2, pi_trt = 0.4, stringsAsFactors = FALSE)
+  r <- annotate_pi_perbase(res, d, read_length = 50)
+  expect_equal(r$len_D, 51 + 49)                       # one run of 51 bp
+  r <- annotate_pi_perbase(res, d, read_length = 50, count_per_part = TRUE)
+  expect_equal(r$len_D, (10 + 49) + (41 + 49))         # part by part
+  expect_equal(r$len_S, 50 + 49)
+})

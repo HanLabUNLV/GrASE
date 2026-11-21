@@ -504,9 +504,13 @@ every reported result uses:
 partitions or genes whose distinct and shared sets differ in length. With `--gff_dir`
 and `--read_length` the output also carries the length-normalized (per-base) columns
 `len_D`, `len_S`, `pi_ctrl_perbase`, `pi_trt_perbase` and `delta_pi_perbase`. The lengths
-are effective lengths: a read is counted in every exonic part it overlaps, so each part
-counts `L + read_length - 1` bases, summed over the set. A junction-sourced side has no
-length, so its per-base values are NA.
+are effective lengths, the number of positions a read can start at and still be counted
+on the set. By default the counts are read signatures (`scripts/sigcnt.py`), each read
+counted once per set, and each run of adjacent parts counts `L + read_length - 1` bases.
+With `--count_per_part` the counts are per-part DEXSeq counts summed over the set, a read
+counted once for every part it overlaps, and each part counts `L + read_length - 1`,
+summed part by part. A junction-sourced side counts `read_length - 2 * sj_overhang + 1`
+per junction with `--sj_overhang`, and is NA without it.
 
 `--dpi_gate` chooses which effect size the `significant` column uses:
 

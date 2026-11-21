@@ -86,6 +86,8 @@ make_option(c("--use_prec_loess"), action="store_true", default=FALSE,
                          "perbase (|delta_pi_perbase|, raw where undefined). both and perbase need",
                          "--gff_dir [default: both]"),
               metavar="character"),
+  make_option(c("--count_per_part"), action="store_true", default=FALSE,
+              help="counts are per-part DEXSeq counts summed over each set: per-base pi sums effective lengths part by part. Default: each read counted once per set (scripts/sigcnt.py), lengths over runs of adjacent parts"),
   make_option(c("--min_effect"), type="double", default=0.4,
               help="minimum |effect_size| (log odds ratio) for the significant column, the default gate; 0 drops it [default: 0.4]", metavar="double"),
   make_option(c("--mc_cores"), type="integer", default=NULL,
@@ -1037,7 +1039,8 @@ if (file.exists(mj_file)) {
 }
 if (!is.null(opt$gff_dir)) {
   message("Adding length-normalized pi from ", opt$gff_dir, " ...")
-  merged_data <- annotate_pi_perbase(merged_data, path.expand(opt$gff_dir), opt$read_length, opt$sj_overhang)
+  merged_data <- annotate_pi_perbase(merged_data, path.expand(opt$gff_dir), opt$read_length, opt$sj_overhang,
+                                     count_per_part = isTRUE(opt$count_per_part))
   ok <- !is.na(merged_data$delta_pi_perbase)
   message(sprintf("  per-base pi resolved for %d of %d rows (%.1f%%)",
                   sum(ok), nrow(merged_data), 100 * mean(ok)))

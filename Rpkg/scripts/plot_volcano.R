@@ -21,6 +21,8 @@ o <- parse_args(OptionParser(option_list = list(
   make_option("--contrast",   type = "character", default = NULL, help = "keep only this contrast"),
   make_option("--gff_dir",    type = "character", default = NULL, help = "per-gene DEXSeq GFFs, for delta_pi_perbase"),
   make_option("--read_length", type = "integer", default = NULL, help = "read length, for the effective lengths with --gff_dir"),
+  make_option("--count_per_part", action = "store_true", default = FALSE,
+              help = "counts are per-part DEXSeq counts summed over a set, as exontest.R --count_per_part"),
   make_option("--out",        type = "character", help = "output prefix"),
   make_option("--pval",       type = "double", default = 0.01, help = "adjusted p cutoff [%default]"),
   make_option("--min_dpi",    type = "double", default = 0, help = "|delta_pi| of is_significant(), per-base where defined [%default]"),
@@ -49,7 +51,8 @@ D <- rbindlist(lapply(seq_along(files), function(i) {
   if ("pi_ref" %in% names(d)) setnames(d, "pi_ref", "pi_ctrl")   # results written before the rename
   if (!is.null(o$contrast)) d <- d[contrast == o$contrast]
   if (!"delta_pi_perbase" %in% names(d) && !is.null(o$gff_dir))
-    d <- as.data.table(annotate_pi_perbase(as.data.frame(d), path.expand(o$gff_dir), o$read_length))
+    d <- as.data.table(annotate_pi_perbase(as.data.frame(d), path.expand(o$gff_dir), o$read_length,
+                                            count_per_part = o$count_per_part))
   if (!"delta_pi_perbase" %in% names(d)) d[, delta_pi_perbase := NA_real_]
   ## the call reads delta_pi_perbase, so it is made after the column exists
   d[, called := is_significant(d, o$pval, 0, o$min_dpi, o$min_dpi_sj, o$min_reads, min_effect = o$min_effect,
