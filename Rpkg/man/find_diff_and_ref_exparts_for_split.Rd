@@ -17,7 +17,9 @@ find_diff_and_ref_exparts_for_split(
   g_exon = NULL,
   g_expart = NULL,
   ex_or_in_gexpart = NULL,
-  dexseq_frag = NULL
+  dexseq_frag = NULL,
+  route_epaths = NULL,
+  route_ex_parts = NULL
 )
 }
 \arguments{
@@ -47,6 +49,12 @@ path indices forming one side of the binary partition.}
 \item{ex_or_in_gexpart}{Optional named character vector of edge types on \code{g_expart}.}
 
 \item{dexseq_frag}{Optional named character vector of DEXSeq fragment labels on \code{g_expart}.}
+
+\item{route_epaths}{Optional list, per path index, of the exon-level edge path from
+\code{source} to \code{sink}; computed per split when absent. A bubble's splits share
+its routes, so passing them saves the graph lookups of every split.}
+
+\item{route_ex_parts}{Optional list, per path index, of the exonic-part edges of that path.}
 }
 \description{
 Besides the exonic distinct sets written to the row, the intronic distinct sets

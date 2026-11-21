@@ -107,6 +107,10 @@ find_reference_exonic_part <- function(source, sink, ex_part1_set, ex_part2_set,
 #' @param g_expart Optional precomputed \code{igraph} with only exonic-part edges (no \code{ex} edges).
 #' @param ex_or_in_gexpart Optional named character vector of edge types on \code{g_expart}.
 #' @param dexseq_frag Optional named character vector of DEXSeq fragment labels on \code{g_expart}.
+#' @param route_epaths Optional list, per path index, of the exon-level edge path from
+#'   \code{source} to \code{sink}; computed per split when absent. A bubble's splits share
+#'   its routes, so passing them saves the graph lookups of every split.
+#' @param route_ex_parts Optional list, per path index, of the exonic-part edges of that path.
 #' @export
 #' @examples
 #' \dontrun{
@@ -115,7 +119,8 @@ find_reference_exonic_part <- function(source, sink, ex_part1_set, ex_part2_set,
 #' result <- grase::bipartition_paths("ENSG00000000003.14", g, outdir = tempdir())
 #' }
 find_diff_and_ref_exparts_for_split <- function(g, source, sink, split, parsed_partitions, parsed_paths, tx_ex_parts, bipartitions_df, gene=gene,
-                                                  g_exon=NULL, g_expart=NULL, ex_or_in_gexpart=NULL, dexseq_frag=NULL) {
+                                                  g_exon=NULL, g_expart=NULL, ex_or_in_gexpart=NULL, dexseq_frag=NULL,
+                                                  route_epaths=NULL, route_ex_parts=NULL) {
 
       group1 = as.numeric(split$group1)
       group2 = as.numeric(split$group2)
@@ -144,18 +149,23 @@ find_diff_and_ref_exparts_for_split <- function(g, source, sink, split, parsed_p
    
       #epath1.0 = lapply(vpath1, from_vpath_to_exon_path, g=g)     # high_mem 
       #epath2.0 = lapply(vpath2, from_vpath_to_exon_path, g=g)     # high_mem 
-      epath1 = lapply(vpath1, from_vpath_to_exon_path_simple, g=g_exon)     # high_mem 
-      epath2 = lapply(vpath2, from_vpath_to_exon_path_simple, g=g_exon)     # high_mem 
-     
+      if (!is.null(route_epaths) && !is.null(route_ex_parts)) {
+        epath1 <- unname(route_epaths[group1]); epath2 <- unname(route_epaths[group2])
+        ex_part1 <- unname(route_ex_parts[group1]); ex_part2 <- unname(route_ex_parts[group2])
+      } else {
+        epath1 = lapply(vpath1, from_vpath_to_exon_path_simple, g=g_exon)     # high_mem
+        epath2 = lapply(vpath2, from_vpath_to_exon_path_simple, g=g_exon)     # high_mem
+        ex_part1 <- lapply(epath1, from_epath_to_expart_path_simple, g=g_expart)   # high_mem
+        ex_part1 <- lapply(ex_part1, function(x) {return (x[ex_or_in_gexpart[x] == 'ex_part'])})
+        ex_part2 <- lapply(epath2, from_epath_to_expart_path_simple, g=g_expart)   # high_mem
+        ex_part2 <- lapply(ex_part2, function(x) {return (x[ex_or_in_gexpart[x] == 'ex_part'])})
+      }
+
       #ex_part1.0 <- lapply(epath1.0, from_exon_path_to_exonic_part_path, g=g)   # high_mem
-      ex_part1 <- lapply(epath1, from_epath_to_expart_path_simple, g=g_expart)   # high_mem
-      ex_part1 <- lapply(ex_part1, function(x) {return (x[ex_or_in_gexpart[x] == 'ex_part'])})
       ex_part1_intersect <- intersect_stream(ex_part1)
       ex_part1_union <- unique(unlist(ex_part1))
 
       #ex_part2.0 <- lapply(epath2.0, from_exon_path_to_exonic_part_path, g=g)   # high_mem 
-      ex_part2 <- lapply(epath2, from_epath_to_expart_path_simple, g=g_expart)   # high_mem
-      ex_part2 <- lapply(ex_part2, function(x) {return (x[ex_or_in_gexpart[x] == 'ex_part'])})
       ex_part2_intersect <- intersect_stream(ex_part2)
       ex_part2_union <- unique(unlist(ex_part2))
      
@@ -380,8 +390,9 @@ diff_exons_gene_ovr <- function(gene, g, outdir) {
 #' }
 bipartition_paths <- function(gene, g, outdir, max_path = 15, max_span = Inf, collapse_bubbles=FALSE) {
 
-  bipartitions_df <- data.frame()
-  in_distinct1 <- character(0); in_distinct2 <- character(0)   # intron sets of the kept rows
+  ## kept rows and their intron sets, bound once per gene: appending to the table on
+  ## every split copies it each time, quadratic in the rows of a gene
+  kept_rows <- list(); kept_in1 <- list(); kept_in2 <- list()
   g <- grase::set_edge_names(g)
 
   txpaths <- grase::txpath_from_edgeattr(g)
@@ -472,16 +483,17 @@ bipartition_paths <- function(gene, g, outdir, max_path = 15, max_span = Inf, co
       retval = grase::find_diff_and_ref_exparts_for_split(
         g=g, source=source, sink=sink, split=split,
         parsed_partitions=parsed_partitions, parsed_paths=parsed_paths,
-        tx_ex_parts=gd$tx_ex_parts, bipartitions_df=bipartitions_df, gene=gene,
+        tx_ex_parts=gd$tx_ex_parts, bipartitions_df=data.frame(), gene=gene,
         g_exon=gd$g_exon, g_expart=gd$g_expart,
-        ex_or_in_gexpart=gd$ex_or_in_gexpart, dexseq_frag=gd$dexseq_frag
+        ex_or_in_gexpart=gd$ex_or_in_gexpart, dexseq_frag=gd$dexseq_frag,
+        route_epaths=epaths, route_ex_parts=ex_part_paths
       )
       new_row <- retval$new_row
       # Early filter: skip if neither side has an exonic or an intronic distinct set
       if (!retval$has_distinct) next
-      bipartitions_df = retval$bipartitions_df
-      in_distinct1 <- c(in_distinct1, retval$in_setdiff1)
-      in_distinct2 <- c(in_distinct2, retval$in_setdiff2)
+      kept_rows[[length(kept_rows) + 1L]] <- new_row
+      kept_in1[[length(kept_in1) + 1L]] <- retval$in_setdiff1
+      kept_in2[[length(kept_in2) + 1L]] <- retval$in_setdiff2
     }
 
     if (collapse_bubbles) {
@@ -539,6 +551,9 @@ bipartition_paths <- function(gene, g, outdir, max_path = 15, max_span = Inf, co
   }
 
   close(pb)
+  bipartitions_df <- if (length(kept_rows)) do.call(rbind, kept_rows) else data.frame()
+  in_distinct1 <- as.character(unlist(kept_in1)); in_distinct2 <- as.character(unlist(kept_in2))
+  rm(kept_rows, kept_in1, kept_in2)
   log_debug(sprintf("[%s] %s: %d rows after empty-setdiff filter",
                   format(Sys.time(), "%H:%M:%S"), gene, nrow(bipartitions_df)))
 
