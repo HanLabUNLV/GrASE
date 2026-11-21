@@ -54,7 +54,8 @@ opt_list <- list(
   make_option("--desc", type = "character", default = NULL),
   make_option("--ylab", type = "character", default = NULL),
   make_option("--raw", action = "store_true", default = FALSE),
-  make_option("--sig_brackets", action = "store_true", default = FALSE),
+  make_option("--no_sig_brackets", action = "store_false", dest = "sig_brackets", default = TRUE,
+              help = "no bracket per called contrast in panel D"),
   make_option("--d_width", type = "double", default = 2.1),
   make_option("--d_height", type = "double", default = 2),
   make_option("--outward", type = "character", default = "",
@@ -71,11 +72,6 @@ for (req in c("gene", "event", "analysis", "conditions", "out"))
 parts <- function(cell) {
   if (is.null(cell) || is.na(cell) || cell %in% c("", "NA", "NaN")) return(character(0))
   x <- trimws(strsplit(cell, ",")[[1]]); x[nzchar(x) & x != "NA"]
-}
-set_length <- function(cell, coords) {
-  p <- parts(cell); p <- p[p %in% names(coords)]
-  if (!length(p)) return(NA_real_)
-  sum(vapply(p, function(e) coords[[e]][2] - coords[[e]][1] + 1, numeric(1)))
 }
 pi_perbase <- function(pi, len_d, len_s) {
   den <- pi * len_s + (1 - pi) * len_d
@@ -253,23 +249,16 @@ if (length(miss)) stop("no pi for conditions: ", paste(miss, collapse = ", "))
 
 perbase <- !isTRUE(a$raw)
 pb_used <- FALSE
-## exontest.R already wrote the lengths behind per-base pi: len_D and len_S are
-## EFFECTIVE lengths (each part's L + read_length - 1, summed over the set), so take
-## them from the row rather than re-measuring the graph here -- re-measuring gives plain
-## lengths and the panel then disagrees with the call it is drawing. NA for a junction
-## side is carried through as before, and only a results file written without the
-## columns falls back to measuring.
-if (all(c("len_D", "len_S") %in% names(focal))) {
+## per-base pi uses the effective lengths exontest.R wrote for the count type it
+## tested (len_D, len_S), so the panel shows the scale the call was made on
+if (perbase) {
+  if (!all(c("len_D", "len_S") %in% names(focal)))
+    stop("results have no len_D/len_S: re-run exontest.R with --gff_dir and --read_length, or pass --raw")
   len_D <- num(focal$len_D); len_S <- num(focal$len_S)
-} else {
-  len_D <- set_length(tested_D, coords); len_S <- set_length(S, coords)
-}
-if (perbase && (is.na(len_D) || is.na(len_S))) {
-  message("  per-base pi undefined: ",
-          if (is.na(len_D)) "distinct set is a junction (no length)"
-          else "reference set did not resolve against the graph",
-          "; plotting the raw ratio")
-  perbase <- FALSE
+  if (is.na(len_D) || is.na(len_S))
+    stop("per-base pi undefined for this side (len_D ", len_D, ", len_S ", len_S, "): ",
+         if (is.na(len_D)) "a junction side needs exontest.R --sj_overhang" else "reference set has no length",
+         "; or pass --raw")
 }
 if (perbase) {
   conv <- lapply(pivals, pi_perbase, len_d = len_D, len_s = len_S)
@@ -732,7 +721,7 @@ draw_pi_panel <- function(vals, ps, rowsP, sigP, out_vals, ylab, title, depth_on
   par(mai = c(0.80, 0.78, TOP, 0.15))
   yr <- c(vals, if (!is.null(ps)) ps$pi, out_vals[!is.na(out_vals)])
   span <- max(yr) - min(yr); pad <- max(span, 0.05)
-  ## --sig_brackets: one bracket per called contrast, joining its two groups, stacked
+  ## brackets (default; --no_sig_brackets turns them off): one bracket per called contrast, joining its two groups, stacked
   ## so that brackets sharing an x range sit on different levels
   brk <- NULL
   if (isTRUE(a$sig_brackets) && length(sigP)) {
