@@ -26,7 +26,7 @@ o <- parse_args(OptionParser(option_list = list(
   make_option("--min_dpi",    type = "double", default = 0, help = "|delta_pi| of is_significant(), per-base where defined [%default]"),
   make_option("--min_dpi_sj", type = "double", default = 0, help = "|delta_pi| for a junction-sourced side [%default]"),
   make_option("--min_reads",  type = "double", default = 10,   help = "reads on the distinct set in a group [%default]"),
-  make_option("--min_effect", type = "double", default = 0.5,  help = "|effect_size| of is_significant() [%default]"),
+  make_option("--min_effect", type = "double", default = 0.4,  help = "|effect_size| of is_significant() [%default]"),
   make_option("--dpi_gate", type = "character", default = "both",
               help = "delta_pi gate as in exontest.R: both (raw and per-base), raw or perbase [%default]"),
   make_option("--measures",   type = "character", default = "effect_size",

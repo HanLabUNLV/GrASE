@@ -137,7 +137,7 @@ opt_list <- list(
               help = "adjusted p cutoff of grase::is_significant(), the exontest.R --padj_threshold default [default %default]"),
   make_option("--min_dpi",     type = "double", default = 0,
               help = "|delta_pi| of grase::is_significant(), per-base with --dpi_gate perbase; 0, the default, is no delta_pi gate [default %default]"),
-  make_option("--min_effect",  type = "double", default = 0.5,
+  make_option("--min_effect",  type = "double", default = 0.4,
               help = "|effect_size| of grase::is_significant() [default %default]"),
   make_option("--dpi_gate",    type = "character", default = "both",
               help = "both, raw or perbase, as exontest.R [default %default]"),

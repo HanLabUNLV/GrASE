@@ -34,7 +34,7 @@ option_list <- list(
               help = "GrASE contrast to compare; required when the GrASE results hold more than one"),
   make_option("--min_dpi", type = "double", default = 0,
               help = "GrASE |delta_pi| gate of is_significant(), per-base where defined [default= %default]"),
-  make_option("--min_effect", type = "double", default = 0.5,
+  make_option("--min_effect", type = "double", default = 0.4,
               help = "GrASE |effect_size| (log odds ratio) gate of is_significant() [default= %default]"),
   make_option("--dpi_gate", type = "character", default = "both",
               help = "delta_pi gate as in exontest.R: both (raw and per-base), raw or perbase [%default]"),

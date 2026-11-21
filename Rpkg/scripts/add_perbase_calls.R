@@ -8,7 +8,7 @@
 ## Each file is rewritten in place; the original is kept as <file>.bak_rawpi (an existing backup is not
 ## overwritten).
 ## Usage: Rscript add_perbase_calls.R --results <a.annotated.txt>,<b.annotated.txt> --gff_dir <dir> --read_length <r>
-##          [--padj_threshold 0.05] [--delta 0] [--min_dpi 0] [--min_dpi_sj 0] [--min_effect 0.5]
+##          [--padj_threshold 0.05] [--delta 0] [--min_dpi 0] [--min_dpi_sj 0] [--min_effect 0.4]
 ##          [--min_reads 10]
 ## Use the padj threshold, delta and read floor of the exontest.R run that wrote the files.
 suppressPackageStartupMessages({library(optparse); library(data.table); library(grase)})
@@ -22,7 +22,7 @@ o <- parse_args(OptionParser(option_list = list(
   make_option("--delta",          type = "double", default = 0),
   make_option("--min_dpi",        type = "double", default = 0),
   make_option("--min_dpi_sj",     type = "double", default = 0),
-  make_option("--min_effect",     type = "double", default = 0.5),
+  make_option("--min_effect",     type = "double", default = 0.4),
   make_option("--min_reads",      type = "double", default = 10),
   make_option("--use_perbase",    type = "character", default = "both",
               help = "both, TRUE (per-base) or FALSE (raw) [%default]"))))

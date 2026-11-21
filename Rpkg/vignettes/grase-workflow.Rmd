@@ -496,7 +496,7 @@ every reported result uses:
 
 - `padj < --padj_threshold` (0.05 by default, under plain BH)
 - \|delta_pi\| passes `--dpi_gate` (below), at `--min_dpi` (0.05), or at `--min_dpi_sj` (0.05) where the side is junction-sourced
-- \|effect_size\|, the log odds ratio of the fitted model, is at least `--min_effect` (0.5)
+- \|effect_size\|, the log odds ratio of the fitted model, is at least `--min_effect` (0.4)
 - `lfc_diff_net > --delta`, i.e. the distinct set moved more than the shared reference
 - at least `--min_reads` on the distinct set, on average, in one group
 

@@ -65,7 +65,7 @@ o <- parse_args(OptionParser(option_list = list(
   make_option("--min_dpsi",  type = "double", default = 0.1,  help = "rMATS |IncLevelDifference| [%default]"),
   make_option("--min_l2fc",  type = "double", default = 0.5,  help = "DEXSeq |log2 fold change| [%default]"),
   make_option("--min_dpi",   type = "double", default = 0, help = "GrASE |delta_pi|, per-base where defined [%default]"),
-  make_option("--min_effect", type = "double", default = 0.5, help = "GrASE |effect_size| (log odds ratio) [%default]"),
+  make_option("--min_effect", type = "double", default = 0.4, help = "GrASE |effect_size| (log odds ratio) [%default]"),
   make_option("--dpi_gate", type = "character", default = "both",
               help = "delta_pi gate as in exontest.R: both (raw and per-base), raw or perbase [%default]"),
   make_option("--min_dpi_sj", type = "double", default = 0, help = "GrASE |delta_pi| for a junction-sourced side [%default]"),

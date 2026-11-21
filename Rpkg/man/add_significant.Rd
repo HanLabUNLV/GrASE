@@ -13,7 +13,7 @@ add_significant(
   min_reads = 10,
   omnibus_pairs = NULL,
   use_perbase = "both",
-  min_effect = 0.5
+  min_effect = 0.4
 )
 }
 \arguments{

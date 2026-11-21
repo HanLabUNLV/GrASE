@@ -1167,7 +1167,7 @@ posthoc_lfc_summary <- function(results, lfc_summary) {
 is_significant <- function(res, padj_thr, delta = 0, min_dpi = 0,
                            min_dpi_sj = min_dpi, min_reads = 0, padj = NULL,
                            omnibus_pairs = NULL, use_perbase = "both",
-                           min_effect = 0.5) {
+                           min_effect = 0.4) {
   ## use_perbase and min_effect are last in the signature on purpose: existing
   ## positional calls must keep working.
   pv <- if (is.null(padj)) res$padj else padj
@@ -1275,7 +1275,7 @@ is_significant <- function(res, padj_thr, delta = 0, min_dpi = 0,
 #' @export
 add_significant <- function(res, padj_thr, delta, min_dpi = 0, min_dpi_sj = 0,
                             min_reads = 10, omnibus_pairs = NULL,
-                            use_perbase = "both", min_effect = 0.5) {
+                            use_perbase = "both", min_effect = 0.4) {
   res$significant <- is_significant(res, padj_thr, delta, min_dpi, min_dpi_sj,
                                     min_reads, omnibus_pairs = omnibus_pairs,
                                     use_perbase = use_perbase, min_effect = min_effect)

@@ -287,10 +287,10 @@ test_that("use_perbase can also promote a side the raw value failed", {
   expect_true(is_significant(r, 0.01, 0, min_dpi = 0.1, use_perbase = TRUE))
 })
 
-test_that("the default gates on |effect_size| >= 0.5 only, not on delta_pi", {
-  r <- mk_res(dpi = 0.06, pb = 0.07); r$effect_size <- 0.6
+test_that("the default gates on |effect_size| >= 0.4 only, not on delta_pi", {
+  r <- mk_res(dpi = 0.06, pb = 0.07); r$effect_size <- 0.45
   expect_true(is_significant(r, 0.01, 0))
-  r$effect_size <- 0.4                       # log odds ratio too small
+  r$effect_size <- 0.35                      # log odds ratio too small
   expect_false(is_significant(r, 0.01, 0))
   r <- mk_res(dpi = 0.01, pb = 0.005); r$effect_size <- 2
   expect_true(is_significant(r, 0.01, 0))    # small delta_pi does not fail a side
