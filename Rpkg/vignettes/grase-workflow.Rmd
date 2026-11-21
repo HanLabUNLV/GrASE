@@ -399,7 +399,8 @@ on to `measured_junctions.txt` in its `--output` directory, one row per
 junction-sourced side: `gene`, `event`, `comparison` and `junctions`. It joins
 to the test results on `gene`, `event` and `comparison`. Each junction is
 `chr:start:end`, and the junctions of one side are joined by `|`; they are the
-junctions every route of the side crosses, and their counts are averaged.
+junctions every route of the side crosses, and their counts are summed, as the
+reads on the parts of an exonic distinct set are.
 
 ---
 

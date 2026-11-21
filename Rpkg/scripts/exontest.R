@@ -1024,6 +1024,17 @@ message(paste("Merged dataset has", nrow(merged_data), "rows."))
 # means re-reading the table and re-resolving the same annotation.
 # Raw pi/delta_pi are untouched -- the beta-binomial likelihood is defined on
 # counts, so the raw ratio stays the tested quantity and no call moves.
+## a junction side's count is the sum over its junctions, so its per-base length
+## is that many junctions' worth: the number comes from measured_junctions.txt,
+## written by merge_exon_sj_counts.R next to the merged counts
+mj_file <- file.path(countdir, "measured_junctions.txt")
+if (file.exists(mj_file)) {
+  mj <- read.table(mj_file, header = TRUE, sep = "\t", colClasses = "character")
+  mj$n_junctions <- lengths(strsplit(mj$junctions, "[|,]"))
+  merged_data <- left_join(merged_data, mj[, c("gene", "event", "comparison", "n_junctions")] %>%
+                             mutate(event = as(event, class(merged_data$event))),
+                           by = c("gene", "event", "comparison"))
+}
 if (!is.null(opt$gff_dir)) {
   message("Adding length-normalized pi from ", opt$gff_dir, " ...")
   merged_data <- annotate_pi_perbase(merged_data, path.expand(opt$gff_dir), opt$read_length, opt$sj_overhang)

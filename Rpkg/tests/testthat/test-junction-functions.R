@@ -1,11 +1,12 @@
 ## Tests for junction (intron) distinct-set construction.
 ##
-## The central property: a side's junction count must be MOLECULE
-## PROPORTIONAL. Distinct introns are grouped BY ROUTE and sum_sj_counts
-## averages within a group, so each route contributes one molecule-equivalent
-## however many distinct introns lie along it. Summing them all instead (the
-## removed "union" form) multiply-counted molecules on 83.8% of
-## junction-substituted TSS/TTS sides in the DICE activation panel.
+## The central property: a side's junction count must count every molecule of
+## the side the same number of times. The distinct set is the introns EVERY route
+## of the side crosses, so summing their reads (sum_sj_counts) counts each
+## molecule at each of the k junctions, a constant of the side. Summing the union
+## of the routes' introns instead (the removed "union" form) counted molecules
+## unequally on 83.8% of junction-substituted TSS/TTS sides in the DICE
+## activation panel.
 
 ## A minimal gene graph stub in the shape precompute_gene_graph() returns.
 ## Bubble: source 1 -> sink 5.
@@ -105,13 +106,13 @@ test_that("uncovered routes are still counted", {
   expect_equal(res$uncovered1, 1L)
 })
 
-test_that("sum_sj_counts averages within a route group", {
+test_that("sum_sj_counts sums the junctions of a set", {
   m <- matrix(c(10, 20, 30, 100), nrow = 4, ncol = 1,
               dimnames = list(c("chr1:1:2", "chr1:3:4", "chr1:5:6", "chr1:7:8"), "s1"))
-  ## one route of three junctions: mean(10,20,30) = 20
-  expect_equal(unname(sum_sj_counts("chr1:1:2|chr1:3:4|chr1:5:6", m)[1]), 20)
-  ## two routes: mean(10,20,30) + 100 = 120
-  expect_equal(unname(sum_sj_counts("chr1:1:2|chr1:3:4|chr1:5:6,chr1:7:8", m)[1]), 120)
+  ## three junctions: 10 + 20 + 30
+  expect_equal(unname(sum_sj_counts("chr1:1:2|chr1:3:4|chr1:5:6", m)[1]), 60)
+  ## "," separates junctions the same way
+  expect_equal(unname(sum_sj_counts("chr1:1:2|chr1:3:4|chr1:5:6,chr1:7:8", m)[1]), 160)
 })
 
 test_that("sum_sj_counts is unchanged when there are no groups", {
@@ -126,11 +127,10 @@ test_that("a single-junction group equals the ungrouped value", {
   expect_equal(unname(sum_sj_counts("chr1:1:2", m)[1]), 42)
 })
 
-test_that("mean is bounded by the min and max of the route's junctions", {
-  m <- matrix(c(10, 20, 30), nrow = 3, ncol = 1,
-              dimnames = list(c("chr1:1:2", "chr1:3:4", "chr1:5:6"), "s1"))
-  v <- unname(sum_sj_counts("chr1:1:2|chr1:3:4|chr1:5:6", m)[1])
-  expect_gte(v, 10); expect_lte(v, 30)
+test_that("a junction listed twice is counted once", {
+  m <- matrix(c(10, 20), nrow = 2, ncol = 1,
+              dimnames = list(c("chr1:1:2", "chr1:3:4"), "s1"))
+  expect_equal(unname(sum_sj_counts("chr1:1:2|chr1:3:4,chr1:1:2", m)[1]), 30)
 })
 
 test_that("distinct sets are NA without routes, never an ungrouped sum", {

@@ -94,8 +94,8 @@ route_node_pairs <- function(field) {
 #' routes: the distinct introns that EVERY route of the side crosses, as the
 #' exonic distinct set is the parts every transcript of the side uses. Each
 #' molecule of the side then crosses each junction of the set exactly once, so
-#' any one of them counts the side's molecules, and their mean
-#' (sum_sj_counts() averages a "|" group) does so with lower variance. A side
+#' any one of them counts the side's molecules; sum_sj_counts() sums them, as
+#' the reads on the parts of an exonic distinct set are summed. A side
 #' whose routes have no distinct intron in common gets NA and is not
 #' substituted: no junction count measures all of its molecules.
 #'
@@ -205,9 +205,8 @@ label_bipartition_introns <- function(ge, tx1_set, tx2_set, chr, bubble_verts = 
     list(sel = unique(sel), groups = groups, unc = unc)
   }
 
-  ## Junction ids, "|" within a group and "," between groups. sum_sj_counts()
-  ## averages within a group and sums across groups; the distinct sets below
-  ## are always ONE group (the intersection), so the count is its mean.
+  ## Junction ids, "|" within a group and "," between groups. The distinct sets
+  ## below are always ONE group (the intersection), and sum_sj_counts() sums it.
   make_junction_groups <- function(groups) {
     if (!length(groups)) return(NA_character_)
     out <- character(0)

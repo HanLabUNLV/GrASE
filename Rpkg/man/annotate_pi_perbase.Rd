@@ -37,7 +37,7 @@ set) has no width, but it has an effective length on the same footing: a
 read is counted on a junction only if it spans it with at least
 \code{sj_overhang} bases on each side, which \code{read_length - 2 *
 sj_overhang + 1} start positions do. A junction distinct set is the junctions
-every route of the side crosses, and its count is their mean, so it is one
-junction's worth of coverage and takes one junction's effective length.
-Without \code{sj_overhang} such rows are left NA.
+every route of the side crosses, and its count is their sum, so it takes k
+junctions' effective length, k from an \code{n_junctions} column (1 when the
+column is absent). Without \code{sj_overhang} such rows are left NA.
 }

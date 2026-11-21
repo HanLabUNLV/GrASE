@@ -54,36 +54,14 @@ sum_sj_counts <- function(junction_str, sj_mat) {
   if (is.na(junction_str) || junction_str == "" || junction_str == "NA") {
     return(rep(NA_real_, ncol(sj_mat)))
   }
-  ## Junction ids may be ROUTE-GROUPED: "|" separates junctions within one
-  ## route, "," separates routes (see make_junction_groups in
-  ## junction_functions.R). Average within a route, then sum across routes -- that
-  ## is the MEAN rule, which has the same expectation as taking one junction per
-  ## route but ~1/k the variance. A group of one averages to itself, so input
-  ## with no "|" behaves exactly as it always did.
-  groups <- trimws(unlist(strsplit(junction_str, ",")))
-  groups <- groups[nchar(groups) > 0L]
-  if (any(grepl("|", groups, fixed = TRUE))) {
-    acc <- rep(0, ncol(sj_mat)); nseen <- 0L
-    for (g in groups) {
-      gk <- trimws(unlist(strsplit(g, "|", fixed = TRUE)))
-      gk <- gk[nchar(gk) > 0L]
-      if (!length(gk)) next
-      parts_g   <- strsplit(gk, ":")
-      gk_alt    <- vapply(parts_g, function(p)
-        paste0(p[1L], ":", p[2L], ":", as.integer(p[3L]) - 1L), character(1L))
-      gi <- match(unique(c(gk, gk_alt)), rownames(sj_mat))
-      gi <- gi[!is.na(gi)]
-      if (!length(gi)) next
-      v <- if (length(gi) == 1L) as.numeric(sj_mat[gi, ]) else colSums(sj_mat[gi, , drop = FALSE])
-      ## divide by the number of DISTINCT physical junctions matched, so the
-      ## route contributes one molecule-equivalent rather than one per junction
-      acc <- acc + v / length(gi)
-      nseen <- nseen + 1L
-    }
-    if (nseen == 0L) return(rep(0, ncol(sj_mat)))
-    return(acc)
-  }
-  keys <- groups
+  ## The junctions of a side's set are separated by "|" (the intersection over
+  ## the side's routes) or "," (older output). Every molecule of the side crosses
+  ## every junction of the intersection once, so, like the reads on the parts of
+  ## an exonic distinct set, their uniquely spanning reads are summed: each read
+  ## is a separate sample of the side's molecules, and the number of junctions is
+  ## a constant of the side that cancels between conditions, as a length does.
+  keys <- trimws(unlist(strsplit(junction_str, "[|,]")))
+  keys <- keys[nchar(keys) > 0L]
   # The graph stores to_pos as either intron_end or next_exon_start depending on
   # edge type; try both end and end-1 to handle either convention without
   # double-counting (each physical intron has exactly one entry in the SJ file).

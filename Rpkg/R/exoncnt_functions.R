@@ -160,8 +160,9 @@ count_bipartitions <- function(bipartition_file, countmat, sampleinfo, outdir, o
                                cnt_suffix = "exoncnt") {
   bipartitions <- utils::read.table(bipartition_file, header = TRUE, sep = "\t", stringsAsFactors = FALSE, colClasses = "character", na.strings = c("NA", ""))  # Reads columns as characters
   bipartitions$event = rownames(bipartitions)
-  bipartitions <- bipartitions[!(is.na(bipartitions$setdiff1) & is.na(bipartitions$setdiff2)),]
-  if (length(bipartitions) == 0) { return (0) }
+  ## rows whose two exonic distinct sets are both empty are kept: their sides are
+  ## measured on junctions, which merge_exon_sj_counts.R fills into these rows
+  if (nrow(bipartitions) == 0) { return (0) }
   gene <- bipartitions$gene
   n_samples = ncol(countmat)-2
 

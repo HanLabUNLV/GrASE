@@ -114,9 +114,9 @@ gene_gff_path <- function(gff_dir, gene) {
 #' read is counted on a junction only if it spans it with at least
 #' \code{sj_overhang} bases on each side, which \code{read_length - 2 *
 #' sj_overhang + 1} start positions do. A junction distinct set is the junctions
-#' every route of the side crosses, and its count is their mean, so it is one
-#' junction's worth of coverage and takes one junction's effective length.
-#' Without \code{sj_overhang} such rows are left NA.
+#' every route of the side crosses, and its count is their sum, so it takes k
+#' junctions' effective length, k from an \code{n_junctions} column (1 when the
+#' column is absent). Without \code{sj_overhang} such rows are left NA.
 #'
 #' @param res Results data frame with pi_ctrl, pi_trt, ref_ex_part, setdiff1,
 #'   setdiff2, comparison, gene.
@@ -167,7 +167,8 @@ annotate_pi_perbase <- function(res, gff_dir, read_length = NULL, sj_overhang = 
   ## junction-sourced sides: empty exonic distinct set, as is_significant() reads it
   if (!is.null(sj_overhang)) {
     sj <- is.na(sd) | sd %in% c("NA", "")
-    res$len_D[sj] <- read_length - 2 * sj_overhang + 1
+    k <- if ("n_junctions" %in% names(res)) res$n_junctions[sj] else rep(1, sum(sj))
+    res$len_D[sj] <- k * (read_length - 2 * sj_overhang + 1)
   }
   if (length(unresolved))
     warning(sprintf(paste0("no DEXSeq GFF found for %d of %d genes under '%s' ",
