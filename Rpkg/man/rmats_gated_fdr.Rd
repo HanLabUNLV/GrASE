@@ -20,7 +20,7 @@ the FDR column, numeric, with failing events set to 1
 \description{
 The gate the simulation benchmark applies to rMATS: the group means of
 IJC+SJC are both at least \code{min_reads}, and the group means of
-IncLevel are both within \link{\code{min_psi}, 1 - \code{min_psi}}. An event
+IncLevel are both between \code{min_psi} and 1 - \code{min_psi}. An event
 failing it is a negative call, not a dropped event: its FDR becomes 1 and
 it stays in the table. Group means skip the NA entries of the
 comma-separated per-sample columns.
