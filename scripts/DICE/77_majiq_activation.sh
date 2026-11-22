@@ -3,8 +3,8 @@
 # studies. One build over the four groups (all .majiq files of a deltapsi must share
 # a splicegraph), then deltapsi per contrast and a voila tsv with --show-all, so a
 # gene with no rows was never quantified rather than filtered. Stranded (DICE is a
-# dUTP library); de novo junctions on (MAJIQ's default; the simulation alone runs
-# without them, having no novel junctions). BAMs are those of config.sh, indexed.
+# dUTP library); de novo junctions off (--disable-denovo), as for rMATS and in the
+# simulation. BAMs are those of config.sh, indexed.
 # Usage: bash 77_majiq_activation.sh [processes]
 # Output: $DICE/majiq_activation/{build,deltapsi,deltapsi_<TRT>_vs_<REF>.tsv}
 set -euo pipefail
@@ -36,7 +36,7 @@ done
     printf "%s=%s\n" "${ct//./_}" "$(awk -F'\t' -v C="$ct" '$1 == C { printf "%s%s", sep, $3; sep = "," }' "$BASE/staged_samples.tsv")"
   done
 } > "$CONF"
-[ -s "$OUT/splicegraph.sql" ] || conda run -n "$MAJIQ_ENV" majiq build "$GFF3" -c "$CONF" -j "$NPROC" -o "$OUT"
+[ -s "$OUT/splicegraph.sql" ] || conda run -n "$MAJIQ_ENV" majiq build "$GFF3" -c "$CONF" -j "$NPROC" --disable-denovo -o "$OUT"
 files () { ls "$OUT/${1}_SRR"*.majiq | tr '\n' ' '; }
 for c in "CD4_N_STIM CD4" "CD8_N_STIM CD8"; do
   set -- $c; TRT=$1; REF=$2; NAME=${TRT}_vs_${REF}
