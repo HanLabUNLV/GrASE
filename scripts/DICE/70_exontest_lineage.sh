@@ -5,7 +5,7 @@ set -eu
 . "$(dirname "$0")/config.sh"
 cd "$DICE"
 ARMS=${1:-"internal terminal"}
-C=$DICE/counts_lineage
+C=$DICE/$COUNT_DIR
 OUT=$DICE/grase_lineage_exsj
 mkdir -p "$OUT"
 
@@ -16,22 +16,16 @@ for A in $ARMS; do
     internal) MDIR=$C/bipartition.exsj.internal.counts; ADIR=$C/bipartition.ex.internal.counts ;;
     terminal) MDIR=$C/bipartition.exsj.terminal.counts; ADIR=$C/bipartition.ex.terminal.counts ;;
   esac
-  COMBINED=bipartition.exsj.${A}.cnt.combined.txt
   if [ -e "$OUT/phi.merged.${A}.txt" ] || compgen -G "$OUT/test_bipartition.exsj.${A}_*" > /dev/null; then
     echo "$A results or phi file already in $OUT; move them aside or delete them first" >&2; exit 1
   fi
-
-  # combined table, plus the bipartition files linked from the exonic counts
-  [ -s "$MDIR/$COMBINED" ] || python3 $R/combine_exoncnt.py "$MDIR" "$MDIR/$COMBINED"
-  echo "$A combined rows: $(wc -l < "$MDIR/$COMBINED")"
-  echo "$A symlinking annotations and running exontest ..."
-
-  for f in $ADIR/*.bipartition.txt; do
-    ln -sfr "$(realpath "$f")" "$MDIR/$(basename "$f")"
-  done
+  ## the per-gene count files are read directly (--prefix); the annotation is next to
+  ## the signature counts, or in the exonic count directory for per-part counts
+  ANNOT=$MDIR; [ -d "$ADIR" ] && ANNOT=$ADIR
+  echo "$A: exontest on $(ls "$MDIR" | grep -c "\.bipartition\.exsj\.$A\.cnt\.txt$") per-gene count files"
 
   Rscript $R/exontest.R --padj_threshold=$PVAL \
-    --file="$COMBINED" \
+    --prefix="bipartition.exsj.$A" --annotdir="$ANNOT/" \
     --outdir="$OUT" \
     --countdir="$MDIR/" \
     --splittype=bipartition \

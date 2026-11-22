@@ -24,6 +24,10 @@ option_list = list(
               help="output directory that contains the test results", metavar="character"),
   make_option(c("-c", "--countdir"), type="character", 
               help="count dir that contains the count and split files by gene", metavar="character"),
+  make_option(c("--prefix"), type="character", default=NULL,
+              help="read the per-gene count files <countdir>/<gene>.<prefix>.cnt.txt instead of a combined --file; <prefix> is <split>.<unit>.<class>, e.g. bipartition.exsj.terminal, and names the outputs", metavar="character"),
+  make_option(c("--annotdir"), type="character", default=NULL,
+              help="dir of the per-gene <gene>.<splittype>.txt annotation joined to the results [default: --countdir]", metavar="character"),
   make_option(c("--gff_dir"), type="character", default=NULL,
               help="dir of per-gene DEXSeq GFFs, flat <gene>.dexseq.gff or nested <gene>/<gene>.dexseq.gff. Supplying it adds length-normalized (per-base) pi to the annotated output", metavar="character"),
   make_option(c("--read_length"), type="integer", default=NULL,
@@ -101,6 +105,8 @@ make_option(c("--use_prec_loess"), action="store_true", default=FALSE,
 opt_parser = OptionParser(option_list=option_list);
 opt = parse_args(opt_parser);
 print(opt)
+if (!is.null(opt$file) && !is.null(opt$prefix))
+  stop("--file and --prefix are alternatives: a combined table or the per-gene files", call. = FALSE)
 if (!is.null(opt$file)) {
   masterfile = opt$file
 }
@@ -211,6 +217,7 @@ min_reads        <- as.double(opt$min_reads)
 # Expand tilde in paths
 outdir <- path.expand(outdir)
 countdir <- path.expand(countdir)
+annotdir <- if (!is.null(opt$annotdir)) path.expand(opt$annotdir) else countdir
 
 if (!dir.exists(outdir)) {
   dir.create(outdir, recursive = TRUE)
@@ -227,12 +234,37 @@ exoncnt_master <- paste0(countdir,'/', masterfile)
 ## disk with no class in the name (grase_omnibus_test, grase_activation_cutrule).
 ## With the unit label in field 2 and the class in field 3, all four
 ## (unit, class) combinations are distinct here and no rename is needed.
-out_prefix <- sub("^([^.]+\\.[^.]+\\.[^.]+).*", "\\1", masterfile)
+out_prefix <- if (!is.null(opt$prefix)) opt$prefix else sub("^([^.]+\\.[^.]+\\.[^.]+).*", "\\1", masterfile)
 if (!grepl("^[^.]+\\.(ex|exsj)\\.", out_prefix))
-  warning("--file name does not look like <split>.<unit>.<class>.cnt.combined.txt: ",
-          masterfile, "\n  out_prefix is \"", out_prefix,
+  warning("--file or --prefix does not look like <split>.<unit>.<class>: ",
+          if (!is.null(opt$prefix)) opt$prefix else masterfile, "\n  out_prefix is \"", out_prefix,
           "\" -- output names may not identify the count unit")
 out_resultfile=paste0(outdir,'/test_', out_prefix,'_', model, '.txt')
+
+## The counts: one combined table (--file), or the per-gene files it would be
+## combined from (--prefix). counts_mtime is the newest of them, for the
+## annotate-only staleness test; NA when there are none.
+if (!is.null(opt$prefix)) {
+  count_files <- list.files(countdir, full.names = TRUE,
+                            pattern = paste0("\\.", gsub(".", "\\.", opt$prefix, fixed = TRUE), "\\.cnt\\.txt$"))
+  counts_mtime <- if (length(count_files)) max(file.mtime(count_files)) else NA
+} else {
+  counts_mtime <- if (file.exists(exoncnt_master)) file.mtime(exoncnt_master) else NA
+}
+## The columns combine_exoncnt.py emits, matched by name: the per-gene files do
+## not all share one column order.
+count_cols <- c("gene", "event", "source", "sink", "ref_ex_part", "setdiff1", "setdiff2",
+                "sample", "ref", "diff1", "diff2", "groups", "diff1_source", "diff2_source")
+read_count_files <- function(files, keep_groups, cores) {
+  d <- data.table::rbindlist(parallel::mclapply(files, function(f) {
+    x <- data.table::fread(f, na.strings = "NA", showProgress = FALSE)
+    for (c_ in setdiff(count_cols, names(x))) x[[c_]] <- NA
+    x <- x[, count_cols, with = FALSE]
+    x[x$groups %in% keep_groups]
+  }, mc.cores = cores), use.names = TRUE)
+  message(sprintf("read %d per-gene count files: %d rows in the run's groups", length(files), nrow(d)))
+  as.data.frame(d)
+}
 
 
 ## Contrast group sets and the omnibus->pairs map depend only on --contrasts,
@@ -280,8 +312,7 @@ if (!length(omnibus_pairs)) omnibus_pairs <- NULL
 d_grp_file <- paste0(outdir, '/d_grp_', out_prefix, '_', model, '.rds')
 annotate_only <- FALSE
 if (!isTRUE(opt$retest) && file.exists(out_resultfile)) {
-  if (!file.exists(exoncnt_master) ||
-      file.mtime(out_resultfile) >= file.mtime(exoncnt_master)) {
+  if (is.na(counts_mtime) || file.mtime(out_resultfile) >= counts_mtime) {
     annotate_only <- TRUE
     message("ANNOTATE ONLY: reusing ", out_resultfile,
             "\n  skipping the count-table read and the model fit.",
@@ -314,8 +345,9 @@ if (annotate_only) {
     message("No cached support table; using the d_support column already in ",
             basename(out_resultfile))
   }
-} else if (file.exists(exoncnt_master)) {
-  splitcnts <- as.data.frame(data.table::fread(exoncnt_master, na.strings="NA"))
+} else if (!is.na(counts_mtime)) {
+  splitcnts <- if (!is.null(opt$prefix)) read_count_files(count_files, all_groups, mc_cores) else
+    as.data.frame(data.table::fread(exoncnt_master, na.strings="NA"))
   # Include all groups mentioned in any contrast; drop samples from other groups.
   splitcnts$groups <- factor(splitcnts$groups, levels = all_groups)
   splitcnts <- splitcnts[!is.na(splitcnts$groups), ]
@@ -979,7 +1011,7 @@ message(paste("Processing", length(unique_genes), "unique genes."))
 # Function to safely read a specific gene file
 read_gene_split <- function(gene_id) {
   # Construct filename based on gene ID
-  f <- file.path(countdir, paste0(gene_id, ".", split, ".txt"))
+  f <- file.path(annotdir, paste0(gene_id, ".", split, ".txt"))
 
   if (file.exists(f)) {
      tryCatch({
