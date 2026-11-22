@@ -11,7 +11,7 @@
 # Required:
 #   --workdir          output directory
 #   --results          exontest.R annotated results for the terminal class,
-#                      e.g. test_bipartition.ex.terminal_betabinom_EBmap.annotated.txt
+#                      e.g. test_bipartition.ex.terminal_betabinom_EBapprox.annotated.txt
 #   --terminal_counts  the combined count table those results were tested on,
 #                      e.g. bipartition.ex.terminal.counts/bipartition.ex.terminal.cnt.combined.txt;
 #                      its directory must hold the per-gene <gene>.bipartition.txt files
@@ -50,6 +50,7 @@
 #                      every other gene are not built, so do not use it for a run
 #                      that needs them. Needs samtools.
 #   --samtools         samtools for --subset_called [samtools]
+#   --model            exontest.R --model of the outward-unit test [betabinom_EBapprox]
 #
 # Output, under --workdir:
 #   outward_walk_verdict.tsv             one row per terminus and contrast
@@ -60,12 +61,12 @@ set -euo pipefail
 FLAGS="--format bam --paired no --stranded reverse --order pos -a 10"
 PY=python3; CORES=8; PADJ=0.05; MIN_DPI=0; MIN_EFFECT=0.4; MIN_READS=10; DPI_GATE=both
 MAX_OUTWARD_FRAC=0.5; MAX_FLANK_COV=0.2
-READ_LEN=; SUBSET=0; SAMTOOLS=samtools; PER_PART=0
+READ_LEN=; SUBSET=0; SAMTOOLS=samtools; PER_PART=0; MODEL=betabinom_EBapprox
 while [ $# -gt 0 ]; do
   case "$1" in
     --subset_called) SUBSET=1; shift; continue ;;
     --count_per_part) PER_PART=1; shift; continue ;;
-    --samtools) SAMTOOLS=$2 ;;
+    --samtools) SAMTOOLS=$2 ;; --model) MODEL=$2 ;;
     --workdir) W=$2 ;; --results) RES=$2 ;; --terminal_counts) TCNT=$2 ;;
     --split_dir) SPLIT=$2 ;; --graphml_dir) GRAPH=$2 ;; --gff_dir) GFF=$2 ;;
     --exon_counts) ECNT=$2 ;; --samples) SAMPLES=$2 ;; --contrasts) CTR=$2 ;;
@@ -158,12 +159,12 @@ ln -sfr "$W/$COMBINED" "$T/run/$COMBINED"
 find "$(dirname "$(realpath "$TCNT")")" -maxdepth 1 -name '*.bipartition.txt' \
   -exec ln -sfr -t "$T/run" {} +
 Rscript "$S/exontest.R" --file="$COMBINED" --outdir="$T" --countdir="$T/run/" \
-  --splittype=bipartition --phi=phi.outward.txt --model=betabinom_EBmap \
+  --splittype=bipartition --phi=phi.outward.txt --model="$MODEL" \
   --mc_cores="$CORES" --min_reads="$MIN_READS" --contrasts="$CTR" &> "$T/test.log"
 
 echo "=== 6 verdicts  $(date '+%F %T')"
 Rscript "$S/score_outward_walk.R" --side_table "$W/outward_side_table.tsv" \
-  --results "$T/test_outward.ex.terminal_betabinom_EBmap.annotated.txt" \
+  --results "$T/test_outward.ex.terminal_${MODEL}.annotated.txt" \
   --exonic "$RES" --combined "$W/$COMBINED" --group_means "$W/outward_unit_group_means.tsv" \
   --intronparts "$IP/intronparts_manifest.tsv" --unmeasurable "$IP/unmeasurable.tsv" \
   --contrasts "$CTR" --min_reads "$MIN_READS" --padj "$PADJ" --min_dpi "$MIN_DPI" \

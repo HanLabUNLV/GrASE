@@ -40,4 +40,4 @@ bash $R/outward_walk.sh --workdir "$W" --results "$RES" --terminal_counts "$TCNT
   --gff_dir "$DEXSEQ_GFF_DIR" --read_length "$READ_LEN" \
   --exon_counts "$PARTS" --samples "$W/samples.tsv" --contrasts "$CTR" \
   --subset_called --samtools "$SAMTOOLS" \
-  --python "$PY" --cores "$CORES" --padj "$PVAL"
+  --python "$PY" --cores "$CORES" --padj "$PVAL" --model "$MODEL"
