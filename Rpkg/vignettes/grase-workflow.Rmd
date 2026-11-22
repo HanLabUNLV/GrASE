@@ -479,8 +479,8 @@ how the moderated value is obtained, and they agree closely.
 
 | Model | Description |
 |-------|-------------|
-| `betabinom_EBapprox` | Closed-form shrinkage of log(phi) toward a global or trend-based target (normal-normal moderation). Recommended, and the model behind the published results. |
-| `betabinom_EBmap` | MAP estimate of phi under a normal prior, optimised against the penalised likelihood. The package default; recovers slightly more true positives at a few more null false positives. |
+| `betabinom_EBapprox` | Closed-form shrinkage of log(phi) toward a global or trend-based target (normal-normal moderation). The package default, and the model behind the published results. |
+| `betabinom_EBmap` | MAP estimate of phi under a normal prior, optimised against the penalised likelihood. Recovers slightly more true positives at a few more null false positives. |
 
 The remaining models exist because the four were benchmarked against each other.
 They are not alternatives to choose between for an analysis.
@@ -537,7 +537,7 @@ For more than two groups, replace `--cond1`/`--cond2` with `--contrasts` in
 | `--gff_dir` | NULL | Per-gene DEXSeq GFFs, flat `<gene>.dexseq.gff` or nested `<gene>/<gene>.dexseq.gff`. Supplying it adds length-normalized (per-base) pi to the annotated output. |
 | `--splittype` | | `bipartition` (recommended); the other two are benchmark-only |
 | `--phi` | | Cached phi estimates; created on first run, reused thereafter |
-| `--model` | `betabinom_EBmap` | See the table above |
+| `--model` | `betabinom_EBapprox` | See the table above |
 | `--cond1`, `--cond2` | | Two-group contrast; the coefficient is cond1 - cond2 |
 | `--contrasts` | NULL | Multi-group contrasts as `trt:ref`, comma separated; overrides `--cond1`/`--cond2` |
 | `--padj_method` | `BH` | Plain Benjamini-Hochberg over all events of a contrast. `nested_BH` instead selects genes by BH on each gene's Simes p-value, then BH-adjusts tests within each selected gene and multiplies them by the number of genes tested over the number selected (Benjamini-Bogomolov). Any other `p.adjust` method is also accepted. |
@@ -626,7 +626,7 @@ exonic counts.
 ```bash
 bash scripts/outward_walk.sh \
     --workdir         ${WD}/outward \
-    --results         ${WD}/bipartition.terminal.test/test_bipartition.ex.terminal_betabinom_EBmap.annotated.txt \
+    --results         ${WD}/bipartition.terminal.test/test_bipartition.ex.terminal_betabinom_EBapprox.annotated.txt \
     --terminal_counts ${WD}/bipartition.ex.terminal.counts/bipartition.ex.terminal.cnt.combined.txt \
     --split_dir       ${WD}/bipartition.filtered \
     --graphml_dir     ${WD}/graphml \

@@ -11,7 +11,7 @@ library(optparse)
 outdir = NULL
 countdir = NULL
 split = 'bipartition'
-model = 'betabinom_EBmap'
+model = 'betabinom_EBapprox'
 masterfile = 'bipartition.ex.internal.cnt.combined.txt'
 phifile = 'phi.glmmtmb.txt'
 cond1 = 'group1'; cond2 = 'group2'
@@ -41,7 +41,7 @@ option_list = list(
   make_option(c("--prec"), type="character", default=NULL,
               help="filename for precision estimates (multinomial models)", metavar="character"),
   make_option(c("-m", "--model"), type="character", 
-              help="model name", metavar="character"),
+              help="model name [default: betabinom_EBapprox]", metavar="character"),
   make_option(c("--cond1"), type="character",
               help="condition 1 name (Group 1 - Group 2)", metavar="character"),
   make_option(c("--cond2"), type="character",
