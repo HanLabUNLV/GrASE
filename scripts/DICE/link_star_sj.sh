@@ -5,7 +5,6 @@
 # Usage: bash link_star_sj.sh
 set -euo pipefail
 . "$(dirname "$0")/config.sh"
-SRC=$SJ_SRC
 CTS=${ALL13//,/ }
 
 rm -rf "$DICE/sj"
@@ -14,7 +13,7 @@ mkdir -p "$DICE/sj"
 n=0
 for CT in $CTS; do
   mkdir -p "$DICE/sj/$CT"
-  for f in "$SRC/$CT/bam"/pass2_*.SJ.out.tab; do
+  for f in "$(star_dir "$CT")"/pass2_*.SJ.out.tab; do
     [ -e "$f" ] || continue
     SRR=$(basename "$f" | sed 's/^pass2_//; s/\.SJ\.out\.tab$//')
     cp -p "$f" "$DICE/sj/$CT/${SRR}.SJ.out.tab"

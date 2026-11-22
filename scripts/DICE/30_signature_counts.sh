@@ -1,6 +1,6 @@
 #!/bin/bash
 # Signature counts (each read once per set) of every bipartition side, all 13 cell types, from one
-# alignment: the EndToEnd, overhang-1 STAR run (pass2_*.Aligned.sorted.overhangMin1.bam)
+# alignment: the STAR pass 2 BAMs of config.sh (star_dir, BAM_SUFFIX)
 # whose SJ.out.tab the junction counts used to come from. The exonic counts used
 # to come from the earlier default-setting run, so the two halves of a merged
 # count came from different alignments.
@@ -34,7 +34,7 @@ mkdir -p "$OUT/raw"
 LIST=$OUT/bams.tsv
 : > "$LIST"
 for CT in ${ALL13//,/ }; do
-  for b in "$SJ_SRC/$CT/bam"/pass2_*.Aligned.sorted.overhangMin1.bam; do
+  for b in "$(star_dir "$CT")"/pass2_*"$BAM_SUFFIX"; do
     [ -e "$b" ] || continue
     s=$(basename "$b" | sed 's/^pass2_//; s/\.Aligned\..*$//')
     printf "%s\t%s_%s\n" "$b" "$CT" "$s" >> "$LIST"

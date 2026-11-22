@@ -1,6 +1,6 @@
 #!/bin/bash
 # rMATS on the activation contrasts, from the alignment GrASE counts
-# (pass2_*.Aligned.sorted.overhangMin1.bam: EndToEnd, --alignSJDBoverhangMin 1)
+# (the STAR pass 2 BAMs of config.sh: EndToEnd, --alignSJDBoverhangMin 1)
 # with the library type of the protocol (dUTP: fr-firststrand). Otherwise the
 # settings of the earlier run: GENCODE v34, single-end, read length $READ_LEN,
 # anchor length 1 (rMATS default), no novel splice sites.
@@ -27,7 +27,7 @@ mkdir -p "$W/bams" "$W/prep"
 
 echo "=== 1. prep  $(date '+%F %T') ==="
 for CT in CD4 CD4_N_STIM CD8 CD8_N_STIM; do
-  ls "$SJ_SRC/$CT/bam"/pass2_*.Aligned.sorted.overhangMin1.bam | paste -sd, > "$W/bams/$CT.txt"
+  ls "$(star_dir "$CT")"/pass2_*"$BAM_SUFFIX" | paste -sd, > "$W/bams/$CT.txt"
   if compgen -G "$W/prep/$CT/tmp/*.rmats" > /dev/null; then echo "  $CT: prepped"; continue; fi
   mkdir -p "$W/prep/$CT/tmp"
   $RMATS --task prep --b1 "$W/bams/$CT.txt" --gtf "$GTF" -t single --readLength "$READ_LEN" \
