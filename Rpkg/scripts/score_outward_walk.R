@@ -153,6 +153,8 @@ opt_list <- list(
               help = "per-gene DEXSeq GFFs, for the per-base lengths of exonic units and references"),
   make_option("--read_length", type = "integer", default = NULL,
               help = "read length of the counted reads, for effective lengths"),
+  make_option("--count_per_part", action = "store_true", default = FALSE,
+              help = "the reference was counted per part (DEXSeq route): its length is the sum of its parts; by default it is a signature count, one read per set, as exontest.R"),
   make_option("--out",         type = "character", help = "per-side verdict table")
 )
 a <- parse_args(OptionParser(option_list = opt_list))
@@ -294,17 +296,25 @@ res <- merge(res, umap, by = c("gene", "event"), all.x = TRUE)
 if (anyNA(res$u_type))
   stop(sum(is.na(res$u_type)), " result rows have no unit in --side_table", call. = FALSE)
 if (a$dpi_gate != "raw") {
-  ## effective lengths, as grase::annotate_pi_perbase(): each part counts
-  ## L + read_length - 1. An intronic unit is one bin of the intronic-part GFF,
-  ## counted the same way, so its width takes the same correction.
+  ## effective lengths, as grase::annotate_pi_perbase(): a signature-counted set
+  ## counts each run of adjacent parts once, run length + read_length - 1; with
+  ## --count_per_part each part counts L + read_length - 1. A unit is a single part
+  ## or one bin of the intronic-part GFF, the same under either rule.
   r1 <- a$read_length - 1
   ulen <- umap[, {
-    eff <- part_lengths_from_gff(gene_gff_path(path.expand(a$gff_dir), .BY$gene)) + r1
+    gp <- gene_gff_path(path.expand(a$gff_dir), .BY$gene)
+    flen <- if (a$count_per_part) {
+      eff <- part_lengths_from_gff(gp) + r1
+      function(x) feature_length(x, eff)
+    } else {
+      co <- part_coords_from_gff(gp)
+      function(x) distinct_feature_length(x, co, r1)
+    }
     .(event,
-      len_S = vapply(u_ref, feature_length, 0, lens = eff, USE.NAMES = FALSE),
+      len_S = vapply(u_ref, flen, 0, USE.NAMES = FALSE),
       ## only exonic units are part numbers; intronic widths come from the manifest
       len_D = vapply(seq_along(u_id), function(i)
-        if (u_type[i] == "exon") feature_length(u_id[i], eff) else NA_real_, 0))
+        if (u_type[i] == "exon") flen(u_id[i]) else NA_real_, 0))
   }, by = gene]
   ip <- unique(fread(a$intronparts, sep = "\t", showProgress = FALSE, select = c("gene", "bin_id", "width"),
                      colClasses = list(character = c("gene", "bin_id"))))

@@ -31,8 +31,11 @@
 #   --read_length      read length of the counted reads; required with --dpi_gate perbase
 #   --padj, --min_dpi, --min_effect, --min_reads
 #                      unit call thresholds of grase::is_significant(), the same as the
-#                      side calls; exontest.R defaults [0.05, 0, 0.5, 10]
+#                      side calls; exontest.R defaults [0.05, 0, 0.4, 10]
 #   --dpi_gate         both, raw or perbase delta_pi for the unit call [both]
+#   --count_per_part   the side results were tested on per-part counts (exontest.R
+#                      --count_per_part); by default on signature counts. Sets the
+#                      reference length rule of the per-base delta_pi
 #   --max_outward_frac a tested, uncalled outward unit counts as a drop only if its
 #                      |effect_size| is below --min_effect, opposite in sign to the
 #                      terminus's, or below this fraction of the terminus's [0.5]
@@ -55,12 +58,13 @@
 set -euo pipefail
 
 FLAGS="--format bam --paired no --stranded reverse --order pos -a 10"
-PY=python3; CORES=8; PADJ=0.05; MIN_DPI=0; MIN_EFFECT=0.5; MIN_READS=10; DPI_GATE=both
+PY=python3; CORES=8; PADJ=0.05; MIN_DPI=0; MIN_EFFECT=0.4; MIN_READS=10; DPI_GATE=both
 MAX_OUTWARD_FRAC=0.5; MAX_FLANK_COV=0.2
-READ_LEN=; SUBSET=0; SAMTOOLS=samtools
+READ_LEN=; SUBSET=0; SAMTOOLS=samtools; PER_PART=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --subset_called) SUBSET=1; shift; continue ;;
+    --count_per_part) PER_PART=1; shift; continue ;;
     --samtools) SAMTOOLS=$2 ;;
     --workdir) W=$2 ;; --results) RES=$2 ;; --terminal_counts) TCNT=$2 ;;
     --split_dir) SPLIT=$2 ;; --graphml_dir) GRAPH=$2 ;; --gff_dir) GFF=$2 ;;
@@ -165,5 +169,6 @@ Rscript "$S/score_outward_walk.R" --side_table "$W/outward_side_table.tsv" \
   --contrasts "$CTR" --min_reads "$MIN_READS" --padj "$PADJ" --min_dpi "$MIN_DPI" \
   --min_effect "$MIN_EFFECT" --dpi_gate "$DPI_GATE" --gff_dir "$GFF" ${READ_LEN:+--read_length "$READ_LEN"} \
   --max_outward_frac "$MAX_OUTWARD_FRAC" --max_flank_cov "$MAX_FLANK_COV" \
+  $([ "$PER_PART" = 1 ] && echo --count_per_part) \
   --out "$W/outward_walk_verdict.tsv"
 echo "=== done: $W/outward_walk_verdict.tsv  $(date '+%F %T')"
