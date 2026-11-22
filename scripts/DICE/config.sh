@@ -42,6 +42,8 @@ GTF=${GTF:-$DICE/ref/gencode.v34.annotation.gtf}
 STAR_BIN=${STAR_BIN:-$HOME/miniconda3/envs/star2711b/bin/STAR}
 SAMTOOLS=${SAMTOOLS:-$HOME/miniconda3/envs/cnr_bam/bin/samtools}
 ALIGN_DIR=${ALIGN_DIR:-/mnt/carrie/SRA/dump/star_primary}
+# STAR temporary files (BAM sorting) on local NVMe rather than the NFS output tree
+STAR_TMP=${STAR_TMP:-/mnt/scratch/$USER/star_tmp}
 
 # Cell types: all 13, and the three panels cut from them (stage 40)
 ALL13='B,CD4,CD4_N_STIM,CD8,CD8_N_STIM,MONO.CLASSIC,MONO.NONCLASSIC,NK,TH1,TH17,TH2,TREG_MEMORY,TREG_NAIVE'

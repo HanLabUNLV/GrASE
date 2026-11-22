@@ -16,4 +16,4 @@ awk -F'\t' -v OFS='\t' -v f="$FASTQ_SRC" '{ print $2, $1, f "/" $1 "/" $2 ".fast
   "$(dirname "$0")/samples_all13.tsv" > "$S"
 bash "$GRASE/scripts/star_two_pass.sh" --samples "$S" --fasta "$GENOME_FASTA" --gtf "$GTF" \
   --outdir "$ALIGN_DIR" --sjdb_overhang $((READ_LEN - 1)) --overhang_min "$SJ_OVERHANG" \
-  --star "$STAR_BIN" --samtools "$SAMTOOLS" --jobs "$JOBS" --threads "$THREADS"
+  --star "$STAR_BIN" --samtools "$SAMTOOLS" --jobs "$JOBS" --threads "$THREADS" --tmpdir "$STAR_TMP"

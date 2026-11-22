@@ -42,7 +42,7 @@ for CT in ${ALL13//,/ }; do
 done
 echo "=== 1. signature counts: $(wc -l < "$LIST") BAMs  $(date '+%F %T') ==="
 DEXSEQ_COUNT=$GRASE/Rpkg/inst/python/dexseq_count_sig.py \
-  bash "$(dirname "$0")/dexseq_count_dice.sh" "$GFF" "$LIST" "$OUT/raw" "$J"
+  bash "$GRASE/scripts/DICE/dexseq_count_dice.sh" "$GFF" "$LIST" "$OUT/raw" "$J"
 
 # signature files with their group, for sigcnt.py
 awk -F'\t' -v d="$OUT/raw" '{g = $2; sub(/_[^_]+$/, "", g); print d "/" $2 "_counts.txt.sig\t" $2 "\t" g}' \

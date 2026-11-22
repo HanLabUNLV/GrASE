@@ -21,6 +21,8 @@
 #   --star           STAR binary [STAR]
 #   --samtools       samtools, to index the pass 2 BAMs (MAJIQ needs the index) [samtools]
 #   --threads        threads per alignment [4]
+#   --tmpdir         directory for STAR's per-sample temporary files (--outTmpDir), e.g.
+#                    on local NVMe; removed after each sample [<sample's output dir>/tmp_<sample>]
 #   --jobs           alignments at once [12]; the genome is loaded once into
 #                    shared memory and used by all of them
 #   --index_threads  threads for genomeGenerate [24]
@@ -38,13 +40,13 @@
 #   run_info.txt: STAR version, inputs and their md5sums
 set -euo pipefail
 
-STAR=STAR; SAMTOOLS=samtools; THREADS=4; JOBS=12; ITHREADS=24; STEPS=index1,pass1,sj,index2,pass2
+STAR=STAR; SAMTOOLS=samtools; TMPDIR_=; THREADS=4; JOBS=12; ITHREADS=24; STEPS=index1,pass1,sj,index2,pass2
 MIN_SAMPLES=5; MIN_UNIQUE=10; MIN_MAXOH=10; FINAL_UNIQUE=20
 while [ $# -gt 0 ]; do
   case "$1" in
     --samples) SAMPLES=$2 ;; --fasta) FASTA=$2 ;; --gtf) GTF=$2 ;; --outdir) OUT=$2 ;;
     --sjdb_overhang) SJDB_OH=$2 ;; --overhang_min) OH_MIN=$2 ;; --star) STAR=$2 ;; --samtools) SAMTOOLS=$2 ;;
-    --threads) THREADS=$2 ;; --jobs) JOBS=$2 ;; --index_threads) ITHREADS=$2 ;; --steps) STEPS=$2 ;;
+    --threads) THREADS=$2 ;; --tmpdir) TMPDIR_=$2 ;; --jobs) JOBS=$2 ;; --index_threads) ITHREADS=$2 ;; --steps) STEPS=$2 ;;
     --min_samples) MIN_SAMPLES=$2 ;; --min_unique) MIN_UNIQUE=$2 ;;
     --min_maxoverhang) MIN_MAXOH=$2 ;; --final_unique) FINAL_UNIQUE=$2 ;;
     *) echo "unknown option: $1" >&2; exit 1 ;;
@@ -58,6 +60,7 @@ for f in "$SAMPLES" "$FASTA" "$GTF"; do [ -s "$f" ] || { echo "missing $f" >&2; 
 "$STAR" --version > /dev/null || { echo "$STAR does not run" >&2; exit 1; }
 "$SAMTOOLS" --version > /dev/null || { echo "$SAMTOOLS does not run" >&2; exit 1; }
 mkdir -p "$OUT"; OUT=$(realpath "$OUT")
+[ -z "$TMPDIR_" ] || { mkdir -p "$TMPDIR_" && TMPDIR_=$(realpath "$TMPDIR_"); } || { echo "cannot create --tmpdir $TMPDIR_" >&2; exit 1; }
 has () { [[ ",$STEPS," == *",$1,"* ]]; }
 I1=$OUT/index_pass1; I2=$OUT/index_pass2
 SJALL=$OUT/sj/all.final.SJ.tab
@@ -82,17 +85,21 @@ ALIGN=(--alignIntronMax 299999 --alignSJDBoverhangMin "$OH_MIN" --alignEndsType 
        --outFilterMismatchNmax 3 --chimSegmentMin 2)
 
 align_one () {  # align_one <pass> <index> <sample> <group> <fastq1> [fastq2]
-  local pass=$1 idx=$2 s=$3 g=$4 f1=$5 f2=${6:-} d pre rf=()
+  local pass=$1 idx=$2 s=$3 g=$4 f1=$5 f2=${6:-} d pre tmp rf=()
   if [ "$pass" = 1 ]; then d=$OUT/pass1/$g; pre=$d/$s.; else d=$OUT/bam/$g; pre=$d/pass2_$s.; fi
   [ -s "${pre}Log.final.out" ] && return 0
   mkdir -p "$d"
+  # STAR wants a tmp dir that does not exist yet; one left by an interrupted run is removed
+  if [ -n "$TMPDIR_" ]; then tmp=$TMPDIR_/pass${pass}_${g}_$s; else tmp=$d/tmp_$s; fi
+  rm -rf "$tmp"
   [[ "$f1" == *.gz ]] && rf=(--readFilesCommand zcat)
   local out=(--outSAMtype None)
   [ "$pass" = 2 ] && out=(--outSAMtype BAM SortedByCoordinate --limitBAMsortRAM 8000000000 --outSAMstrandField intronMotif)
   "$STAR" --runThreadN "$THREADS" --genomeDir "$idx" --genomeLoad LoadAndKeep "${ALIGN[@]}" \
     --readFilesIn "$f1" ${f2:+"$f2"} "${rf[@]}" "${out[@]}" \
-    --outFileNamePrefix "$pre" --outTmpDir "$d/tmp_$s" > "${pre}stdout" 2>&1 \
-    || { rm -f "${pre}Log.final.out"; echo "FAILED $s (pass $pass): see ${pre}Log.out" >&2; return 1; }
+    --outFileNamePrefix "$pre" --outTmpDir "$tmp" > "${pre}stdout" 2>&1 \
+    || { rm -f "${pre}Log.final.out"; rm -rf "$tmp"; echo "FAILED $s (pass $pass): see ${pre}Log.out" >&2; return 1; }
+  rm -rf "$tmp"
   [ "$pass" = 1 ] && mv "${pre}SJ.out.tab" "$d/$s.SJ.out.tab"
   if [ "$pass" = 2 ]; then
     "$SAMTOOLS" index "${pre}Aligned.sortedByCoord.out.bam" \
@@ -100,7 +107,7 @@ align_one () {  # align_one <pass> <index> <sample> <group> <fastq1> [fastq2]
   fi
   return 0
 }
-export -f align_one; export OUT STAR SAMTOOLS THREADS; export ALIGN_STR="${ALIGN[*]}"
+export -f align_one; export OUT STAR SAMTOOLS THREADS TMPDIR_; export ALIGN_STR="${ALIGN[*]}"
 
 run_pass () {  # run_pass <pass> <index>
   local idx=$2
