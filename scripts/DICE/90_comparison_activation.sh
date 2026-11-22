@@ -26,7 +26,7 @@ CTS=${1:-CD4 CD8}
 for CT in $CTS; do
   RM=$DICE/rmats_post_${CT}_${CT}_N_STIM
   SAT=$DICE/saturn_${CT}_${CT}_N_STIM/all.${CT}_${CT}_N_STIM.sumExp_filteredbyCount.txt
-  for f in "$RM/fromGTF.SE.txt" "$RM/SE.MATS.JCEC.txt" "$SAT" "$G.internal_betabinom_EBmap.annotated.txt" "$G.terminal_betabinom_EBmap.annotated.txt"; do
+  for f in "$RM/fromGTF.SE.txt" "$RM/SE.MATS.JCEC.txt" "$SAT" "$G.internal_${MODEL}.annotated.txt" "$G.terminal_${MODEL}.annotated.txt"; do
     [ -s "$f" ] || { echo "missing $f" >&2; exit 1; }
   done
 done
@@ -54,12 +54,12 @@ for CT in $CTS; do
   mkdir -p "$OUT"
 
   for C in internal terminal; do
-    GF=$G.${C}_betabinom_EBmap.annotated.txt
+    GF=$G.${C}_${MODEL}.annotated.txt
     Rscript $R/compare_rmats_grase.R --grase "$GF" --rmats_dir "$RM" --map_dir "$OUT/map.$C/" \
       --contrast "$CTR" --rmats_sample1 "$CT" --pval "$PVAL" --output "$OUT/grase_vs_rmats.$C.txt" &> "$OUT/grase_vs_rmats.$C.log"
   done
 
-  Rscript $R/compare_dexseq_grase.R --grase "$G.internal_betabinom_EBmap.annotated.txt,$G.terminal_betabinom_EBmap.annotated.txt" \
+  Rscript $R/compare_dexseq_grase.R --grase "$G.internal_${MODEL}.annotated.txt,$G.terminal_${MODEL}.annotated.txt" \
     --exon_results "$SAT" --exon_sign -1 --contrast "$CTR" --pval "$PVAL" \
     --output "$OUT/grase_vs_saturn.txt" &> "$OUT/grase_vs_saturn.log"
 
@@ -83,7 +83,7 @@ for CT in $CTS; do for M in $MAPS; do
     graph)       MD="$OUT/map.graph,$OUT/map.graph" ;;
     bipartition) MD="$OUT/map.internal,$OUT/map.terminal" ;;
   esac
-  Rscript $R/compare_parts_upset.R --grase "$G.internal_betabinom_EBmap.annotated.txt,$G.terminal_betabinom_EBmap.annotated.txt" \
+  Rscript $R/compare_parts_upset.R --grase "$G.internal_${MODEL}.annotated.txt,$G.terminal_${MODEL}.annotated.txt" \
     --rmats_dir "$DICE/rmats_post_${CT}_${CT}_N_STIM" --dexseq "$DICE/saturn_${CT}_${CT}_N_STIM/all.${CT}_${CT}_N_STIM.sumExp_filteredbyCount.txt" \
     --contrast "${CT}_N_STIM_vs_${CT}" --pval "$PVAL" --map_dirs "$MD" --outdir "$OUT/upset.$M" --count &> "$OUT/upset.$M.log"
   TABLES+=("$OUT/upset.$M/exonic_parts_three_tools.tsv")

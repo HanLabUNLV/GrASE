@@ -10,7 +10,7 @@ G=$DICE/grase_activation_exsj/test_bipartition.exsj
 OUT=$DICE/comparison/volcano
 mkdir -p "$OUT"
 for CT in ${1:-CD4 CD8}; do
-  Rscript $R/plot_volcano.R --grase "$G.internal_betabinom_EBmap.annotated.txt,$G.terminal_betabinom_EBmap.annotated.txt" \
+  Rscript $R/plot_volcano.R --grase "$G.internal_${MODEL}.annotated.txt,$G.terminal_${MODEL}.annotated.txt" \
     --labels internal,terminal --contrast "${CT}_N_STIM_vs_${CT}" --gff_dir "$DEXSEQ_GFF_DIR" --read_length "$READ_LEN" --pval "$PVAL" \
     --out "$OUT/volcano.$CT" &> "$OUT/volcano.$CT.log"
   echo "=== $CT: $OUT/volcano.$CT.png"

@@ -14,7 +14,7 @@ CORES=${1:-24}
 SAMTOOLS=${SAMTOOLS:-/mnt/data1/home/mirahan/miniconda3/envs/cnr_bam/bin/samtools}   # needs view -N (>= 1.12)
 W=intronparts/activation/ig
 CTR=$ACTIVATION_CTR
-RES=grase_activation_exsj/test_bipartition.exsj.terminal_betabinom_EBmap.annotated.txt
+RES=grase_activation_exsj/test_bipartition.exsj.terminal_${MODEL}.annotated.txt
 TCNT=$COUNT_DIR/bipartition.exsj.terminal.counts/bipartition.exsj.terminal.cnt.combined.txt
 PARTS=$COUNT_DIR/parts
 [ -s "$RES" ] || { echo "missing $RES -- run 70_exontest_activation.sh" >&2; exit 1; }

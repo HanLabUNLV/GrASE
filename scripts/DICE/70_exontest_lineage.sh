@@ -30,7 +30,7 @@ for A in $ARMS; do
     --countdir="$MDIR/" \
     --splittype=bipartition \
     --phi=phi.merged.${A}.txt \
-    --model=betabinom_EBmap --mc_cores=8 \
+    --model=$MODEL --mc_cores=8 \
     --gff_dir="$DEXSEQ_GFF_DIR" --read_length="$READ_LEN" --sj_overhang="$SJ_OVERHANG" \
     --contrasts="$CTR" &> "$OUT/test_${A}.log"
 done

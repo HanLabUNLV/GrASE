@@ -11,6 +11,8 @@ DICE=${DICE:-$HOME/DICE}
 # outward walk's --padj, and every comparison. Passed explicitly at each stage,
 # so a change to a script's own default cannot move the DICE runs.
 PVAL=${PVAL:-0.01}
+# exontest.R --model of stage 70; its name is part of the result files read by stages 80-90
+MODEL=${MODEL:-betabinom_EBapprox}
 # A python that can import HTSeq (DEXSeq counting, outward walk)
 PY=${PY:-/mnt/data1/home/jaquino/miniconda3/bin/python3}
 # Filtered bipartitions (stage 20 output, per gene internal/terminal) and the
