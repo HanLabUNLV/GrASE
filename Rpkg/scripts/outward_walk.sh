@@ -35,7 +35,9 @@
 #   --read_length      read length of the counted reads; required with --dpi_gate perbase
 #   --padj, --min_dpi, --min_effect, --min_reads
 #                      unit call thresholds of grase::is_significant(), the same as the
-#                      side calls; exontest.R defaults [0.05, 0, 0.4, 10]
+#                      side calls; exontest.R defaults [0.05, 0, 0.4, 10]. --padj is also the
+#                      outward test's --padj_threshold, the alpha its independent filtering
+#                      tunes for, as in the test of the sides
 #   --dpi_gate         both, raw or perbase delta_pi for the unit call [both]
 #   --count_per_part   the side results were tested on per-part counts (exontest.R
 #                      --count_per_part); by default on signature counts. Sets the
@@ -175,7 +177,7 @@ find "$BIPDIR" -maxdepth 1 -name '*.bipartition.txt' \
   -exec ln -sfr -t "$T/run" {} +
 Rscript "$S/exontest.R" --file="$COMBINED" --outdir="$T" --countdir="$T/run/" \
   --splittype=bipartition --phi=phi.outward.txt --model="$MODEL" \
-  --mc_cores="$CORES" --min_reads="$MIN_READS" --contrasts="$CTR" &> "$T/test.log"
+  --mc_cores="$CORES" --min_reads="$MIN_READS" --padj_threshold="$PADJ" --contrasts="$CTR" &> "$T/test.log"
 
 echo "=== 6 verdicts  $(date '+%F %T')"
 Rscript "$S/score_outward_walk.R" --side_table "$W/outward_side_table.tsv" \
