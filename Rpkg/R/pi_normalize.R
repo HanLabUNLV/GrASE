@@ -204,15 +204,14 @@ annotate_pi_perbase <- function(res, gff_dir, read_length = NULL, sj_overhang = 
     }
     if (!NROW(lens)) next
     i <- rows_by_gene[[g]]
-    if (!count_per_part) {
-      res$len_D[i] <- vapply(sd[i], distinct_feature_length, numeric(1), coords = lens, extra = extra)
-      res$len_S[i] <- vapply(res$ref_ex_part[i], distinct_feature_length, numeric(1),
-                             coords = lens, extra = extra)
-    } else {
-      res$len_D[i] <- vapply(sd[i], feature_length, numeric(1), lens = lens)
-      res$len_S[i] <- vapply(res$ref_ex_part[i], feature_length, numeric(1),
-                             lens = lens)
-    }
+    ## a length depends only on the gene and the set, and the same sets recur across a
+    ## gene's rows (one row per contrast and comparison; the reference of both sides),
+    ## so each distinct set is measured once and the lengths matched back to the rows
+    u <- unique(c(sd[i], res$ref_ex_part[i]))
+    v <- if (!count_per_part) vapply(u, distinct_feature_length, numeric(1), coords = lens, extra = extra)
+         else vapply(u, feature_length, numeric(1), lens = lens)
+    res$len_D[i] <- unname(v[match(sd[i], u)])
+    res$len_S[i] <- unname(v[match(res$ref_ex_part[i], u)])
   }
   ## junction-sourced sides: empty exonic distinct set, as is_significant() reads it
   if (!is.null(sj_overhang)) {
