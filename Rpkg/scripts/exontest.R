@@ -72,6 +72,12 @@ make_option(c("--use_prec_loess"), action="store_true", default=FALSE,
                          "both stages use this value [default: 0.05]"), metavar="double"),
   make_option(c("--delta"), type="double", default=0,
               help="lfc_diff_net threshold for the significant column; events with lfc_diff_net <= delta are not significant [default: 0]", metavar="double"),
+  make_option(c("--min_ref_reads"), type="double", default=1,
+              help=paste("minimum read support for the shared reference, required in at least",
+                         "one of the two contrasted groups; tests below it are dropped before the",
+                         "adjustment, as for --min_reads. Guards against a reference the alignment",
+                         "cannot see (reads of a duplicated region dropped as multi-mapping);",
+                         "0 turns it off [default: %default]")),
   make_option(c("--min_reads"), type="double", default=10,
               help=paste("minimum read support for the tested distinct set, required in AT",
                          "LEAST ONE of the two contrasted groups. Either, not both: requiring",
@@ -213,6 +219,7 @@ if (dpi_gate != "raw" && is.null(opt$gff_dir))
           call. = FALSE, immediate. = TRUE)
 use_perbase      <- switch(dpi_gate, both = "both", perbase = TRUE, raw = FALSE)
 min_reads        <- as.double(opt$min_reads)
+min_ref_reads    <- as.double(opt$min_ref_reads)
 
 # Expand tilde in paths
 outdir <- path.expand(outdir)
@@ -345,6 +352,23 @@ if (annotate_only) {
     message("No cached support table; using the d_support column already in ",
             basename(out_resultfile))
   }
+  ## --readjust with the reference floor needs reference rows in the support
+  ## table; a table cached before s_support existed has none, so rebuild it from
+  ## the counts (the read a fresh fit does; no refitting)
+  if (isTRUE(opt$readjust) && min_ref_reads > 0 && !is.na(counts_mtime) &&
+      (is.null(d_grp) || !"ref" %in% d_grp$side)) {
+    message("Support table has no reference rows: rebuilding it from the counts for --min_ref_reads")
+    splitcnts <- if (!is.null(opt$prefix)) read_count_files(count_files, all_groups, mc_cores) else
+      as.data.frame(data.table::fread(exoncnt_master, na.strings="NA"))
+    splitcnts$groups <- factor(splitcnts$groups, levels = all_groups)
+    splitcnts <- splitcnts[!is.na(splitcnts$groups), ]
+    d_grp <- grase::support_table(splitcnts)
+    rm(splitcnts); invisible(gc())
+    if (!is.null(d_grp)) {
+      saveRDS(d_grp, d_grp_file)
+      message(sprintf("Support table rebuilt: %d rows, cached to %s", nrow(d_grp), d_grp_file))
+    }
+  }
 } else if (!is.na(counts_mtime)) {
   splitcnts <- if (!is.null(opt$prefix)) read_count_files(count_files, all_groups, mc_cores) else
     as.data.frame(data.table::fread(exoncnt_master, na.strings="NA"))
@@ -431,7 +455,7 @@ add_support <- function(res, contrast = NULL) {
 ## non-call still present in the universe. Deleting the rows instead would remove
 ## ground-truth positives from the denominator and inflate recall.
 filter_unsupported <- function(res, contrast = NULL) {
-  if (min_reads <= 0 || is.null(res) || !nrow(res)) return(res)
+  if ((min_reads <= 0 && min_ref_reads <= 0) || is.null(res) || !nrow(res)) return(res)
   res <- add_support(res, contrast)
   if (!"d_support" %in% names(res)) return(res)
   bad <- !is.na(res$d_support) & res$d_support < min_reads & !is.na(res$p.value)
@@ -439,6 +463,14 @@ filter_unsupported <- function(res, contrast = NULL) {
     res$p.value[bad] <- NA_real_
     message(sprintf("Support filter: %d of %d tests below %g reads in both contrasted groups -> not tested",
                     sum(bad), nrow(res), min_reads))
+  }
+  ## the shared reference, by the same rule (larger group mean); NA (no reference
+  ## rows in a cached support table) is not filtered
+  bad <- min_ref_reads > 0 & !is.na(res$s_support) & res$s_support < min_ref_reads & !is.na(res$p.value)
+  if (any(bad)) {
+    res$p.value[bad] <- NA_real_
+    message(sprintf("Reference support filter: %d of %d tests below %g reference reads in both contrasted groups -> not tested",
+                    sum(bad), nrow(res), min_ref_reads))
   }
   res
 }
@@ -787,7 +819,7 @@ if (model == 'betabinom_EBmap') {
       ungroup()
   }
 
-  results <- add_significant(add_support(results), padj_thr, delta, min_dpi, min_dpi_sj, min_reads,
+  results <- add_significant(add_support(results), padj_thr, delta, min_dpi, min_dpi_sj, min_reads, min_ref_reads = min_ref_reads,
                                omnibus_pairs = omnibus_pairs, use_perbase = use_perbase, min_effect = min_effect)
   write.table(results, file = out_resultfile, quote = FALSE, sep = "\t", row.names = FALSE)
 
@@ -856,7 +888,7 @@ if (model == 'betabinom_EBmap') {
       ungroup()
   }
 
-  results <- add_significant(add_support(results), padj_thr, delta, min_dpi, min_dpi_sj, min_reads,
+  results <- add_significant(add_support(results), padj_thr, delta, min_dpi, min_dpi_sj, min_reads, min_ref_reads = min_ref_reads,
                                omnibus_pairs = omnibus_pairs, use_perbase = use_perbase, min_effect = min_effect)
   write.table(results, file = out_resultfile, quote = FALSE, sep = "\t", row.names = FALSE)
 
@@ -900,7 +932,7 @@ if (model == 'betabinom_EBmap') {
     res$pvalue <- res$p.value
     res <- adjust_pvalues(filter_unsupported(res), independentFiltering = FALSE, alpha = padj_thr, method = padj_method)
     res$pvalue <- NULL
-    add_significant(add_support(res), padj_thr, delta, min_dpi, min_dpi_sj, min_reads,
+    add_significant(add_support(res), padj_thr, delta, min_dpi, min_dpi_sj, min_reads, min_ref_reads = min_ref_reads,
                                omnibus_pairs = omnibus_pairs, use_perbase = use_perbase, min_effect = min_effect)
   })
   results <- bind_rows(contrast_results)
@@ -928,7 +960,7 @@ if (model == 'betabinom_EBmap') {
     res$pvalue <- res$p.value
     res <- adjust_pvalues(filter_unsupported(res), independentFiltering = indep_filter, alpha = padj_thr, method = padj_method)
     res$pvalue <- NULL
-    add_significant(add_support(res), padj_thr, delta, min_dpi, min_dpi_sj, min_reads,
+    add_significant(add_support(res), padj_thr, delta, min_dpi, min_dpi_sj, min_reads, min_ref_reads = min_ref_reads,
                                omnibus_pairs = omnibus_pairs, use_perbase = use_perbase, min_effect = min_effect)
   })
   results <- bind_rows(contrast_results)
@@ -958,7 +990,7 @@ if (model == 'betabinom_EBmap') {
       ungroup()
   }
 
-  results <- add_significant(add_support(results), padj_thr, delta, min_dpi, min_dpi_sj, min_reads,
+  results <- add_significant(add_support(results), padj_thr, delta, min_dpi, min_dpi_sj, min_reads, min_ref_reads = min_ref_reads,
                                omnibus_pairs = omnibus_pairs, use_perbase = use_perbase, min_effect = min_effect)
   write.table(results, file = out_resultfile, quote = FALSE, sep = "\t", row.names = FALSE)
 
@@ -990,7 +1022,10 @@ message(paste("Loaded", nrow(tests), "test results."))
 if (isTRUE(opt$readjust)) {
   if (!annotate_only) message("--readjust has no effect on a fresh fit; the fit path adjusts with the current settings")
   else {
-    ## the stored p.value is already NA for rows under --min_reads, as filter_unsupported() leaves it
+    ## the stored p.value is already NA for rows under --min_reads, as filter_unsupported() leaves it;
+    ## apply the floors again so that a floor added since the fit (--min_ref_reads) drops its
+    ## tests before the adjustment, as a fresh fit would
+    tests <- filter_unsupported(tests)
     message("Readjusting p-values (", padj_method, ", independent filtering ", indep_filter, ") from the stored p-values")
     tests <- tests %>%
       select(-any_of(c("padj_gene", "padj"))) %>%
@@ -1088,7 +1123,7 @@ if (!is.null(opt$gff_dir)) {
 # not exist yet, so every row got the exonic min_dpi. Now that the merge has
 # attached them, recompute so junction-sourced sides use min_dpi_sj.
 if (nrow(merged_data) > 0 && all(c("setdiff1", "setdiff2") %in% names(merged_data))) {
-  merged_data <- add_significant(add_support(merged_data), padj_thr, delta, min_dpi, min_dpi_sj, min_reads,
+  merged_data <- add_significant(add_support(merged_data), padj_thr, delta, min_dpi, min_dpi_sj, min_reads, min_ref_reads = min_ref_reads,
                                omnibus_pairs = omnibus_pairs, use_perbase = use_perbase, min_effect = min_effect)
 }
 
@@ -1152,7 +1187,7 @@ if (isTRUE(opt$combine_p) && (split == 'bipartition' || split == 'n_choose_2')) 
       min_data$pvalue <- NULL
     }
 
-    min_data <- add_significant(add_support(min_data), padj_thr, delta, min_dpi, min_dpi_sj, min_reads,
+    min_data <- add_significant(add_support(min_data), padj_thr, delta, min_dpi, min_dpi_sj, min_reads, min_ref_reads = min_ref_reads,
                                omnibus_pairs = omnibus_pairs, use_perbase = use_perbase, min_effect = min_effect)
     out_mincomb <- sub("\\.annotated\\.txt$", ".mincomb.annotated.txt",
                       out_result_annotated)
@@ -1187,7 +1222,7 @@ if (isTRUE(opt$combine_p) && (split == 'bipartition' || split == 'n_choose_2')) 
       fisher_data$pvalue <- NULL
     }
 
-    fisher_data <- add_significant(add_support(fisher_data), padj_thr, delta, min_dpi, min_dpi_sj, min_reads,
+    fisher_data <- add_significant(add_support(fisher_data), padj_thr, delta, min_dpi, min_dpi_sj, min_reads, min_ref_reads = min_ref_reads,
                                omnibus_pairs = omnibus_pairs, use_perbase = use_perbase, min_effect = min_effect)
     out_fisher <- sub("\\.annotated\\.txt$", ".fisher_combined.annotated.txt",
                       out_result_annotated)

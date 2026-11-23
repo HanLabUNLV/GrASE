@@ -14,7 +14,8 @@ is_significant(
   padj = NULL,
   omnibus_pairs = NULL,
   use_perbase = "both",
-  min_effect = 0.4
+  min_effect = 0.4,
+  min_ref_reads = 1
 )
 }
 \arguments{
@@ -75,6 +76,13 @@ its distinct set, so it has no length and no per-base pi.}
 fitted model; 0 or a missing column drops the condition. The default gate:
 the log odds ratio does not depend on the lengths of the distinct set and
 the reference, so one threshold means the same thing on every side.}
+
+\item{min_ref_reads}{minimum read support for the shared reference, required
+in at least one of the two contrasted groups, read from an \code{s_support}
+column; no-op when that column is absent or NA. A guard against a reference
+the alignment cannot see (reads of a duplicated region dropped as
+multi-mapping), not a reliability floor: on the simulation a floor of 10
+discarded 175 true positives for 4 false ones, a floor of 1 one true positive.}
 }
 \value{
 logical vector, one element per row of \code{res}.

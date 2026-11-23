@@ -1157,6 +1157,12 @@ posthoc_lfc_summary <- function(results, lfc_summary) {
 #'   precision, which does not justify a source-dependent rule.
 #' @param padj optional vector to use in place of \code{res$padj} -- for a
 #'   two-stage nested-BH sweep, pass \code{pmax(within_gene_BH, padj_gene)}.
+#' @param min_ref_reads minimum read support for the shared reference, required
+#'   in at least one of the two contrasted groups, read from an \code{s_support}
+#'   column; no-op when that column is absent or NA. A guard against a reference
+#'   the alignment cannot see (reads of a duplicated region dropped as
+#'   multi-mapping), not a reliability floor: on the simulation a floor of 10
+#'   discarded 175 true positives for 4 false ones, a floor of 1 one true positive.
 #' @return logical vector, one element per row of \code{res}.
 #'
 #' @details NA handling: a missing \code{lfc_diff_net}, \code{delta_pi} or
@@ -1167,7 +1173,7 @@ posthoc_lfc_summary <- function(results, lfc_summary) {
 is_significant <- function(res, padj_thr, delta = 0, min_dpi = 0,
                            min_dpi_sj = min_dpi, min_reads = 0, padj = NULL,
                            omnibus_pairs = NULL, use_perbase = "both",
-                           min_effect = 0.4) {
+                           min_effect = 0.4, min_ref_reads = 1) {
   ## use_perbase and min_effect are last in the signature on purpose: existing
   ## positional calls must keep working.
   pv <- if (is.null(padj)) res$padj else padj
@@ -1223,6 +1229,9 @@ is_significant <- function(res, padj_thr, delta = 0, min_dpi = 0,
   sup_ok <- if (min_reads > 0 && "d_support" %in% names(res)) {
     !is.na(res$d_support) & res$d_support >= min_reads
   } else TRUE
+  ## read support for the shared reference, in either contrasted group
+  if (min_ref_reads > 0 && "s_support" %in% names(res))
+    sup_ok <- sup_ok & (is.na(res$s_support) | res$s_support >= min_ref_reads)
 
   ## K-group omnibus rows have no single direction, so delta_pi and
   ## lfc_diff_net are NA and the two effect-size gates cannot be evaluated on
@@ -1275,10 +1284,12 @@ is_significant <- function(res, padj_thr, delta = 0, min_dpi = 0,
 #' @export
 add_significant <- function(res, padj_thr, delta, min_dpi = 0, min_dpi_sj = 0,
                             min_reads = 10, omnibus_pairs = NULL,
-                            use_perbase = "both", min_effect = 0.4) {
+                            use_perbase = "both", min_effect = 0.4,
+                            min_ref_reads = 1) {
   res$significant <- is_significant(res, padj_thr, delta, min_dpi, min_dpi_sj,
                                     min_reads, omnibus_pairs = omnibus_pairs,
-                                    use_perbase = use_perbase, min_effect = min_effect)
+                                    use_perbase = use_perbase, min_effect = min_effect,
+                                    min_ref_reads = min_ref_reads)
   res
 }
 
@@ -1457,11 +1468,13 @@ estimate_phi_for_comparison <- function(sc, comp_name, outdir, mc_cores = 1L) {
 ## never collide onto one key. Exported here with the dependencies as arguments
 ## so there is one definition of the floor.
 
-#' Per-group mean of each side's distinct-set count
+#' Per-group mean of each side's distinct-set count, and of the reference
 #'
 #' One row per (gene, event, side, group): the arithmetic mean, over the samples
-#' of that group, of the side's distinct-set read count. This is the support
-#' table \code{\link{add_support}} consumes.
+#' of that group, of the side's distinct-set read count, with \code{side}
+#' \code{"diff1"} or \code{"diff2"}; and the same for the shared reference, with
+#' \code{side} \code{"ref"}. This is the support table \code{\link{add_support}}
+#' consumes.
 #'
 #' `side` is part of the key and must stay so. A side's two distinct sets are
 #' separate tests with separate counts, and collapsing them would average a
@@ -1486,15 +1499,18 @@ support_table <- function(counts) {
     m$side <- lab
     m
   }
-  out <- rbind(one("diff1", "diff1"), one("diff2", "diff2"))
+  out <- rbind(one("diff1", "diff1"), one("diff2", "diff2"),
+               if ("ref" %in% names(counts)) one("ref", "ref"))
   out$gene <- as.character(out$gene); out$event <- as.character(out$event)
   out
 }
 
-#' Attach d_support, the read floor's statistic
+#' Attach d_support and s_support, the read floors' statistics
 #'
 #' \code{d_support} is the LARGER of the contrasted groups' mean distinct
-#' counts for the tested side.
+#' counts for the tested side; \code{s_support} is the same for the shared
+#' reference. A support table without reference rows (written before
+#' \code{s_support} existed) leaves \code{s_support} NA, which no floor rejects.
 #'
 #' max(), not min(): requiring both groups to clear the floor throws away
 #' exactly the on/off events the test exists to find. Measured on the
@@ -1519,7 +1535,7 @@ support_table <- function(counts) {
 #'   name contains "_vs_", and could not express a K-group omnibus.
 #' @param contrast Optional single contrast name, recycled over \code{res},
 #'   for callers that test one contrast at a time.
-#' @return \code{res} with a \code{d_support} column. An unknown contrast name
+#' @return \code{res} with \code{d_support} and \code{s_support} columns. An unknown contrast name
 #'   gives NA, which leaves the row untested by the floor rather than wrongly
 #'   filtered.
 #' @export
@@ -1536,18 +1552,21 @@ add_support <- function(res, d_grp, ctr_groups, contrast = NULL) {
   ## match() per row against a key vector with ~1.9M entries on the terminal
   ## arm -- order 10^12 operations, which ran for hours with no output. Each
   ## contrast now contributes one vectorised match() per group.
-  res$d_support <- NA_real_
+  res$d_support <- NA_real_; res$s_support <- NA_real_
   for (cn in unique(ctr)) {
     gs <- ctr_groups[[cn]]
     if (is.null(gs) || !length(gs)) next
     rows <- which(ctr == cn)
-    acc  <- rep(NA_real_, length(rows))
+    acc  <- rep(NA_real_, length(rows)); acc_s <- acc
     for (g in gs) {
       m <- d_grp$m[match(paste(res$gene[rows], res$event[rows], side[rows], g,
                                sep = "\r"), key)]
       acc <- pmax(acc, m, na.rm = TRUE)
+      m <- d_grp$m[match(paste(res$gene[rows], res$event[rows], "ref", g,
+                               sep = "\r"), key)]
+      acc_s <- pmax(acc_s, m, na.rm = TRUE)
     }
-    res$d_support[rows] <- acc
+    res$d_support[rows] <- acc; res$s_support[rows] <- acc_s
   }
   res
 }

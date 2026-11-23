@@ -2,7 +2,7 @@
 % Please edit documentation in R/exontest_functions.R
 \name{support_table}
 \alias{support_table}
-\title{Per-group mean of each side's distinct-set count}
+\title{Per-group mean of each side's distinct-set count, and of the reference}
 \usage{
 support_table(counts)
 }
@@ -18,8 +18,10 @@ there is no "the tested distinct set" to support.
 }
 \description{
 One row per (gene, event, side, group): the arithmetic mean, over the samples
-of that group, of the side's distinct-set read count. This is the support
-table \code{\link{add_support}} consumes.
+of that group, of the side's distinct-set read count, with \code{side}
+\code{"diff1"} or \code{"diff2"}; and the same for the shared reference, with
+\code{side} \code{"ref"}. This is the support table \code{\link{add_support}}
+consumes.
 }
 \details{
 \code{side} is part of the key and must stay so. A side's two distinct sets are

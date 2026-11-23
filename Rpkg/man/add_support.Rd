@@ -2,7 +2,7 @@
 % Please edit documentation in R/exontest_functions.R
 \name{add_support}
 \alias{add_support}
-\title{Attach d_support, the read floor's statistic}
+\title{Attach d_support and s_support, the read floors' statistics}
 \usage{
 add_support(res, d_grp, ctr_groups, contrast = NULL)
 }
@@ -23,13 +23,15 @@ name contains "\emph{vs}", and could not express a K-group omnibus.}
 for callers that test one contrast at a time.}
 }
 \value{
-\code{res} with a \code{d_support} column. An unknown contrast name
+\code{res} with \code{d_support} and \code{s_support} columns. An unknown contrast name
 gives NA, which leaves the row untested by the floor rather than wrongly
 filtered.
 }
 \description{
 \code{d_support} is the LARGER of the contrasted groups' mean distinct
-counts for the tested side.
+counts for the tested side; \code{s_support} is the same for the shared
+reference. A support table without reference rows (written before
+\code{s_support} existed) leaves \code{s_support} NA, which no floor rejects.
 }
 \details{
 max(), not min(): requiring both groups to clear the floor throws away
