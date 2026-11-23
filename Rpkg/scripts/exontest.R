@@ -541,15 +541,31 @@ if (model == 'betabinom_EBmap' || model == 'betabinom_EBapprox') {
   if (is.null(opt$phi)) stop("--phi is required for model '", model, "'")
   if (!is.null(opt$prec)) warning("--prec is not used for model '", model, "' and will be ignored")
   rm(splitcnts)
+  ## comparisons_list holds the two comparison tables too; the EB paths do not use
+  ## it, and keeping it would stop rm(sc_d1r, sc_d2r) below from freeing them
+  if (exists("comparisons_list")) rm(comparisons_list)
   gc()
 
   if (file.exists(paste0(outdir, "/", phifile))) {
     phi_df <- read.table(paste0(outdir,'/', phifile), header=TRUE, row.names=NULL)
   } else {
+    ## Workers forked from a parent that holds the comparison tables copy them as
+    ## their garbage collector touches them, so the tables are written to disk and
+    ## dropped before the fit, each chunk of events read back in turn, and the
+    ## tables reloaded after it (spill_event_chunks).
+    spill_dir <- file.path(outdir, paste0("spill_", out_prefix))
+    f_d1r <- spill_event_chunks(sc_d1r, spill_dir, "phi_d1r")
+    f_d2r <- spill_event_chunks(sc_d2r, spill_dir, "phi_d2r")
+    saveRDS(sc_d1r, file.path(spill_dir, "sc_d1r.rds"), compress = FALSE)
+    saveRDS(sc_d2r, file.path(spill_dir, "sc_d2r.rds"), compress = FALSE)
+    rm(sc_d1r, sc_d2r); invisible(gc())
     message("Estimating phi for diff1 vs ref...")
-    phi_d1r <- estimate_phi_for_comparison(sc_d1r, "diff1_vs_ref", outdir = outdir, mc_cores = mc_cores)
+    phi_d1r <- estimate_phi_for_comparison(NULL, "diff1_vs_ref", outdir = outdir, mc_cores = mc_cores, chunk_files = f_d1r)
     message("Estimating phi for diff2 vs ref...")
-    phi_d2r <- estimate_phi_for_comparison(sc_d2r, "diff2_vs_ref", outdir = outdir, mc_cores = mc_cores)
+    phi_d2r <- estimate_phi_for_comparison(NULL, "diff2_vs_ref", outdir = outdir, mc_cores = mc_cores, chunk_files = f_d2r)
+    sc_d1r <- readRDS(file.path(spill_dir, "sc_d1r.rds"))
+    sc_d2r <- readRDS(file.path(spill_dir, "sc_d2r.rds"))
+    unlink(spill_dir, recursive = TRUE)
 
     phi_df <- bind_rows(phi_d1r, phi_d2r)
     rm(phi_d1r, phi_d2r)
@@ -795,14 +811,18 @@ if (model == 'betabinom_EBmap') {
   if (exists("sc_d1r")) rm(sc_d1r, sc_d2r)
   gc()
 
-  results <- run_one_comparison(sc_both_eb,
+  ## events to disk, tables dropped before the workers fork (see the phi fit above)
+  spill_dir <- file.path(outdir, paste0("spill_", out_prefix))
+  f_lrt <- spill_event_chunks(sc_both_eb, spill_dir, "lrt")
+  rm(sc_both_eb); invisible(gc())
+  results <- run_one_comparison(NULL,
                                 test_fn = test_model_glmmTMB_EB,
                                 err_log = "glmmtmb_EBmap.errors.log",
                                 model_label = "betabinom_EBmap",
                                 L = L,
                                 checkpoint_prefix = paste0(outdir, "/ckpt_lrt_", out_prefix, "_EBmap"),
-                                mc_cores = mc_cores)
-  rm(sc_both_eb)
+                                mc_cores = mc_cores, chunk_files = f_lrt)
+  unlink(spill_dir, recursive = TRUE)
 
   results <- results %>%
     left_join(baseMean_df, by = c("gene", "event", "comparison")) %>%
@@ -865,14 +885,18 @@ if (model == 'betabinom_EBmap') {
   if (exists("sc_d1r")) rm(sc_d1r, sc_d2r)
   gc()
 
-  results <- run_one_comparison(sc_both_eb,
+  ## events to disk, tables dropped before the workers fork (see the phi fit above)
+  spill_dir <- file.path(outdir, paste0("spill_", out_prefix))
+  f_lrt <- spill_event_chunks(sc_both_eb, spill_dir, "lrt")
+  rm(sc_both_eb); invisible(gc())
+  results <- run_one_comparison(NULL,
                                 test_fn = test_model_glmmTMB_EB,
                                 err_log = "glmmtmb_EB.errors.log",
                                 model_label = "betabinom_EBapprox",
                                 L = L,
                                 checkpoint_prefix = paste0(outdir, "/ckpt_lrt_", out_prefix, "_EBapprox"),
-                                mc_cores = mc_cores)
-  rm(sc_both_eb)
+                                mc_cores = mc_cores, chunk_files = f_lrt)
+  unlink(spill_dir, recursive = TRUE)
   results <- results %>%
     left_join(baseMean_df, by = c("gene", "event", "comparison")) %>%
     left_join(lfc_summary_all, by = c("gene", "event", "comparison", "contrast"))

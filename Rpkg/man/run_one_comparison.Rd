@@ -11,7 +11,8 @@ run_one_comparison(
   ...,
   chunk_size = 10000L,
   checkpoint_prefix = NULL,
-  mc_cores = 1L
+  mc_cores = 1L,
+  chunk_files = NULL
 )
 }
 \arguments{
@@ -26,6 +27,9 @@ run_one_comparison(
 \item{checkpoint_prefix}{prefix for checkpoint RDS files; NULL disables checkpointing}
 
 \item{mc_cores}{number of parallel cores}
+
+\item{chunk_files}{event chunk files from \code{\link{spill_event_chunks}}; when
+given, \code{sc} is not used and each chunk is read from its file}
 }
 \description{
 Run a test function over events in chunked parallel batches with checkpointing

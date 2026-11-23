@@ -1308,6 +1308,38 @@ impute_z_mod <- function(df, p_table) {
   df
 }
 
+#' Write a comparison's events to chunk files
+#'
+#' Groups \code{sc} by event as the fitting functions do and writes the event
+#' list in chunks of \code{chunk_size}, so that the caller can drop the full
+#' tables before forking workers. A worker forked from a parent that holds them
+#' copies them page by page as its garbage collector touches them, which ran the
+#' DICE lineage terminal arm out of memory. Chunk numbering is that of
+#' \code{run_one_comparison()} and \code{estimate_phi_for_comparison()}, so
+#' their checkpoints stay valid.
+#'
+#' @param sc split counts data frame for one comparison (or both, with a
+#'   \code{comparison} column)
+#' @param dir directory for the chunk files
+#' @param tag file name prefix
+#' @param chunk_size events per chunk
+#' @return character vector of chunk file paths, in chunk order; empty when
+#'   \code{sc} has no rows
+#' @export
+spill_event_chunks <- function(sc, dir, tag, chunk_size = 10000L) {
+  if (is.null(sc) || nrow(sc) == 0) return(character(0))
+  gd <- group_by_event(sc, 'diff', 'n')
+  n_events <- length(gd)
+  if (!n_events) return(character(0))
+  chunk_starts <- seq(1L, n_events, by = chunk_size)
+  n_chunks <- length(chunk_starts)
+  dir.create(dir, showWarnings = FALSE, recursive = TRUE)
+  files <- file.path(dir, sprintf("%s_chunk%dof%d.events.rds", tag, seq_len(n_chunks), n_chunks))
+  for (ci in seq_len(n_chunks))
+    saveRDS(gd[chunk_starts[ci]:min(chunk_starts[ci] + chunk_size - 1L, n_events)], files[ci], compress = FALSE)
+  files
+}
+
 #' Run a test function over events in chunked parallel batches with checkpointing
 #'
 #' @param sc split counts data frame
@@ -1316,16 +1348,24 @@ impute_z_mod <- function(df, p_table) {
 #' @param chunk_size number of events per parallel batch
 #' @param checkpoint_prefix prefix for checkpoint RDS files; NULL disables checkpointing
 #' @param mc_cores number of parallel cores
+#' @param chunk_files event chunk files from \code{\link{spill_event_chunks}}; when
+#'   given, \code{sc} is not used and each chunk is read from its file
 #' @export
 run_one_comparison <- function(sc, test_fn, err_log, ..., chunk_size = 10000L,
-                               checkpoint_prefix = NULL, mc_cores = 1L) {
-  if (nrow(sc) == 0) return(NULL)
-  gd <- group_by_event(sc, 'diff', 'n')
-  n_events <- length(gd)
-  chunk_starts <- seq(1L, n_events, by = chunk_size)
-  n_chunks <- length(chunk_starts)
+                               checkpoint_prefix = NULL, mc_cores = 1L,
+                               chunk_files = NULL) {
+  if (is.null(chunk_files)) {
+    if (nrow(sc) == 0) return(NULL)
+    gd <- group_by_event(sc, 'diff', 'n')
+    n_events <- length(gd)
+    chunk_starts <- seq(1L, n_events, by = chunk_size)
+    n_chunks <- length(chunk_starts)
+  } else {
+    if (!length(chunk_files)) return(NULL)
+    n_chunks <- length(chunk_files)
+  }
   all_results <- vector("list", n_chunks)
-  for (ci in seq_along(chunk_starts)) {
+  for (ci in seq_len(n_chunks)) {
     ckpt_file <- if (!is.null(checkpoint_prefix))
       sprintf("%s_chunk%dof%d.rds", checkpoint_prefix, ci, n_chunks) else NULL
     if (!is.null(ckpt_file) && file.exists(ckpt_file)) {
@@ -1334,8 +1374,9 @@ run_one_comparison <- function(sc, test_fn, err_log, ..., chunk_size = 10000L,
                       format(Sys.time(), "%H:%M:%S"), ci, n_chunks))
       next
     }
-    idx <- chunk_starts[ci]:min(chunk_starts[ci] + chunk_size - 1L, n_events)
-    chunk_res <- parallel::mclapply(gd[idx], function(dd) {
+    items <- if (is.null(chunk_files))
+      gd[chunk_starts[ci]:min(chunk_starts[ci] + chunk_size - 1L, n_events)] else readRDS(chunk_files[ci])
+    chunk_res <- parallel::mclapply(items, function(dd) {
       result <- tryCatch(test_fn(dd, ...), error = function(e) {
         msg <- sprintf("[%s] ERROR gene=%s event=%s (PID %d): %s\n",
                        format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
@@ -1350,10 +1391,11 @@ run_one_comparison <- function(sc, test_fn, err_log, ..., chunk_size = 10000L,
     all_results[[ci]] <- dplyr::bind_rows(Filter(Negate(is.null), chunk_res))
     if (!is.null(ckpt_file)) saveRDS(all_results[[ci]], ckpt_file)
     message(sprintf("[%s] LRT testing chunk %d/%d done (%d events)",
-                    format(Sys.time(), "%H:%M:%S"), ci, n_chunks, length(idx)))
+                    format(Sys.time(), "%H:%M:%S"), ci, n_chunks, length(items)))
+    rm(items)
   }
   res <- dplyr::bind_rows(all_results)
-  if (nrow(res) > 0 && !"comparison" %in% names(res))
+  if (nrow(res) > 0 && !"comparison" %in% names(res) && !is.null(sc))
     res$comparison <- sc$comparison[1]
   res
 }
@@ -1412,20 +1454,29 @@ run_map_for_comparison <- function(sc, comp_name, prior_fn, err_log,
 #' @param comp_name comparison label used for log file names
 #' @param outdir output directory for progress and error logs
 #' @param mc_cores number of parallel cores
+#' @param chunk_files event chunk files from \code{\link{spill_event_chunks}}; when
+#'   given, \code{sc} is not used and each chunk is read from its file
 #' @export
-estimate_phi_for_comparison <- function(sc, comp_name, outdir, mc_cores = 1L) {
-  if (nrow(sc) == 0) return(NULL)
-  grouped_data      <- group_by_event(sc, 'diff', 'n')
+estimate_phi_for_comparison <- function(sc, comp_name, outdir, mc_cores = 1L,
+                                        chunk_files = NULL) {
   phi_progress_file <- file.path(outdir, paste0("phi_progress_", comp_name, ".log"))
   error_log_file    <- paste0("phi.glmmtmb.errors.", comp_name, ".log")
-
-  n_events     <- length(grouped_data)
-  chunk_size   <- 10000L
-  chunk_starts <- seq(1L, n_events, by = chunk_size)
-  phi_chunks   <- vector("list", length(chunk_starts))
-  for (ci in seq_along(chunk_starts)) {
-    idx <- chunk_starts[ci]:min(chunk_starts[ci] + chunk_size - 1L, n_events)
-    phi_chunks[[ci]] <- parallel::mclapply(grouped_data[idx], function(dd) {
+  chunk_size <- 10000L
+  if (is.null(chunk_files)) {
+    if (nrow(sc) == 0) return(NULL)
+    grouped_data <- group_by_event(sc, 'diff', 'n')
+    n_events     <- length(grouped_data)
+    chunk_starts <- seq(1L, n_events, by = chunk_size)
+    n_chunks     <- length(chunk_starts)
+  } else {
+    if (!length(chunk_files)) return(NULL)
+    n_chunks <- length(chunk_files)
+  }
+  phi_chunks <- vector("list", n_chunks)
+  for (ci in seq_len(n_chunks)) {
+    items <- if (is.null(chunk_files))
+      grouped_data[chunk_starts[ci]:min(chunk_starts[ci] + chunk_size - 1L, n_events)] else readRDS(chunk_files[ci])
+    phi_chunks[[ci]] <- parallel::mclapply(items, function(dd) {
       result <- withCallingHandlers(
         tryCatch({
           phi_estimate_glmmTMB(dd)
@@ -1450,7 +1501,8 @@ estimate_phi_for_comparison <- function(sc, comp_name, outdir, mc_cores = 1L) {
     }, mc.cores = mc_cores)
     message(sprintf("[%s] phi chunk %d/%d done (%d events)",
                     format(Sys.time(), "%H:%M:%S"), ci,
-                    length(chunk_starts), length(idx)))
+                    n_chunks, length(items)))
+    rm(items)
   }
   phi_list     <- unlist(phi_chunks, recursive = FALSE)
   phi_df_comp  <- dplyr::bind_rows(Filter(Negate(is.null), phi_list))

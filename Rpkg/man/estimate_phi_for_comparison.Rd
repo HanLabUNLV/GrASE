@@ -4,7 +4,13 @@
 \alias{estimate_phi_for_comparison}
 \title{Estimate phi (overdispersion) for all events in one comparison using glmmTMB}
 \usage{
-estimate_phi_for_comparison(sc, comp_name, outdir, mc_cores = 1L)
+estimate_phi_for_comparison(
+  sc,
+  comp_name,
+  outdir,
+  mc_cores = 1L,
+  chunk_files = NULL
+)
 }
 \arguments{
 \item{sc}{split counts data frame for one comparison}
@@ -14,6 +20,9 @@ estimate_phi_for_comparison(sc, comp_name, outdir, mc_cores = 1L)
 \item{outdir}{output directory for progress and error logs}
 
 \item{mc_cores}{number of parallel cores}
+
+\item{chunk_files}{event chunk files from \code{\link{spill_event_chunks}}; when
+given, \code{sc} is not used and each chunk is read from its file}
 }
 \description{
 Estimate phi (overdispersion) for all events in one comparison using glmmTMB
