@@ -102,6 +102,10 @@ make_option(c("--use_prec_loess"), action="store_true", default=FALSE,
               help="minimum |effect_size| (log odds ratio) for the significant column, the default gate; 0 drops it [default: 0.4]", metavar="double"),
   make_option(c("--mc_cores"), type="integer", default=NULL,
               help="number of parallel worker processes for mclapply [default: %default]", metavar="integer"),
+  make_option(c("--lowmem_batch_mb"), type="double", default=50,
+              help="--lowmem: largest size of the count files in one batch of genes, in MB, lowered to give at least 8 batches per worker; a larger gene is a batch of its own [default: %default]"),
+  make_option(c("--lowmem"), action="store_true", default=FALSE,
+              help="fit in batches of genes read from the per-gene count files (--prefix, --model betabinom_EBapprox only): two passes, the full count table is never built [default: %default]"),
   make_option(c("--retest"), action="store_true", default=FALSE,
               help="force a full re-test even when a complete results file and cached support table already exist; without it an existing, not-stale results file is reused and only the annotation stage runs [default: %default]"),
   make_option(c("--readjust"), action="store_true", default=FALSE,
@@ -247,6 +251,11 @@ if (!grepl("^[^.]+\\.(ex|exsj)\\.", out_prefix))
           if (!is.null(opt$prefix)) opt$prefix else masterfile, "\n  out_prefix is \"", out_prefix,
           "\" -- output names may not identify the count unit")
 out_resultfile=paste0(outdir,'/test_', out_prefix,'_', model, '.txt')
+lowmem <- isTRUE(opt$lowmem)
+if (lowmem && (is.null(opt$prefix) || model != "betabinom_EBapprox"))
+  stop("--lowmem needs --prefix and --model betabinom_EBapprox", call. = FALSE)
+if (lowmem && isTRUE(opt$combine_p))
+  stop("--lowmem does not support --combine_p, which needs every contrast at once", call. = FALSE)
 
 ## The counts: one combined table (--file), or the per-gene files it would be
 ## combined from (--prefix). counts_mtime is the newest of them, for the
@@ -317,6 +326,20 @@ if (!length(omnibus_pairs)) omnibus_pairs <- NULL
 ## what keeps this from silently reusing a stale result: regenerate the counts
 ## and the short circuit disarms itself. --retest forces the full path.
 d_grp_file <- paste0(outdir, '/d_grp_', out_prefix, '_', model, '.rds')
+## Raw phi is written as text for reading and as .rds at full precision. A run that
+## resumes from saved phi reads the .rds (unless the text file is newer), so it
+## moderates the same values as an uninterrupted run; the text file alone carries 15
+## significant digits, which moved p-values by up to 4e-5.
+phi_rds <- function(p) sub("\\.[^.]*$", ".rds", p)
+write_phi <- function(df, p) {
+  write.table(df, file = p, quote = FALSE, sep = "\t", row.names = FALSE)
+  saveRDS(df, phi_rds(p))
+}
+read_phi <- function(p) {
+  r <- phi_rds(p)
+  if (file.exists(r) && file.mtime(r) >= file.mtime(p)) readRDS(r)
+  else read.table(p, header = TRUE, row.names = NULL)
+}
 annotate_only <- FALSE
 if (!isTRUE(opt$retest) && file.exists(out_resultfile)) {
   if (is.na(counts_mtime) || file.mtime(out_resultfile) >= counts_mtime) {
@@ -370,6 +393,7 @@ if (annotate_only) {
     }
   }
 } else if (!is.na(counts_mtime)) {
+  if (!lowmem) {
   splitcnts <- if (!is.null(opt$prefix)) read_count_files(count_files, all_groups, mc_cores) else
     as.data.frame(data.table::fread(exoncnt_master, na.strings="NA"))
   # Include all groups mentioned in any contrast; drop samples from other groups.
@@ -405,6 +429,7 @@ if (annotate_only) {
     saveRDS(d_grp, d_grp_file)
     message("Support table cached to ", d_grp_file)
   }
+  }  ## end if (!lowmem): --lowmem builds the support table batch by batch below
 
   ## L: a NAMED LIST of contrast matrices, columns = "groups<level>".
   ## A pairwise contrast is one row (+1 trt, -1 ref) and reproduces the former
@@ -475,10 +500,196 @@ filter_unsupported <- function(res, contrast = NULL) {
   res
 }
 
+## ---- --lowmem: the EBapprox fit in batches of genes, for a bounded memory peak --
+## Two passes over the per-gene count files, so the full count table is never built
+## and a worker holds one batch's counts. A batch (worker task) is a run of genes
+## whose count files add up to --lowmem_batch_mb. Pass 1 returns, per batch, the
+## support-table rows, baseMean, the effect summaries and raw phi; the moderation runs
+## on those per-event tables; pass 2 tests each batch's events with their moderated
+## phi. Each batch goes through the functions of the whole-table path (support_table,
+## compute_lfc_summary, estimate_phi_for_comparison, run_one_comparison) on its own
+## rows, and genes are taken in that path's order, so the results are the same. Pass 1
+## caches each batch's comparison tables in --outdir (lowmem_cache_*), which pass 2
+## reads instead of the count files, and the cache is removed at the end. Groups of
+## batches are checkpointed in --outdir (ckpt_lowmem1_*, ckpt_lowmem2_*).
+if (lowmem && !annotate_only) {
+  pg_cmp <- function(sc, diff_col, comp_name) {
+    sc %>%
+      filter(!is.na(.data[[diff_col]]) & !is.na(.data[["ref"]])) %>%
+      mutate(diff = .data[[diff_col]], ref = .data[["ref"]],
+             n = .data[[diff_col]] + .data[["ref"]], comparison = comp_name) %>%
+      select(gene, event, groups, diff, ref, n, comparison)
+  }
+  pg_pseudo <- function(sc) {
+    zero_ref <- sc$ref == 0L
+    sc$ref[zero_ref] <- pseudocount
+    sc$n[zero_ref]   <- sc$n[zero_ref] + pseudocount
+    sc
+  }
+  pg_read <- function(fs) {
+    x <- suppressMessages(read_count_files(fs, all_groups, 1L))
+    if (!nrow(x)) return(x)
+    x$groups <- factor(x$groups, levels = all_groups)
+    x[!is.na(x$groups), ]
+  }
+  ## genes in the order dplyr::arrange() puts them (C locale), as the whole-table path
+  pg_gene <- sub(paste0("\\.", gsub(".", "\\.", opt$prefix, fixed = TRUE), "\\.cnt\\.txt$"), "",
+                 basename(count_files))
+  pg_files <- count_files[order(pg_gene, method = "radix")]
+  ## batches: consecutive genes (so the order is kept) up to --lowmem_batch_mb of count files
+  ## at most --lowmem_batch_mb, and small enough for at least 8 batches per worker
+  task_cap <- min(as.numeric(opt$lowmem_batch_mb) * 1e6,
+                  sum(file.size(pg_files)) / (8 * max(1L, mc_cores)))
+  task_of <- integer(length(pg_files)); ti <- 1L; acc <- 0
+  for (i in seq_along(pg_files)) {
+    sz <- file.size(pg_files[i])
+    if (acc > 0 && acc + sz > task_cap) { ti <- ti + 1L; acc <- 0 }
+    task_of[i] <- ti; acc <- acc + sz
+  }
+  pg_tasks <- unname(split(pg_files, task_of))
+  pg_batches <- split(seq_along(pg_tasks), ceiling(seq_along(pg_tasks) / 32L))
+  cache_dir <- file.path(outdir, paste0("lowmem_cache_", out_prefix))
+  dir.create(cache_dir, showWarnings = FALSE)
+  cache_file <- function(ti) file.path(cache_dir, sprintf("task%d.rds", ti))
+  pg_run <- function(tag, fun) {
+    nb <- length(pg_batches); out <- vector("list", nb)
+    for (bi in seq_len(nb)) {
+      ck <- sprintf("%s/ckpt_lowmem%s_%s_%s_batch%dof%d.rds", outdir, tag, out_prefix, model, bi, nb)
+      if (file.exists(ck)) {
+        out[[bi]] <- readRDS(ck)
+        message(sprintf("[%s] pass %s checkpoint %d/%d loaded", format(Sys.time(), "%H:%M:%S"), tag, bi, nb))
+        next
+      }
+      r <- parallel::mclapply(pg_batches[[bi]], function(ti) fun(pg_tasks[[ti]], ti),
+                              mc.cores = mc_cores, mc.preschedule = FALSE)
+      bad <- vapply(r, function(z) is.null(z) || inherits(z, "try-error"), logical(1))
+      if (any(bad)) stop("pass ", tag, " checkpoint ", bi, ": a worker failed on batch ",
+                         pg_batches[[bi]][which(bad)[1]], ": ",
+                         paste(as.character(r[which(bad)[1]][[1]]), collapse = " "), call. = FALSE)
+      saveRDS(r, ck); out[[bi]] <- r
+      message(sprintf("[%s] pass %s checkpoint %d/%d done (%d batches, %d genes)", format(Sys.time(), "%H:%M:%S"),
+                      tag, bi, nb, length(pg_batches[[bi]]), length(unlist(pg_tasks[pg_batches[[bi]]]))))
+    }
+    unlist(out, recursive = FALSE)
+  }
+  pair_ctr <- Filter(function(ct) identical(ct$type, "pair"), contrasts)
+  phi_path <- paste0(outdir, "/", phifile)
+  do_phi <- !file.exists(phi_path)
+
+  message(sprintf("--lowmem: pass 1 over %d genes in %d batches (support, baseMean, effect summaries%s)",
+                  length(pg_files), length(pg_tasks), if (do_phi) ", phi" else ""))
+  p1 <- pg_run("1", function(f, ti) {
+    x <- pg_read(f)
+    if (!nrow(x)) return(list())
+    dg <- grase::support_table(x)
+    s1 <- pg_cmp(x, "diff1", "diff1_vs_ref"); s2 <- pg_cmp(x, "diff2", "diff2_vs_ref"); rm(x)
+    bmf <- function(s) s %>% group_by(gene, event, comparison) %>%
+      summarise(baseMean = mean(n, na.rm = TRUE), .groups = "drop")
+    bm <- bind_rows(bmf(s1), bmf(s2))
+    if (pseudocount > 0L) { s1 <- pg_pseudo(s1); s2 <- pg_pseudo(s2) }
+    saveRDS(list(s1 = s1, s2 = s2), cache_file(ti), compress = FALSE)
+    bmt <- bind_rows(
+      s1 %>% group_by(gene, event) %>% summarise(baseMean = mean(n, na.rm = TRUE), .groups = "drop") %>% mutate(comparison = "diff1_vs_ref"),
+      s2 %>% group_by(gene, event) %>% summarise(baseMean = mean(n, na.rm = TRUE), .groups = "drop") %>% mutate(comparison = "diff2_vs_ref"))
+    lfc <- bind_rows(lapply(pair_ctr, function(ct) bind_rows(
+      if (nrow(s1)) compute_lfc_summary(s1, cond_ref = ct$ref, cond_trt = ct$trt) %>%
+        mutate(comparison = "diff1_vs_ref", contrast = ct$name),
+      if (nrow(s2)) compute_lfc_summary(s2, cond_ref = ct$ref, cond_trt = ct$trt) %>%
+        mutate(comparison = "diff2_vs_ref", contrast = ct$name))))
+    ph1 <- if (do_phi) suppressMessages(estimate_phi_for_comparison(s1, "diff1_vs_ref", outdir = outdir, mc_cores = 1L))
+    ph2 <- if (do_phi) suppressMessages(estimate_phi_for_comparison(s2, "diff2_vs_ref", outdir = outdir, mc_cores = 1L))
+    list(dg = dg, bm = bm, bmt = bmt, lfc = lfc, ph1 = ph1, ph2 = ph2)
+  })
+  pick <- function(k) bind_rows(lapply(p1, `[[`, k))
+  d_grp <- pick("dg")
+  saveRDS(d_grp, d_grp_file)
+  message(sprintf("Support table: %d (gene,event,side,group) means, cached to %s", nrow(d_grp), d_grp_file))
+  baseMean_df <- pick("bm")
+  baseMean_df_all <- pick("bmt") %>%
+    arrange(match(comparison, c("diff1_vs_ref", "diff2_vs_ref")), gene, event)
+  lfc_summary_all <- pick("lfc")
+  if (do_phi) {
+    phi_df <- bind_rows(pick("ph1"), pick("ph2"))
+    write_phi(phi_df, phi_path)
+  } else {
+    phi_df <- read_phi(phi_path)
+  }
+  rm(p1); invisible(gc())
+
+  ## moderation, as in the whole-table EBapprox path
+  if (phi_trend) {
+    phi_table <- moderate_phi_trend(phi_df, baseMean_df_all)
+    fallback_z <- median(phi_table$z_mod, na.rm = TRUE)
+  } else {
+    phi_table <- phi_df %>%
+      filter(!is.na(comparison)) %>%
+      group_by(comparison) %>%
+      group_modify(~ moderate_phi_log_scale(.x)) %>%
+      ungroup()
+    ## impute_z_mod()'s fallback: the comparison's median, else the overall one, else 0
+    z_all <- median(phi_table$z_mod, na.rm = TRUE)
+    z_fb <- vapply(c("diff1_vs_ref", "diff2_vs_ref"), function(cn) {
+      v <- median(phi_table$z_mod[phi_table$comparison == cn], na.rm = TRUE)
+      if (is.na(v)) v <- z_all
+      if (is.na(v)) v <- 0
+      v
+    }, numeric(1))
+  }
+  phi_mod_file <- sub("\\.([^.]+)$", ".approx.moderated.\\1", phifile)
+  write.table(phi_table, file = paste0(outdir, '/', phi_mod_file), sep = "\t", quote = FALSE, row.names = FALSE)
+  phi_by_gene <- split(phi_table, phi_table$gene)
+  rm(phi_df, baseMean_df_all); invisible(gc())
+
+  message("--lowmem: pass 2, tests")
+  p2 <- pg_run("2", function(f, ti) {
+    if (file.exists(cache_file(ti))) {
+      sc <- readRDS(cache_file(ti)); s1 <- sc$s1; s2 <- sc$s2; rm(sc)
+    } else {
+      x <- pg_read(f)
+      if (!nrow(x)) return(list(res = NULL))
+      s1 <- pg_cmp(x, "diff1", "diff1_vs_ref"); s2 <- pg_cmp(x, "diff2", "diff2_vs_ref"); rm(x)
+      if (pseudocount > 0L) { s1 <- pg_pseudo(s1); s2 <- pg_pseudo(s2) }
+    }
+    if (!nrow(s1) && !nrow(s2)) return(list(res = NULL))
+    pt <- bind_rows(phi_by_gene[intersect(unique(c(as.character(s1$gene), as.character(s2$gene))), names(phi_by_gene))])
+    if (!nrow(pt)) pt <- phi_table[0, ]
+    fill <- function(s) {
+      s <- s %>% left_join(pt, by = c("gene", "event", "comparison"))
+      if (nrow(s)) s$z_mod[is.na(s$z_mod)] <- if (phi_trend) fallback_z else z_fb[[s$comparison[1]]]
+      s
+    }
+    both <- bind_rows(fill(s1), fill(s2))
+    list(res = suppressMessages(run_one_comparison(both,
+                                test_fn = test_model_glmmTMB_EB,
+                                err_log = "glmmtmb_EB.errors.log",
+                                model_label = "betabinom_EBapprox",
+                                L = L, mc_cores = 1L)))
+  })
+  results <- bind_rows(lapply(p2, `[[`, "res"))
+  rm(p2, phi_by_gene, phi_table); invisible(gc())
+  unlink(cache_dir, recursive = TRUE)
+  results <- results %>%
+    left_join(baseMean_df, by = c("gene", "event", "comparison")) %>%
+    left_join(lfc_summary_all, by = c("gene", "event", "comparison", "contrast"))
+  if (nrow(results) > 0) {
+    results <- results %>%
+      group_by(contrast) %>%
+      group_modify(~ {
+        r <- filter_unsupported(.x, .y$contrast); r$pvalue <- r$p.value
+        r <- adjust_pvalues(r, independentFiltering = indep_filter, alpha = padj_thr, method = padj_method)
+        r$pvalue <- NULL; r
+      }) %>%
+      ungroup()
+  }
+  results <- add_significant(add_support(results), padj_thr, delta, min_dpi, min_dpi_sj, min_reads, min_ref_reads = min_ref_reads,
+                               omnibus_pairs = omnibus_pairs, use_perbase = use_perbase, min_effect = min_effect)
+  write.table(results, file = out_resultfile, quote = FALSE, sep = "\t", row.names = FALSE)
+}
+
 ## Everything from here to the end of the model chain builds the test from the
 ## 56 GiB count table and fits it. In annotate-only mode the results file on
 ## disk already holds all of it, so the whole region is skipped.
-if (!annotate_only) {
+if (!annotate_only && !lowmem) {
 if (split != "multinomial") {
 
   make_comparison <- function(sc, diff_col, ref_col, comp_name) {
@@ -547,7 +758,7 @@ if (model == 'betabinom_EBmap' || model == 'betabinom_EBapprox') {
   gc()
 
   if (file.exists(paste0(outdir, "/", phifile))) {
-    phi_df <- read.table(paste0(outdir,'/', phifile), header=TRUE, row.names=NULL)
+    phi_df <- read_phi(paste0(outdir, '/', phifile))
   } else {
     ## Workers forked from a parent that holds the comparison tables copy them as
     ## their garbage collector touches them, so the tables are written to disk and
@@ -570,7 +781,7 @@ if (model == 'betabinom_EBmap' || model == 'betabinom_EBapprox') {
     phi_df <- bind_rows(phi_d1r, phi_d2r)
     rm(phi_d1r, phi_d2r)
 
-    write.table(phi_df, file=paste0(outdir,'/', phifile), quote=FALSE, sep="\t", row.names = FALSE)
+    write_phi(phi_df, paste0(outdir, '/', phifile))
   }
 } else if (model == 'dirmult_EBplugin') {
   # Multinomial DM Moderation Pipeline
@@ -1107,6 +1318,7 @@ message(paste("Loaded split data for", length(unique(splits$gene)), "genes."))
 
 # Combine data
 # Using left_join to keep all tests, filling NAs for missing annotations
+if (!lowmem) {
 message("Merging data...")
 merged_data <- left_join(tests, splits, by = c("gene", "event"))
 message(paste("Merged dataset has", nrow(merged_data), "rows."))
@@ -1169,6 +1381,77 @@ if ("delta_pi" %in% names(merged_data)) {
 
 # Write output
 write.table(merged_data, out_result_annotated, sep = "\t", quote = FALSE, row.names = FALSE)
+} else {
+  ## --lowmem: one contrast at a time. The results are grouped by contrast (the
+  ## adjustment ran per contrast), so annotating each contrast and appending it gives
+  ## the same rows in the same order. The per-base lengths depend only on the gene,
+  ## event and comparison, so annotate_pi_perbase() computes them once for each, and
+  ## each contrast joins them and computes its per-base pi with pi_perbase(), as
+  ## annotate_pi_perbase() does row by row.
+  tests_by_ctr <- split(tests, factor(tests$contrast, levels = unique(tests$contrast)))
+  n_rows_all <- nrow(tests); rm(tests); invisible(gc())
+  mj_file <- file.path(countdir, "measured_junctions.txt")
+  mjj <- NULL
+  if (file.exists(mj_file)) {
+    mj <- read.table(mj_file, header = TRUE, sep = "\t", colClasses = "character")
+    mj$n_junctions <- lengths(strsplit(mj$junctions, "[|,]"))
+    mjj <- mj[, c("gene", "event", "comparison", "n_junctions")]
+    rm(mj)
+  }
+  lens <- NULL
+  if (!is.null(opt$gff_dir)) {
+    message("Adding length-normalized pi from ", opt$gff_dir, " (lengths once per gene, event and comparison) ...")
+    uk <- bind_rows(lapply(tests_by_ctr, function(t) distinct(t, gene, event, comparison))) %>%
+      distinct(gene, event, comparison) %>%
+      left_join(splits[, intersect(c("gene", "event", "setdiff1", "setdiff2", "ref_ex_part"), names(splits))],
+                by = c("gene", "event"))
+    if (!is.null(mjj)) uk <- left_join(uk, mjj %>% mutate(event = as(event, class(uk$event))),
+                                       by = c("gene", "event", "comparison"))
+    uk$pi_ctrl <- NA_real_; uk$pi_trt <- NA_real_
+    lens <- annotate_pi_perbase(uk, path.expand(opt$gff_dir), opt$read_length, opt$sj_overhang,
+                                count_per_part = isTRUE(opt$count_per_part))[, c("gene", "event", "comparison", "len_D", "len_S")]
+    rm(uk); invisible(gc())
+  } else {
+    message("--gff_dir not given: annotated output will carry raw pi only ",
+            "(no pi_ctrl_perbase/delta_pi_perbase columns)")
+  }
+  n_ok <- 0; first <- TRUE
+  for (cn in names(tests_by_ctr)) {
+    merged_data <- left_join(tests_by_ctr[[cn]], splits, by = c("gene", "event"))
+    tests_by_ctr[[cn]] <- NULL
+    if (!is.null(mjj))
+      merged_data <- left_join(merged_data, mjj %>% mutate(event = as(event, class(merged_data$event))),
+                               by = c("gene", "event", "comparison"))
+    if (!is.null(lens)) {
+      merged_data <- left_join(merged_data, lens, by = c("gene", "event", "comparison"))
+      merged_data$pi_ctrl_perbase  <- pi_perbase(merged_data$pi_ctrl, merged_data$len_D, merged_data$len_S)
+      merged_data$pi_trt_perbase   <- pi_perbase(merged_data$pi_trt, merged_data$len_D, merged_data$len_S)
+      merged_data$delta_pi_perbase <- merged_data$pi_trt_perbase - merged_data$pi_ctrl_perbase
+      n_ok <- n_ok + sum(!is.na(merged_data$delta_pi_perbase))
+    }
+    if (nrow(merged_data) > 0 && all(c("setdiff1", "setdiff2") %in% names(merged_data))) {
+      merged_data <- add_significant(add_support(merged_data), padj_thr, delta, min_dpi, min_dpi_sj, min_reads, min_ref_reads = min_ref_reads,
+                                   omnibus_pairs = omnibus_pairs, use_perbase = use_perbase, min_effect = min_effect)
+    }
+    if ("delta_pi" %in% names(merged_data)) {
+      dpi_thr <- rep(min_dpi, nrow(merged_data))
+      if (all(c("comparison", "setdiff1", "setdiff2") %in% names(merged_data))) {
+        sd <- ifelse(grepl("diff1", merged_data$comparison), merged_data$setdiff1, merged_data$setdiff2)
+        dpi_thr[is.na(sd) | sd %in% c("NA", "")] <- min_dpi_sj
+      }
+      merged_data$dpi_raw_pass <- abs(merged_data$delta_pi) >= dpi_thr
+      merged_data$dpi_perbase_pass <- if ("delta_pi_perbase" %in% names(merged_data))
+        abs(merged_data$delta_pi_perbase) >= dpi_thr else NA
+    }
+    write.table(merged_data, out_result_annotated, sep = "\t", quote = FALSE, row.names = FALSE,
+                append = !first, col.names = first)
+    first <- FALSE
+    rm(merged_data); invisible(gc())
+  }
+  if (!is.null(lens))
+    message(sprintf("  per-base pi resolved for %d of %d rows (%.1f%%)", n_ok, n_rows_all, 100 * n_ok / max(n_rows_all, 1)))
+  rm(tests_by_ctr, lens, mjj); invisible(gc())
+}
 message(paste("Successfully wrote annotated tests to", out_result_annotated))
 
 
