@@ -61,12 +61,57 @@ sampleData <- data.frame(
 countFiles <- c(countFiles1, countFiles2)
 names(countFiles) = sampleNames
 
+## DEXSeqDataSetFromHTSeq, with the count files read as tab-separated and unquoted.
+## The counters write part ids as "GENE":"001"; DEXSeqDataSetFromHTSeq reads them with
+## read.table's defaults (whitespace and quote characters), which splits such an id
+## into two fields, so every file stops at its first summary line (_ambiguous ...).
+## Otherwise as DEXSeq 1.52.0: summary lines dropped, ids GENE:E001, rows matched to
+## the flattened annotation's exonic parts.
+dxd_from_counts <- function(countfiles, sampleData, design, flattenedfile) {
+  lf <- lapply(countfiles, function(x) {
+    d <- read.table(x, header = FALSE, sep = "\t", quote = "", comment.char = "",
+                    stringsAsFactors = FALSE, colClasses = c("character", "integer"))
+    d$V1 <- gsub('"', "", d$V1, fixed = TRUE)
+    d
+  })
+  if (!all(sapply(lf[-1], function(x) identical(x$V1, lf[[1]]$V1))))
+    stop("Count files have differing gene ID column.")
+  dcounts <- sapply(lf, `[[`, "V2")
+  rownames(dcounts) <- lf[[1]]$V1
+  dcounts <- dcounts[substr(rownames(dcounts), 1, 1) != "_", ]
+  rownames(dcounts) <- sub(":", ":E", rownames(dcounts))
+  colnames(dcounts) <- countfiles
+  splitted <- strsplit(rownames(dcounts), ":")
+  exons <- sapply(splitted, "[[", 2)
+  genesrle <- sapply(splitted, "[[", 1)
+  aggregates <- read.delim(flattenedfile, stringsAsFactors = FALSE, header = FALSE)
+  colnames(aggregates) <- c("chr", "source", "class", "start", "end", "ex", "strand", "ex2", "attr")
+  aggregates$strand <- gsub("\\.", "*", aggregates$strand)
+  aggregates <- aggregates[which(aggregates$class == "exonic_part"), ]
+  aggregates$attr <- gsub("\"|=|;", "", aggregates$attr)
+  aggregates$gene_id <- sub(".*gene_id\\s(\\S+).*", "\\1", aggregates$attr)
+  transcripts <- gsub(".*transcripts\\s(\\S+).*", "\\1", aggregates$attr)
+  transcripts <- strsplit(transcripts, "\\+")
+  exonids <- gsub(".*exonic_part_number\\s(\\S+).*", "\\1", aggregates$attr)
+  exoninfo <- GRanges(as.character(aggregates$chr),
+                      IRanges(start = aggregates$start, end = aggregates$end),
+                      strand = aggregates$strand)
+  names(exoninfo) <- paste(aggregates$gene_id, exonids, sep = ":E")
+  names(transcripts) <- names(exoninfo)
+  if (!all(rownames(dcounts) %in% names(exoninfo)))
+    stop("Count files do not correspond to the flattened annotation file")
+  matching <- match(rownames(dcounts), names(exoninfo))
+  stopifnot(all(names(exoninfo[matching]) == rownames(dcounts)))
+  DEXSeqDataSet(dcounts, sampleData, design, exons, genesrle,
+                exoninfo[matching], transcripts[matching])
+}
+
 dxdfile = paste0(outdir,"/dxd.",celltype1,"_",celltype2,".rds")
 if (file.exists(dxdfile)) {
   dxd <- readRDS(dxdfile)
 } else {
   # Create DEXSeq dataset
-  dxd <- DEXSeqDataSetFromHTSeq(
+  dxd <- dxd_from_counts(
     countFiles,
     sampleData = sampleData,
     design = ~ sample_id + exon + condition:exon,
