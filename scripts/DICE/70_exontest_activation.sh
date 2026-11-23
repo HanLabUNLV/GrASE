@@ -14,6 +14,11 @@ mkdir -p "$OUT"
 
 CTR=$ACTIVATION_CTR
 
+## --lowmem (EBapprox only): the fit and annotation in batches of genes, so the full
+## count table is never built; same results. The whole-table fit of the lineage
+## terminal arm peaked at 159 GB in its parent process and was once killed for memory.
+LOWMEM=; [ "$MODEL" = betabinom_EBapprox ] && LOWMEM=--lowmem
+
 for A in $ARMS; do
   case "$A" in
     internal) MDIR=$C/bipartition.exsj.internal.counts; ADIR=$C/bipartition.ex.internal.counts ;;
@@ -39,7 +44,7 @@ for A in $ARMS; do
     --countdir="$MDIR/" \
     --splittype=bipartition \
     --phi=phi.merged.${A}.txt \
-    --model=$MODEL --mc_cores=8 \
+    --model=$MODEL --mc_cores=8 $LOWMEM \
     --gff_dir="$DEXSEQ_GFF_DIR" --read_length="$READ_LEN" --sj_overhang="$SJ_OVERHANG" \
     --contrasts="$CTR" &> "$OUT/test_${A}.log"
 done
