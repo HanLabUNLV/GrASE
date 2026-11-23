@@ -35,9 +35,15 @@
 ##   Rscript scripts/build_outward_counts.R --units intronparts/outward_units.tsv \
 ##     --intron_counts intronparts/counts,intronparts/counts_ig \
 ##     --exon_counts count_files \
-##     --exon_combined <...exoncnt.combined.txt> \
+##     --exon_combined <...exoncnt.combined.txt> \     (or --count_dir DIR --count_prefix P)
 ##     --out intronparts/outward.exoncnt.combined.txt \
 ##     --out_sides intronparts/outward_side_table.tsv [--ref_cache <file>]
+##
+## THE REFERENCE COUNTS come from one of two places, as exontest.R reads them:
+## --exon_combined, the combined table (exontest.R --file), or --count_dir with
+## --count_prefix, the per-gene files <count_dir>/<gene>.<count_prefix>.cnt.txt
+## (exontest.R --prefix). The per-gene route reads only the genes it needs and
+## matches columns by name, as exontest.R's read_count_files does.
 suppressPackageStartupMessages({library(data.table); library(optparse)})
 a <- parse_args(OptionParser(option_list = list(
   make_option("--units",         type = "character"),
@@ -47,12 +53,20 @@ a <- parse_args(OptionParser(option_list = list(
                       intergenic gene-edge flanks) and unioned here"),
   make_option("--exon_counts",   type = "character"),
   make_option("--exon_combined", type = "character"),
+  make_option("--count_dir",     type = "character",
+              help = "per-gene count files, instead of --exon_combined"),
+  make_option("--count_prefix",  type = "character",
+              help = "with --count_dir: files are <gene>.<count_prefix>.cnt.txt"),
   make_option("--out",           type = "character"),
   make_option("--out_sides",     type = "character"),
   make_option("--ref_cache",     type = "character", default = NULL,
               help = "reuse/populate a (gene, ref_ex_part, sample) reference selection"))))
-for (r in c("units","intron_counts","exon_counts","exon_combined","out","out_sides"))
+for (r in c("units","intron_counts","exon_counts","out","out_sides"))
   if (is.null(a[[r]])) stop("--", r, " is required")
+per_gene <- !is.null(a$count_dir)
+if (per_gene == !is.null(a$exon_combined))
+  stop("give either --exon_combined or --count_dir (with --count_prefix), not both")
+if (per_gene && is.null(a$count_prefix)) stop("--count_dir needs --count_prefix")
 
 ## ID COLUMNS ARE CHARACTER, NOT NUMBERS THAT HAPPEN TO PARSE. An exonic part
 ## id is `sprintf("%03d")` (enumerate_outward_units.R's pid), so reading it
@@ -176,12 +190,19 @@ if (nrow(missing))
 cat(sprintf("all %d units resolve to counts\n", nrow(need)))
 
 ## ---- reference counts, keyed on (gene, ref_ex_part, sample) ----------------
-con   <- file(a$exon_combined, "r")
-hdr   <- strsplit(readLines(con, 1), "\t", fixed = TRUE)[[1]]
-probe <- strsplit(readLines(con, 1), "\t", fixed = TRUE)[[1]]
-close(con)
-shift <- length(probe) - length(hdr)
-if (!shift %in% c(0L,1L)) stop("unexpected combined-table shape")
+if (per_gene) {
+  ## the columns combine_exoncnt.py emits, i.e. the combined table exontest.R reads
+  hdr <- c("gene", "event", "source", "sink", "ref_ex_part", "setdiff1", "setdiff2",
+           "sample", "ref", "diff1", "diff2", "groups", "diff1_source", "diff2_source")
+  shift <- 0L
+} else {
+  con   <- file(a$exon_combined, "r")
+  hdr   <- strsplit(readLines(con, 1), "\t", fixed = TRUE)[[1]]
+  probe <- strsplit(readLines(con, 1), "\t", fixed = TRUE)[[1]]
+  close(con)
+  shift <- length(probe) - length(hdr)
+  if (!shift %in% c(0L,1L)) stop("unexpected combined-table shape")
+}
 idx <- setNames(seq_along(hdr) + shift, hdr); ncol_ <- length(hdr) + shift
 for (c_ in c("gene","event","ref_ex_part","sample","ref","diff1","diff2","groups"))
   if (!c_ %in% names(idx)) stop("combined table lacks column '", c_, "'")
@@ -192,7 +213,23 @@ for (c_ in c("gene","event","ref_ex_part","sample","ref","diff1","diff2","groups
 ## no error. It happened because sides whose every anchor sat at a gene edge
 ## were dropped before the cache was built, and adding terminus_self units
 ## brought them back. Missing pairs are fetched and appended here.
+select_refs_per_gene <- function(pairs) {
+  ncore <- as.integer(Sys.getenv("MC_CORES", unset = "16"))
+  genes <- unique(pairs$gene)
+  files <- file.path(a$count_dir, paste0(genes, ".", a$count_prefix, ".cnt.txt"))
+  miss <- files[!file.exists(files)]
+  if (length(miss)) stop(sprintf("%d per-gene count files missing, e.g. %s", length(miss), miss[1]))
+  cols <- c("gene", "ref_ex_part", "sample", "ref", "groups")
+  d <- rbindlist(parallel::mclapply(files, function(f) {
+    x <- fread(f, sep = "\t", select = cols, showProgress = FALSE,
+               colClasses = list(character = c("gene", "ref_ex_part", "sample")))
+    unique(x[pairs, on = .(gene, ref_ex_part), nomatch = NULL])
+  }, mc.cores = ncore))
+  d[, groups := as.character(groups)]
+  unique(d[, ..cols])
+}
 select_refs <- function(pairs) {
+  if (per_gene) return(select_refs_per_gene(pairs))
   keyf <- tempfile(); sel <- tempfile()
   fwrite(pairs[, .(k = paste(gene, ref_ex_part, sep = "\t"))], keyf,
          col.names = FALSE, quote = FALSE)

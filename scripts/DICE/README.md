@@ -30,8 +30,9 @@ Each stage stops if its output already exists.
 | `30_signature_counts.sh` | Signature counts of every side, all 13 cell types, into `$COUNT_DIR` (default `counts_sig`): `dexseq_count_sig.py` on every STAR pass 2 BAM, the junction sets of every bipartition (`bipartition_junction_sets.R`), and each side counted once per read (`sigcnt.py`); resumable, and step 1 can run before stage 20 |
 | `70_exontest_lineage.sh` | Tests the signature counts, 10 lineage contrasts (`exontest.R --prefix`, reading the per-gene count files) |
 | `70_exontest_activation.sh` | Tests the signature counts, CD4 and CD8 against stimulated (`exontest.R --prefix`) |
+| `72_called_counts.sh` | Supplementary table to the stage 70 results: per panel, class and contrast, the per-sample counts of every call, two rows per significant result row (tested side D, reference S), in `grase_<panel>_exsj/test_bipartition.exsj.<class>_<model>.called_counts.<contrast>.txt` (`called_counts.py`) |
 | `75_rmats_activation.sh` | rMATS on the activation contrasts, on the same alignment, `--libType fr-firststrand`, into `rmats_post_<CT>_<CT>_N_STIM` for stage 90 |
-| `80_outward_walk_lineage.sh` | Outward walk on the lineage terminal calls (`outward_walk.sh`) |
+| `80_outward_walk_lineage.sh` | Outward walk on the lineage terminal calls (`outward_walk.sh`); reference counts from the per-gene terminal count files stage 70 tested (`--count_dir`, `--count_prefix`) |
 | `76_saturn_activation.sh` | satuRn on exonic parts for the activation contrasts (`saturn_exon.R`), from the per-part counts stage 30 writes, into `saturn_<CT>_<CT>_N_STIM` for stage 90 |
 | `77_majiq_activation.sh` | MAJIQ build and deltapsi on the activation contrasts, stranded, into `majiq_activation/` |
 | `80_outward_walk_activation.sh` | Outward walk on the activation terminal calls; each panel builds and counts intronic parts for its own called genes (`--subset_called`) |

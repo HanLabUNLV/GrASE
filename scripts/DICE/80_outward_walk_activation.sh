@@ -15,10 +15,10 @@ SAMTOOLS=${SAMTOOLS:-/mnt/data1/home/mirahan/miniconda3/envs/cnr_bam/bin/samtool
 W=intronparts/activation/ig
 CTR=$ACTIVATION_CTR
 RES=grase_activation_exsj/test_bipartition.exsj.terminal_${MODEL}.annotated.txt
-TCNT=$COUNT_DIR/bipartition.exsj.terminal.counts/bipartition.exsj.terminal.cnt.combined.txt
+CDIR=$COUNT_DIR/bipartition.exsj.terminal.counts   # the per-gene counts stage 70 tested
 PARTS=$COUNT_DIR/parts
 [ -s "$RES" ] || { echo "missing $RES -- run 70_exontest_activation.sh" >&2; exit 1; }
-[ -s "$TCNT" ] || { echo "missing $TCNT -- run 70_exontest_activation.sh" >&2; exit 1; }
+[ -d "$CDIR" ] || { echo "missing $CDIR -- run 30_signature_counts.sh" >&2; exit 1; }
 [ ! -e "$W" ] || { echo "$W already exists; move it aside or delete it first" >&2; exit 1; }
 mkdir -p "$W"
 
@@ -35,7 +35,8 @@ while IFS=$'\t' read -r bam cond smp; do
   ln -sfr "$f" "$PARTS/$cond/${smp}_counts.txt"
 done < "$W/samples.tsv"
 
-bash $R/outward_walk.sh --workdir "$W" --results "$RES" --terminal_counts "$TCNT" \
+bash $R/outward_walk.sh --workdir "$W" --results "$RES" \
+  --count_dir "$CDIR" --count_prefix bipartition.exsj.terminal \
   --split_dir "$SPLIT_DIR" --graphml_dir "$GRAPHML_DIR" \
   --gff_dir "$DEXSEQ_GFF_DIR" --read_length "$READ_LEN" \
   --exon_counts "$PARTS" --samples "$W/samples.tsv" --contrasts "$CTR" \

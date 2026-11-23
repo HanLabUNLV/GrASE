@@ -4,7 +4,8 @@
 # outward of it, and report whether the change stops there or continues.
 #
 # Usage:
-#   bash outward_walk.sh --workdir DIR --results FILE --terminal_counts FILE \
+#   bash outward_walk.sh --workdir DIR --results FILE \
+#     (--terminal_counts FILE | --count_dir DIR --count_prefix P) \
 #     --split_dir DIR --graphml_dir DIR --gff_dir DIR --exon_counts DIR \
 #     --samples FILE --contrasts TRT:REF[,...] [options]
 #
@@ -12,9 +13,12 @@
 #   --workdir          output directory
 #   --results          exontest.R annotated results for the terminal class,
 #                      e.g. test_bipartition.ex.terminal_betabinom_EBapprox.annotated.txt
-#   --terminal_counts  the combined count table those results were tested on,
+#   --terminal_counts  the combined count table those results were tested on (exontest.R --file),
 #                      e.g. bipartition.ex.terminal.counts/bipartition.ex.terminal.cnt.combined.txt;
 #                      its directory must hold the per-gene <gene>.bipartition.txt files
+#   --count_dir, --count_prefix
+#                      or the per-gene count files they were tested on (exontest.R --prefix):
+#                      <count_dir>/<gene>.<count_prefix>.cnt.txt, beside <gene>.bipartition.txt
 #   --split_dir        filtered bipartitions (filterTerminal.R output)
 #   --graphml_dir      splicing graphs
 #   --gff_dir          per-gene DEXSeq GFFs (<gene>.dexseq.gff)
@@ -68,6 +72,7 @@ while [ $# -gt 0 ]; do
     --count_per_part) PER_PART=1; shift; continue ;;
     --samtools) SAMTOOLS=$2 ;; --model) MODEL=$2 ;;
     --workdir) W=$2 ;; --results) RES=$2 ;; --terminal_counts) TCNT=$2 ;;
+    --count_dir) CDIR=$2 ;; --count_prefix) CPREFIX=$2 ;;
     --split_dir) SPLIT=$2 ;; --graphml_dir) GRAPH=$2 ;; --gff_dir) GFF=$2 ;;
     --exon_counts) ECNT=$2 ;; --samples) SAMPLES=$2 ;; --contrasts) CTR=$2 ;;
     --dexseq_flags) FLAGS=$2 ;; --python) PY=$2 ;; --cores) CORES=$2 ;;
@@ -78,11 +83,21 @@ while [ $# -gt 0 ]; do
   esac
   shift 2
 done
-for v in W RES TCNT SPLIT GRAPH GFF ECNT SAMPLES CTR; do
+for v in W RES SPLIT GRAPH GFF ECNT SAMPLES CTR; do
   [ -n "${!v:-}" ] || { echo "missing a required option (see the header of $0)" >&2; exit 1; }
 done
+# reference counts: the combined table, or the per-gene files (as exontest.R --file / --prefix)
+if [ -n "${TCNT:-}" ] && [ -z "${CDIR:-}" ]; then
+  [ -s "$TCNT" ] || { echo "missing $TCNT" >&2; exit 1; }
+  REF_ARGS=(--exon_combined "$TCNT"); BIPDIR=$(dirname "$(realpath "$TCNT")")
+elif [ -z "${TCNT:-}" ] && [ -n "${CDIR:-}" ] && [ -n "${CPREFIX:-}" ]; then
+  [ -d "$CDIR" ] || { echo "missing $CDIR" >&2; exit 1; }
+  REF_ARGS=(--count_dir "$CDIR" --count_prefix "$CPREFIX"); BIPDIR=$(realpath "$CDIR")
+else
+  echo "give --terminal_counts, or --count_dir with --count_prefix (not both)" >&2; exit 1
+fi
 [ "$DPI_GATE" = raw ] || [ -n "$READ_LEN" ] || { echo "--dpi_gate $DPI_GATE needs --read_length" >&2; exit 1; }
-for f in "$RES" "$TCNT" "$SAMPLES"; do [ -s "$f" ] || { echo "missing $f" >&2; exit 1; }; done
+for f in "$RES" "$SAMPLES"; do [ -s "$f" ] || { echo "missing $f" >&2; exit 1; }; done
 
 S=$(dirname "$(realpath "$0")")
 DC=$(Rscript -e 'cat(system.file("python","dexseq_count.py",package="grase"))')
@@ -150,13 +165,13 @@ Rscript "$S/enumerate_outward_units.R" --results "$RES" --split_dir "$SPLIT" \
 echo "=== 4 outward count table  $(date '+%F %T')"
 COMBINED=outward.ex.terminal.cnt.combined.txt
 MC_CORES=$CORES Rscript "$S/build_outward_counts.R" --units "$W/outward_units.tsv" \
-  --intron_counts "$IP/counts" --exon_counts "$ECNT" --exon_combined "$TCNT" \
+  --intron_counts "$IP/counts" --exon_counts "$ECNT" "${REF_ARGS[@]}" \
   --ref_cache "$W/ref_cache.tsv" --out "$W/$COMBINED" --out_sides "$W/outward_side_table.tsv"
 
 echo "=== 5 test  $(date '+%F %T')"
 mkdir -p "$T/run"
 ln -sfr "$W/$COMBINED" "$T/run/$COMBINED"
-find "$(dirname "$(realpath "$TCNT")")" -maxdepth 1 -name '*.bipartition.txt' \
+find "$BIPDIR" -maxdepth 1 -name '*.bipartition.txt' \
   -exec ln -sfr -t "$T/run" {} +
 Rscript "$S/exontest.R" --file="$COMBINED" --outdir="$T" --countdir="$T/run/" \
   --splittype=bipartition --phi=phi.outward.txt --model="$MODEL" \
