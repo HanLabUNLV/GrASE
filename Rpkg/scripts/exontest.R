@@ -326,6 +326,20 @@ if (!length(omnibus_pairs)) omnibus_pairs <- NULL
 ## what keeps this from silently reusing a stale result: regenerate the counts
 ## and the short circuit disarms itself. --retest forces the full path.
 d_grp_file <- paste0(outdir, '/d_grp_', out_prefix, '_', model, '.rds')
+## Raw phi is written as text for reading and as .rds at full precision. A run that
+## resumes from saved phi reads the .rds (unless the text file is newer), so it
+## moderates the same values as an uninterrupted run; the text file alone carries 15
+## significant digits, which moved p-values by up to 4e-5.
+phi_rds <- function(p) sub("\\.[^.]*$", ".rds", p)
+write_phi <- function(df, p) {
+  write.table(df, file = p, quote = FALSE, sep = "\t", row.names = FALSE)
+  saveRDS(df, phi_rds(p))
+}
+read_phi <- function(p) {
+  r <- phi_rds(p)
+  if (file.exists(r) && file.mtime(r) >= file.mtime(p)) readRDS(r)
+  else read.table(p, header = TRUE, row.names = NULL)
+}
 annotate_only <- FALSE
 if (!isTRUE(opt$retest) && file.exists(out_resultfile)) {
   if (is.na(counts_mtime) || file.mtime(out_resultfile) >= counts_mtime) {
@@ -596,9 +610,9 @@ if (lowmem && !annotate_only) {
   lfc_summary_all <- pick("lfc")
   if (do_phi) {
     phi_df <- bind_rows(pick("ph1"), pick("ph2"))
-    write.table(phi_df, file = phi_path, quote = FALSE, sep = "\t", row.names = FALSE)
+    write_phi(phi_df, phi_path)
   } else {
-    phi_df <- read.table(phi_path, header = TRUE, row.names = NULL)
+    phi_df <- read_phi(phi_path)
   }
   rm(p1); invisible(gc())
 
@@ -744,7 +758,7 @@ if (model == 'betabinom_EBmap' || model == 'betabinom_EBapprox') {
   gc()
 
   if (file.exists(paste0(outdir, "/", phifile))) {
-    phi_df <- read.table(paste0(outdir,'/', phifile), header=TRUE, row.names=NULL)
+    phi_df <- read_phi(paste0(outdir, '/', phifile))
   } else {
     ## Workers forked from a parent that holds the comparison tables copy them as
     ## their garbage collector touches them, so the tables are written to disk and
@@ -767,7 +781,7 @@ if (model == 'betabinom_EBmap' || model == 'betabinom_EBapprox') {
     phi_df <- bind_rows(phi_d1r, phi_d2r)
     rm(phi_d1r, phi_d2r)
 
-    write.table(phi_df, file=paste0(outdir,'/', phifile), quote=FALSE, sep="\t", row.names = FALSE)
+    write_phi(phi_df, paste0(outdir, '/', phifile))
   }
 } else if (model == 'dirmult_EBplugin') {
   # Multinomial DM Moderation Pipeline
