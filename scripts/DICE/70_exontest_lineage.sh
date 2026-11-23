@@ -16,8 +16,14 @@ for A in $ARMS; do
     internal) MDIR=$C/bipartition.exsj.internal.counts; ADIR=$C/bipartition.ex.internal.counts ;;
     terminal) MDIR=$C/bipartition.exsj.terminal.counts; ADIR=$C/bipartition.ex.terminal.counts ;;
   esac
-  if [ -e "$OUT/phi.merged.${A}.txt" ] || compgen -G "$OUT/test_bipartition.exsj.${A}_*" > /dev/null; then
-    echo "$A results or phi file already in $OUT; move them aside or delete them first" >&2; exit 1
+  if compgen -G "$OUT/test_bipartition.exsj.${A}_*" > /dev/null; then
+    echo "$A results already in $OUT; move them aside or delete them first" >&2; exit 1
+  fi
+  ## an existing phi file is reused (exontest.R skips the estimation), so a stopped fit
+  ## resumes at moderation; its log is kept beside the new one
+  if [ -e "$OUT/phi.merged.${A}.txt" ]; then
+    echo "$A: reusing $OUT/phi.merged.${A}.txt"
+    [ ! -e "$OUT/test_${A}.log" ] || mv "$OUT/test_${A}.log" "$OUT/test_${A}.$(date +%Y%m%d_%H%M%S).log"
   fi
   ## the per-gene count files are read directly (--prefix); the annotation is next to
   ## the signature counts, or in the exonic count directory for per-part counts
